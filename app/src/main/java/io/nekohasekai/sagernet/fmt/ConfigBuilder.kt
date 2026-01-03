@@ -65,7 +65,7 @@ fun buildConfig(
 
     if (proxy.type == TYPE_CONFIG) {
         val bean = proxy.requireBean() as ConfigBean
-        if (bean.type == 0) {
+        if (bean.type == 0 && bean.config.isNotBlank()) {
             val config = runCatching {
                 val customMap =
                     gson.fromJson(bean.config, MutableMap::class.java) as MutableMap<String, Any?>
@@ -119,6 +119,8 @@ fun buildConfig(
     val globalOutbounds = HashMap<Long, String>()
     val selectorNames = ArrayList<String>()
     val group = SagerDatabase.groupDao.getById(proxy.groupId)
+    val forceSelectorForAggregate = proxy.type == TYPE_CONFIG &&
+        (proxy.requireBean() as? ConfigBean)?.let { it.type == 0 && it.config.isBlank() } == true
 
     fun ProxyEntity.resolveChainInternal(): MutableList<ProxyEntity> {
         val bean = requireBean()
@@ -165,7 +167,7 @@ fun buildConfig(
         if (forTest) mapOf() else SagerDatabase.proxyDao.getEntities(extraRules.mapNotNull { rule ->
             rule.outbound.takeIf { it > 0 && it != proxy.id }
         }.toHashSet().toList()).associateBy { it.id }
-    val buildSelector = !forTest && group?.isSelector == true && !forExport
+    val buildSelector = !forTest && (group?.isSelector == true || forceSelectorForAggregate) && !forExport
     val userDNSRuleList = mutableListOf<DNSRule_DefaultOptions>()
     val domainListDNSDirectForce = mutableListOf<String>()
     val bypassDNSBeans = hashSetOf<AbstractBean>()
@@ -498,14 +500,20 @@ fun buildConfig(
 
         // build outbounds
         if (buildSelector) {
-            val list = group.id.let { SagerDatabase.proxyDao.getByGroup(it) }
+            val groupId = group?.id ?: proxy.groupId
+            val list = SagerDatabase.proxyDao.getByGroup(groupId)
+                .filterNot {
+                    it.type == TYPE_CONFIG && (it.requireBean() as? ConfigBean)?.let { bean ->
+                        bean.type == 0 && bean.config.isBlank()
+                    } == true
+                }
             list.forEach {
                 tagMap[it.id] = buildChain(it.id, it)
             }
             outbounds.add(0, Outbound_SelectorOptions().apply {
                 type = "selector"
                 tag = TAG_PROXY
-                default_ = tagMap[proxy.id]
+                default_ = tagMap[proxy.id] ?: tagMap.values.firstOrNull()
                 outbounds = tagMap.values.toList()
             })
         } else {
@@ -785,7 +793,7 @@ fun buildConfig(
             proxy.id,
             trafficMap,
             tagMap,
-            if (buildSelector) group.id else -1L
+            if (buildSelector) (group?.id ?: proxy.groupId) else -1L
         )
     }
 

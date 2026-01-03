@@ -7,8 +7,6 @@ import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.http.HttpBean
 import io.nekohasekai.sagernet.fmt.hysteria.HysteriaBean
 import io.nekohasekai.sagernet.fmt.hysteria.parseHysteria1Json
-import io.nekohasekai.sagernet.fmt.shadowsocks.ShadowsocksBean
-import io.nekohasekai.sagernet.fmt.shadowsocks.parseShadowsocks
 import io.nekohasekai.sagernet.fmt.socks.SOCKSBean
 import io.nekohasekai.sagernet.fmt.trojan.TrojanBean
 import io.nekohasekai.sagernet.fmt.trojan_go.parseTrojanGo
@@ -21,6 +19,7 @@ import io.nekohasekai.sagernet.fmt.wireguard.WireGuardBean
 import io.nekohasekai.sagernet.ktx.*
 import libcore.Libcore
 import moe.matsuri.nb4a.Protocols
+import moe.matsuri.nb4a.converter.ProxyToSingboxConverter
 import moe.matsuri.nb4a.proxy.anytls.AnyTLSBean
 import moe.matsuri.nb4a.proxy.config.ConfigBean
 import moe.matsuri.nb4a.utils.Util
@@ -46,13 +45,15 @@ object RawUpdater : GroupUpdater() {
     ) {
 
         val link = subscription.link
+        var rawText = ""
         var proxies: List<AbstractBean>
         if (link.startsWith("content://")) {
-            val contentText = app.contentResolver.openInputStream(link.toUri())
+            rawText = app.contentResolver.openInputStream(link.toUri())
                 ?.bufferedReader()
                 ?.readText()
+                .orEmpty()
 
-            proxies = contentText?.let { parseRaw(contentText) }
+            proxies = rawText.let { parseRaw(it) }
                 ?: error(app.getString(R.string.no_proxies_found_in_subscription))
         } else {
 
@@ -69,7 +70,8 @@ object RawUpdater : GroupUpdater() {
                 setURL(subscription.link)
                 setUserAgent(subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT)
             }.execute()
-            proxies = parseRaw(Util.getStringBox(response.contentString))
+            rawText = Util.getStringBox(response.contentString)
+            proxies = parseRaw(rawText)
                 ?: error(app.getString(R.string.no_proxies_found))
 
             subscription.subscriptionUserinfo =
@@ -85,6 +87,18 @@ object RawUpdater : GroupUpdater() {
                     }
                 }
             }
+        }
+
+        val aggregateName = "sing-box config (all)"
+        val aggregateConfig = ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
+        if (proxies.none { it is ConfigBean && it.type == 0 && it.name == aggregateName }) {
+            val aggregate = ConfigBean().apply {
+                applyDefaultValues()
+                type = 0
+                config = aggregateConfig
+                name = aggregateName
+            }
+            proxies = listOf(aggregate) + proxies
         }
 
         val proxiesMap = LinkedHashMap<String, AbstractBean>()
@@ -271,41 +285,6 @@ object RawUpdater : GroupUpdater() {
                                 sni = proxy["sni"]?.toString()
                                 name = proxy["name"]?.toString()
                                 allowInsecure = proxy["skip-cert-verify"]?.toString() == "true"
-                            })
-                        }
-
-                        "ss" -> {
-                            val ssPlugin = mutableListOf<String>()
-                            if (proxy.contains("plugin")) {
-                                val opts = proxy["plugin-opts"] as Map<String, Any?>
-                                when (proxy["plugin"]) {
-                                    "obfs" -> {
-                                        ssPlugin.apply {
-                                            add("obfs-local")
-                                            add("obfs=" + (opts["mode"]?.toString() ?: ""))
-                                            add("obfs-host=" + (opts["host"]?.toString() ?: ""))
-                                        }
-                                    }
-
-                                    "v2ray-plugin" -> {
-                                        ssPlugin.apply {
-                                            add("v2ray-plugin")
-                                            add("mode=" + (opts["mode"]?.toString() ?: ""))
-                                            if (opts["mode"]?.toString() == "true") add("tls")
-                                            add("host=" + (opts["host"]?.toString() ?: ""))
-                                            add("path=" + (opts["path"]?.toString() ?: ""))
-                                            if (opts["mux"]?.toString() == "true") add("mux=8")
-                                        }
-                                    }
-                                }
-                            }
-                            proxies.add(ShadowsocksBean().apply {
-                                serverAddress = proxy["server"] as String
-                                serverPort = proxy["port"].toString().toInt()
-                                password = proxy["password"]?.toString()
-                                method = clashCipher(proxy["cipher"] as String)
-                                plugin = ssPlugin.joinToString(";")
-                                name = proxy["name"]?.toString()
                             })
                         }
 
@@ -751,10 +730,6 @@ object RawUpdater : GroupUpdater() {
             when {
                 json.has("server") && (json.has("up") || json.has("up_mbps")) -> {
                     return listOf(json.parseHysteria1Json())
-                }
-
-                json.has("method") -> {
-                    return listOf(json.parseShadowsocks())
                 }
 
                 json.has("remote_addr") -> {
