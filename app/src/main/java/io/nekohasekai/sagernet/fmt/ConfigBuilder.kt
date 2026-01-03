@@ -66,8 +66,45 @@ fun buildConfig(
     if (proxy.type == TYPE_CONFIG) {
         val bean = proxy.requireBean() as ConfigBean
         if (bean.type == 0) {
+            val config = runCatching {
+                val customMap =
+                    gson.fromJson(bean.config, MutableMap::class.java) as MutableMap<String, Any?>
+                val baseProxy = SagerDatabase.proxyDao.getByGroup(proxy.groupId).firstOrNull {
+                    if (it.id == proxy.id) return@firstOrNull false
+                    if (it.type != TYPE_CONFIG) return@firstOrNull true
+                    val otherBean = it.requireBean()
+                    otherBean !is ConfigBean || otherBean.type != 0
+                }
+                val mergedMap = if (baseProxy != null) {
+                    val baseConfig = buildConfig(baseProxy, forTest, forExport).config
+                    val baseMap =
+                        gson.fromJson(baseConfig, MutableMap::class.java) as MutableMap<String, Any?>
+                    (customMap["outbounds"] as? List<*>)?.let { baseMap["outbounds"] = it }
+                    customMap["route"]?.let { baseMap["route"] = it }
+                    customMap["dns"]?.let { baseMap["dns"] = it }
+                    customMap["rule_set"]?.let { baseMap["rule_set"] = it }
+                    customMap["log"]?.let { baseMap["log"] = it }
+                    customMap["experimental"]?.let { baseMap["experimental"] = it }
+                    baseMap
+                } else {
+                    customMap
+                }
+                if (DataStore.enableClashAPI) {
+                    val experimental =
+                        (mergedMap["experimental"] as? Map<*, *>)?.let { Util.map2StringMap(it) }
+                            ?: mutableMapOf()
+                    if (!experimental.containsKey("clash_api")) {
+                        experimental["clash_api"] = mutableMapOf(
+                            "external_controller" to "127.0.0.1:9090",
+                            "external_ui" to "../files/yacd"
+                        )
+                        mergedMap["experimental"] = experimental
+                    }
+                }
+                gson.toJson(mergedMap)
+            }.getOrDefault(bean.config)
             return ConfigBuildResult(
-                bean.config,
+                config,
                 listOf(),
                 proxy.id, //
                 mapOf(TAG_PROXY to listOf(proxy)), //

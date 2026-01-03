@@ -155,9 +155,14 @@ object RawUpdater : GroupUpdater() {
         val updated = mutableMapOf<String, String>()
         val deleted = toDelete.map { it.displayName() }
 
+        fun isAggregate(bean: AbstractBean): Boolean {
+            return bean is ConfigBean && bean.type == 0 && bean.name == "sing-box config (all)"
+        }
+
         var userOrder = 1L
         var changed = toDelete.size
         for ((name, bean) in nameMap.entries) {
+            val desiredOrder = if (isAggregate(bean)) 0L else userOrder
             if (toReplace.contains(name)) {
                 val entity = toReplace[name]!!
                 val existsBean = entity.requireBean()
@@ -172,10 +177,10 @@ object RawUpdater : GroupUpdater() {
                         Logs.d("Updated profile: $name")
                     }
 
-                    entity.userOrder != userOrder -> {
+                    entity.userOrder != desiredOrder -> {
                         entity.putBean(bean)
                         toUpdate.add(entity)
-                        entity.userOrder = userOrder
+                        entity.userOrder = desiredOrder
 
                         Logs.d("Reordered profile: $name")
                     }
@@ -188,14 +193,16 @@ object RawUpdater : GroupUpdater() {
                 changed++
                 SagerDatabase.proxyDao.addProxy(
                     ProxyEntity(
-                        groupId = proxyGroup.id, userOrder = userOrder
+                        groupId = proxyGroup.id, userOrder = desiredOrder
                     ).apply {
                         putBean(bean)
                     })
                 added.add(name)
                 Logs.d("Inserted profile: $name")
             }
-            userOrder++
+            if (!isAggregate(bean)) {
+                userOrder++
+            }
         }
 
         SagerDatabase.proxyDao.updateProxy(toUpdate).also {
@@ -755,7 +762,14 @@ object RawUpdater : GroupUpdater() {
                 }
 
                 json.has("outbounds") -> {
-                    return json.getJSONArray("outbounds")
+                    val fullConfig = json.toStringPretty()
+                    val aggregate = ConfigBean().apply {
+                        applyDefaultValues()
+                        type = 0
+                        config = fullConfig
+                        name = "sing-box config (all)"
+                    }
+                    val outbounds = json.getJSONArray("outbounds")
                         .filterIsInstance<JSONObject>()
                         .mapNotNull {
                             val ty = it.getStr("type")
@@ -774,6 +788,7 @@ object RawUpdater : GroupUpdater() {
                                 name = it.getStr("tag")
                             }
                         }
+                    return listOf(aggregate) + outbounds
                 }
 
                 json.has("server") && json.has("server_port") -> {
