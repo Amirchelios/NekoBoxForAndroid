@@ -510,10 +510,11 @@ fun buildConfig(
             list.forEach {
                 tagMap[it.id] = buildChain(it.id, it)
             }
+            val preferredId = DataStore.getSmartPreferredProxy(groupId)
             outbounds.add(0, Outbound_SelectorOptions().apply {
                 type = "selector"
                 tag = TAG_PROXY
-                default_ = tagMap[proxy.id] ?: tagMap.values.firstOrNull()
+                default_ = tagMap[preferredId] ?: tagMap[proxy.id] ?: tagMap.values.firstOrNull()
                 outbounds = tagMap.values.toList()
             })
         } else {

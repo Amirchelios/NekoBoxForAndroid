@@ -253,6 +253,14 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     var rulesFirstCreate by profileCacheStore.boolean("rulesFirstCreate")
 
+    fun getSmartPreferredProxy(groupId: Long): Long {
+        return configurationStore.getLong("smartPreferred.$groupId", 0L)
+    }
+
+    fun setSmartPreferredProxy(groupId: Long, proxyId: Long) {
+        configurationStore.putLong("smartPreferred.$groupId", proxyId)
+    }
+
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {
     }
 }

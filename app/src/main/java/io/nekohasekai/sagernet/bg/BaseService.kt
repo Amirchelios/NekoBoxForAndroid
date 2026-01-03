@@ -13,8 +13,10 @@ import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.aidl.ISagerNetService
 import io.nekohasekai.sagernet.aidl.ISagerNetServiceCallback
 import io.nekohasekai.sagernet.bg.proto.ProxyInstance
+import io.nekohasekai.sagernet.bg.proto.SmartSelector
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.SagerDatabase
+import io.nekohasekai.sagernet.database.ProxyEntity.Companion.TYPE_CONFIG
 import io.nekohasekai.sagernet.ktx.*
 import io.nekohasekai.sagernet.plugin.PluginManager
 import io.nekohasekai.sagernet.utils.DefaultNetworkListener
@@ -23,6 +25,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import libcore.Libcore
 import moe.matsuri.nb4a.Protocols
+import moe.matsuri.nb4a.proxy.config.ConfigBean
 import moe.matsuri.nb4a.utils.Util
 import java.net.UnknownHostException
 
@@ -374,6 +377,17 @@ class BaseService {
                     data.changeState(State.Connected)
 
                     lateInit()
+                    runOnDefaultDispatcher {
+                        val isAggregateConfig = profile.type == TYPE_CONFIG &&
+                            (profile.requireBean() as? ConfigBean)?.type == 0
+                        if (isAggregateConfig) {
+                            val preferredId = SmartSelector.selectBest(profile.groupId)
+                            val tag = data.proxy?.config?.profileTagMap?.get(preferredId) ?: ""
+                            if (tag.isNotBlank()) {
+                                data.proxy?.box?.selectOutbound(tag)
+                            }
+                        }
+                    }
                 } catch (_: CancellationException) { // if the job was cancelled, it is canceller's responsibility to call stopRunner
                 } catch (_: UnknownHostException) {
                     stopRunner(false, getString(R.string.invalid_server))
