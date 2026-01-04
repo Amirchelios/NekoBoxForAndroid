@@ -35,6 +35,10 @@
             android:icon="@drawable/ic_baseline_transform_24"
             android:title="@string/menu_dashboard" />
         <item
+            android:id="@+id/nav_singbox_dashboard"
+            android:icon="@drawable/ic_baseline_transform_24"
+            android:title="Sing-Box GUI" />
+        <item
             android:id="@+id/nav_tools"
             android:icon="@drawable/baseline_construction_24"
             android:title="@string/menu_tools" />
