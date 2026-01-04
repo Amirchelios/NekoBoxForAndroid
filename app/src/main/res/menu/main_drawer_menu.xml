@@ -31,10 +31,6 @@
             android:icon="@drawable/ic_baseline_bug_report_24"
             android:title="@string/menu_log" />
         <item
-            android:id="@+id/nav_traffic"
-            android:icon="@drawable/ic_baseline_transform_24"
-            android:title="@string/menu_dashboard" />
-        <item
             android:id="@+id/nav_singbox_dashboard"
             android:icon="@drawable/ic_baseline_transform_24"
             android:title="Sing-Box GUI" />
@@ -47,14 +43,6 @@
     <group
         android:id="@+id/about"
         android:checkableBehavior="single">
-        <item
-            android:id="@+id/nav_tuiguang"
-            android:icon="@drawable/ic_social_share"
-            android:title="@string/ads" />
-        <item
-            android:id="@+id/nav_faq"
-            android:icon="@drawable/ic_device_data_usage"
-            android:title="@string/document" />
         <item
             android:id="@+id/nav_about"
             android:icon="@drawable/ic_baseline_info_24"

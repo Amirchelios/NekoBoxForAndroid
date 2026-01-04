@@ -128,8 +128,7 @@ class MainActivity : ThemedActivity(),
 
     fun refreshNavMenu(clashApi: Boolean) {
         if (::navigation.isInitialized) {
-            navigation.menu.findItem(R.id.nav_traffic)?.isVisible = clashApi
-            navigation.menu.findItem(R.id.nav_tuiguang)?.isVisible = !isPlay
+            navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isVisible = clashApi
         }
     }
 
@@ -337,23 +336,13 @@ class MainActivity : ThemedActivity(),
             R.id.nav_group -> displayFragment(GroupFragment())
             R.id.nav_route -> displayFragment(RouteFragment())
             R.id.nav_settings -> displayFragment(SettingsFragment())
-            R.id.nav_traffic -> displayFragment(WebviewFragment())
             R.id.nav_singbox_dashboard -> {
                 launchCustomTab("http://127.0.0.1:9090/ui/")
                 return false
             }
             R.id.nav_tools -> displayFragment(ToolsFragment())
             R.id.nav_logcat -> displayFragment(LogcatFragment())
-            R.id.nav_faq -> {
-                launchCustomTab("https://matsuridayo.github.io/")
-                return false
-            }
-
             R.id.nav_about -> displayFragment(AboutFragment())
-            R.id.nav_tuiguang -> {
-                launchCustomTab("https://neko-box.pages.dev/喵")
-                return false
-            }
 
             else -> return false
         }
