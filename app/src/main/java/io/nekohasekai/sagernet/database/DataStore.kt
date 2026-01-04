@@ -261,6 +261,18 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         configurationStore.putLong("smartPreferred.$groupId", proxyId)
     }
 
+    fun getSmartPreferredOrder(groupId: Long): List<Long> {
+        val raw = configurationStore.getString("smartPreferredOrder.$groupId", "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return raw.split(",")
+            .mapNotNull { it.trim().toLongOrNull() }
+    }
+
+    fun setSmartPreferredOrder(groupId: Long, proxyIds: List<Long>) {
+        val raw = proxyIds.joinToString(",")
+        configurationStore.putString("smartPreferredOrder.$groupId", raw)
+    }
+
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {
     }
 }

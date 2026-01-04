@@ -33,8 +33,10 @@ object SmartSelector {
 
         if (results.isEmpty()) return null
 
-        val best = results.minByOrNull { it.second } ?: return null
+        val sortedResults = results.sortedBy { it.second }
+        val best = sortedResults.firstOrNull() ?: return null
         DataStore.setSmartPreferredProxy(groupId, best.first.id)
+        DataStore.setSmartPreferredOrder(groupId, sortedResults.map { it.first.id })
 
         results.forEach { (profile, score) ->
             profile.status = 1
@@ -44,7 +46,7 @@ object SmartSelector {
         SagerDatabase.proxyDao.updateProxy(results.map { it.first })
 
         if (group.order == GroupOrder.ORIGIN) {
-            val sortedIds = results.sortedBy { it.second }.map { it.first.id }
+            val sortedIds = sortedResults.map { it.first.id }
             val remaining = profiles.filterNot { sortedIds.contains(it.id) }.map { it.id }
             val orderedIds = sortedIds + remaining
             val update = profiles.associateBy { it.id }.toMutableMap()
