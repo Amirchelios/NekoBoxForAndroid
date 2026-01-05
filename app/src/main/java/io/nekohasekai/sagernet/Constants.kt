@@ -1,6 +1,8 @@
 package io.nekohasekai.sagernet
 
 const val CONNECTION_TEST_URL = "http://cp.cloudflare.com/"
+const val ACCESS_TEST_URL_YOUTUBE = "https://www.youtube.com/generate_204"
+const val ACCESS_TEST_URL_INSTAGRAM = "https://www.instagram.com/"
 const val DEFAULT_SUBSCRIPTION_LINK =
     "https://raw.githubusercontent.com/Amirchelios/NG_manager/refs/heads/main/sl.txt"
 const val DEFAULT_SUBSCRIPTION_GROUP_NAME = "NG LINK"

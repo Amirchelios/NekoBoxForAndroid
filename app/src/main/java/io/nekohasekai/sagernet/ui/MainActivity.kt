@@ -21,6 +21,8 @@ import com.google.android.material.snackbar.Snackbar
 import io.nekohasekai.sagernet.BuildConfig
 import io.nekohasekai.sagernet.GroupType
 import io.nekohasekai.sagernet.Key
+import io.nekohasekai.sagernet.ACCESS_TEST_URL_INSTAGRAM
+import io.nekohasekai.sagernet.ACCESS_TEST_URL_YOUTUBE
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.aidl.ISagerNetService
@@ -28,10 +30,13 @@ import io.nekohasekai.sagernet.aidl.SpeedDisplayData
 import io.nekohasekai.sagernet.aidl.TrafficData
 import io.nekohasekai.sagernet.bg.BaseService
 import io.nekohasekai.sagernet.bg.SagerConnection
+import io.nekohasekai.sagernet.bg.proto.TestInstance
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.database.ProxyGroup
+import io.nekohasekai.sagernet.database.ProxyEntity
+import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.database.SubscriptionBean
 import io.nekohasekai.sagernet.database.preference.OnPreferenceDataStoreChangeListener
 import io.nekohasekai.sagernet.databinding.LayoutMainBinding
@@ -49,6 +54,7 @@ import io.nekohasekai.sagernet.ktx.parseProxies
 import io.nekohasekai.sagernet.ktx.readableMessage
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import moe.matsuri.nb4a.utils.Util
+import moe.matsuri.nb4a.proxy.config.ConfigBean
 
 class MainActivity : ThemedActivity(),
     SagerConnection.Callback,
@@ -57,6 +63,8 @@ class MainActivity : ThemedActivity(),
 
     lateinit var binding: LayoutMainBinding
     lateinit var navigation: NavigationView
+    private var accessTestRunning = false
+    private var lastAccessTestProfileId = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -363,6 +371,84 @@ class MainActivity : ThemedActivity(),
         binding.fab.changeState(state, DataStore.serviceState, animate)
         binding.stats.changeState(state)
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
+        if (state == BaseService.State.Connected) {
+            runAccessQualityCheck()
+        }
+    }
+
+    private fun runAccessQualityCheck() {
+        if (accessTestRunning) return
+        accessTestRunning = true
+        runOnDefaultDispatcher {
+            try {
+                val selected = ProfileManager.getProfile(DataStore.selectedProxy)
+                    ?: return@runOnDefaultDispatcher
+                val isAggregateConfig = selected.type == ProxyEntity.TYPE_CONFIG &&
+                    (selected.requireBean() as? ConfigBean)?.type == 0
+                val group = SagerDatabase.groupDao.getById(selected.groupId)
+                    ?: return@runOnDefaultDispatcher
+                if (!isAggregateConfig || group.type != GroupType.SUBSCRIPTION) {
+                    return@runOnDefaultDispatcher
+                }
+                if (selected.groupId == lastAccessTestProfileId) return@runOnDefaultDispatcher
+                val profiles = SagerDatabase.proxyDao.getByGroup(selected.groupId)
+                    .filterNot { it.type == ProxyEntity.TYPE_CONFIG }
+                var anyUpdated = false
+                profiles.forEach { profile ->
+                    val ping = runCatching {
+                        TestInstance(profile, DataStore.connectionTestURL, 5000).doTest()
+                    }.getOrDefault(-1)
+                    val youtubeOk = runCatching {
+                        TestInstance(profile, ACCESS_TEST_URL_YOUTUBE, 7000).doTest()
+                    }.isSuccess
+                    val instagramOk = runCatching {
+                        TestInstance(profile, ACCESS_TEST_URL_INSTAGRAM, 7000).doTest()
+                    }.isSuccess
+                    val isHealthy = youtubeOk && instagramOk
+                    if (!isHealthy) return@forEach
+                    val updatedName = buildAccessName(
+                        profile.displayName(),
+                        youtubeOk,
+                        instagramOk,
+                        ping
+                    )
+                    val bean = profile.requireBean()
+                    if (bean.name != updatedName) {
+                        bean.name = updatedName
+                        ProfileManager.updateProfile(profile)
+                        anyUpdated = true
+                    }
+                }
+                if (anyUpdated) {
+                    GroupManager.postReload(selected.groupId)
+                }
+                lastAccessTestProfileId = selected.groupId
+            } finally {
+                accessTestRunning = false
+            }
+        }
+    }
+
+    private fun buildAccessName(
+        currentName: String,
+        youtubeOk: Boolean,
+        instagramOk: Boolean,
+        ping: Int
+    ): String {
+        val baseName = stripAccessSuffix(currentName)
+        val yt = if (youtubeOk) "OK" else "FAIL"
+        val ig = if (instagramOk) "OK" else "FAIL"
+        val latency = if (ping > 0) ping else 9999
+        return "$baseName - YT $yt IG $ig - ${latency}ms"
+    }
+
+    private fun stripAccessSuffix(name: String): String {
+        val marker = " - YT "
+        val index = name.indexOf(marker)
+        if (index > 0 && name.endsWith("ms")) {
+            return name.substring(0, index)
+        }
+        return name
     }
 
     override fun snackbarInternal(text: CharSequence): Snackbar {
