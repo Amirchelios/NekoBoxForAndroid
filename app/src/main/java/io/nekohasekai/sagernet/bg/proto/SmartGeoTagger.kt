@@ -24,8 +24,10 @@ object SmartGeoTagger {
     private val mutex = Mutex()
     private const val testTimeoutMs = 5000
     private val testLinks = listOf(
-        "https://www.instagram.com/",
-        "https://www.youtube.com/"
+        "https://www.youtube.com/generate_204",
+        "https://www.youtube.com/",
+        "https://i.instagram.com/",
+        "https://www.instagram.com/"
     )
 
     suspend fun runForGroup(groupId: Long) {

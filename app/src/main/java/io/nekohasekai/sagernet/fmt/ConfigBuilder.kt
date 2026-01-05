@@ -1,4 +1,4 @@
-ببین package io.nekohasekai.sagernet.fmt
+package io.nekohasekai.sagernet.fmt
 
 import android.widget.Toast
 import io.nekohasekai.sagernet.*

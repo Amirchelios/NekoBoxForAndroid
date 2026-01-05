@@ -1442,6 +1442,9 @@ class ConfigurationFragment @JvmOverloads constructor(
                         profile.configBean?.type == 0
                 }
                 newProfiles = autoSelect + others
+                if (proxyGroup.type == GroupType.SUBSCRIPTION) {
+                    newProfiles = filterSubscriptionProfiles(newProfiles)
+                }
 
                 configurationList.clear()
                 configurationList.putAll(newProfiles.associateBy { it.id })
@@ -1465,6 +1468,24 @@ class ConfigurationFragment @JvmOverloads constructor(
                         configurationListView.scrollTo(0, true)
                     }
 
+                }
+            }
+
+            private fun filterSubscriptionProfiles(
+                profiles: List<ProxyEntity>
+            ): List<ProxyEntity> {
+                val autoSelect = profiles.filter { profile ->
+                    profile.type == ProxyEntity.TYPE_CONFIG &&
+                        profile.configBean?.type == 0
+                }
+                val renamed = profiles.filter { profile ->
+                    val name = profile.displayName()
+                    name.contains(" - ") && name.endsWith("ms")
+                }
+                return if (renamed.isNotEmpty()) {
+                    autoSelect + renamed
+                } else {
+                    autoSelect
                 }
             }
 

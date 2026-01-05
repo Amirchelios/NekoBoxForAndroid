@@ -10,11 +10,13 @@ import io.nekohasekai.sagernet.ktx.readableMessage
 
 object SmartSelector {
 
-    private const val TIMEOUT_MS = 2000
+    private const val TIMEOUT_MS = 4000
     private const val MAX_ATTEMPTS = 2
     private val testUrls = listOf(
         "https://www.youtube.com/generate_204",
-        "https://i.instagram.com/"
+        "https://www.youtube.com/",
+        "https://i.instagram.com/",
+        "https://www.instagram.com/"
     )
 
     suspend fun selectBest(groupId: Long): Long? {
