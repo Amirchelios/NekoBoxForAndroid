@@ -20,6 +20,7 @@ object ProxyToSingboxConverter {
     )
 
     fun convertToSingBoxJson(input: String): String? {
+        extractSingBoxJson(input)?.let { return it }
         val configs = extractStandardConfigs(input)
         if (configs.isEmpty()) return null
 
@@ -46,6 +47,32 @@ object ProxyToSingboxConverter {
         config["log"] = mapOf("level" to "warn")
         config["outbounds"] = buildOutbounds(outbounds, validTags)
         return gson.toJson(config)
+    }
+
+    private fun extractSingBoxJson(input: String): String? {
+        tryParseSingBoxJson(input)?.let { return it }
+        if (isBase64(input)) {
+            decodeBase64(input)?.let { decoded ->
+                tryParseSingBoxJson(decoded)?.let { return it }
+            }
+        }
+        if (isDataUriBase64(input)) {
+            decodeDataUri(input)?.let { decoded ->
+                tryParseSingBoxJson(decoded)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun tryParseSingBoxJson(raw: String): String? {
+        val trimmed = raw.trim()
+        if (!trimmed.startsWith("{")) return null
+        return runCatching {
+            val json = JSONObject(trimmed)
+            val hasOutbounds = json.optJSONArray("outbounds") != null
+            val hasInbounds = json.optJSONArray("inbounds") != null
+            if (hasOutbounds || hasInbounds) json.toString() else null
+        }.getOrNull()
     }
 
     private fun buildOutbounds(

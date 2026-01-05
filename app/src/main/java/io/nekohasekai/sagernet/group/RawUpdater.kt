@@ -705,6 +705,10 @@ object RawUpdater : GroupUpdater() {
             val newOutbounds = JSONArray()
             for (i in 0 until outbounds.length()) {
                 val outbound = outbounds.optJSONObject(i) ?: continue
+                if (outbound.optString("type") == "shadowsocks") {
+                    outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
+                    continue
+                }
                 if (isInvalidRealityOutbound(outbound)) {
                     outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
                     continue
