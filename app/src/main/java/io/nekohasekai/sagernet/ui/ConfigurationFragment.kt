@@ -1437,6 +1437,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                             newProfiles.sortedBy { if (it.status == 1) it.ping else 114514 }
                     }
                 }
+                val (autoSelect, others) = newProfiles.partition { profile ->
+                    profile.type == ProxyEntity.TYPE_CONFIG &&
+                        profile.configBean?.type == 0
+                }
+                newProfiles = autoSelect + others
 
                 configurationList.clear()
                 configurationList.putAll(newProfiles.associateBy { it.id })

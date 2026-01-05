@@ -13,6 +13,7 @@ import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.aidl.ISagerNetService
 import io.nekohasekai.sagernet.aidl.ISagerNetServiceCallback
 import io.nekohasekai.sagernet.bg.proto.ProxyInstance
+import io.nekohasekai.sagernet.bg.proto.SmartGeoTagger
 import io.nekohasekai.sagernet.bg.proto.SmartSelector
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.SagerDatabase
@@ -386,6 +387,7 @@ class BaseService {
                             if (tag.isNotBlank()) {
                                 data.proxy?.box?.selectOutbound(tag)
                             }
+                            SmartGeoTagger.runForGroup(profile.groupId)
                         }
                     }
                 } catch (_: CancellationException) { // if the job was cancelled, it is canceller's responsibility to call stopRunner

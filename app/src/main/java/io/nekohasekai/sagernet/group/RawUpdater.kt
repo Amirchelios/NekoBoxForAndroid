@@ -89,9 +89,11 @@ object RawUpdater : GroupUpdater() {
             }
         }
 
-        val aggregateName = "sing-box config (all)"
-        val aggregateConfig = ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
-        if (proxies.none { it is ConfigBean && it.type == 0 && it.name == aggregateName }) {
+        val aggregateName = app.getString(R.string.menu_auto_select)
+        val aggregateConfig = sanitizeAggregateConfig(
+            ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
+        )
+        if (proxies.none { it is ConfigBean && it.type == 0 }) {
             val aggregate = ConfigBean().apply {
                 applyDefaultValues()
                 type = 0
@@ -692,6 +694,51 @@ object RawUpdater : GroupUpdater() {
             "dummy" -> "none"
             else -> cipher
         }
+    }
+
+    private fun sanitizeAggregateConfig(config: String): String {
+        if (config.isBlank()) return config
+        return runCatching {
+            val root = JSONObject(config)
+            val outbounds = root.optJSONArray("outbounds") ?: return@runCatching config
+            val invalidTags = HashSet<String>()
+            val newOutbounds = JSONArray()
+            for (i in 0 until outbounds.length()) {
+                val outbound = outbounds.optJSONObject(i) ?: continue
+                if (isInvalidRealityOutbound(outbound)) {
+                    outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
+                    continue
+                }
+                newOutbounds.put(outbound)
+            }
+            if (invalidTags.isNotEmpty()) {
+                for (i in 0 until newOutbounds.length()) {
+                    val outbound = newOutbounds.optJSONObject(i) ?: continue
+                    val type = outbound.optString("type")
+                    if (type == "selector" || type == "urltest") {
+                        val list = outbound.optJSONArray("outbounds") ?: continue
+                        val filtered = JSONArray()
+                        for (j in 0 until list.length()) {
+                            val tag = list.optString(j)
+                            if (!invalidTags.contains(tag)) {
+                                filtered.put(tag)
+                            }
+                        }
+                        outbound.put("outbounds", filtered)
+                    }
+                }
+            }
+            root.put("outbounds", newOutbounds)
+            root.toString()
+        }.getOrDefault(config)
+    }
+
+    private fun isInvalidRealityOutbound(outbound: JSONObject): Boolean {
+        val tls = outbound.optJSONObject("tls") ?: return false
+        val reality = tls.optJSONObject("reality") ?: return false
+        if (!reality.optBoolean("enabled", false)) return false
+        val key = reality.optString("public_key", "").trim()
+        return key.isBlank() || !key.matches(Regex("^[A-Za-z0-9_-]{43,64}$"))
     }
 
     fun parseWireGuard(conf: String): List<WireGuardBean> {

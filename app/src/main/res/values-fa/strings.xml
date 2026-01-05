@@ -20,6 +20,7 @@
     <string name="tile_title">سوییچر</string>
     <string name="menu_traffic">ترافیک</string>
     <string name="menu_dashboard">sing-box تنظیمات</string>
+    <string name="menu_auto_select">انتخاب خودکار</string>
     <!-- externel -->
     <string name="action_copy">کپی</string>
     <string name="action_open">باز کردن</string>
