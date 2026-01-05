@@ -46,6 +46,7 @@
         app:title="@string/subscription_settings">
 
         <io.nekohasekai.sagernet.widget.LinkOrContentPreference
+            app:defaultValue="https://raw.githubusercontent.com/Amirchelios/NG_manager/refs/heads/main/sl.txt"
             app:icon="@drawable/ic_baseline_link_24"
             app:key="subscriptionLink"
             app:title="@string/group_subscription_link"

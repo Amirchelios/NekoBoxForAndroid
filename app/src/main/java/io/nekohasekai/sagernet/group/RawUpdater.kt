@@ -47,6 +47,7 @@ object RawUpdater : GroupUpdater() {
         val link = subscription.link
         var rawText = ""
         var proxies: List<AbstractBean>
+        var aggregateConfig = ""
         if (link.startsWith("content://")) {
             rawText = app.contentResolver.openInputStream(link.toUri())
                 ?.bufferedReader()
@@ -57,22 +58,41 @@ object RawUpdater : GroupUpdater() {
                 ?: error(app.getString(R.string.no_proxies_found_in_subscription))
         } else {
 
-            val response = Libcore.newHttpClient().apply {
-                trySocks5(DataStore.mixedPort)
-                tryH3Direct()
-                when (DataStore.appTLSVersion) {
-                    "1.3" -> restrictedTLS()
-                }
-            }.newRequest().apply {
-                if (DataStore.allowInsecureOnRequest) {
-                    allowInsecure()
-                }
-                setURL(subscription.link)
-                setUserAgent(subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT)
-            }.execute()
+            val response = buildSubscriptionRequest(
+                subscription.link,
+                subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
+            ).execute()
             rawText = Util.getStringBox(response.contentString)
-            proxies = parseRaw(rawText)
-                ?: error(app.getString(R.string.no_proxies_found))
+            val subscriptionLinks = extractSubscriptionLinks(rawText)
+            if (subscriptionLinks.isNotEmpty()) {
+                val aggregated = mutableListOf<AbstractBean>()
+                val rawTexts = mutableListOf<String>()
+                for (subLink in subscriptionLinks) {
+                    val subText = runCatching {
+                        Util.getStringBox(
+                            buildSubscriptionRequest(
+                                subLink,
+                                subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
+                            ).execute().contentString
+                        )
+                    }.getOrDefault("")
+                    if (subText.isBlank()) continue
+                    rawTexts.add(subText)
+                    val subProxies = parseRaw(subText)
+                    if (subProxies != null) {
+                        aggregated.addAll(subProxies)
+                    }
+                }
+                proxies = aggregated.takeIf { it.isNotEmpty() }
+                    ?: error(app.getString(R.string.no_proxies_found))
+                aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(rawTexts))
+            } else {
+                proxies = parseRaw(rawText)
+                    ?: error(app.getString(R.string.no_proxies_found))
+                aggregateConfig = sanitizeAggregateConfig(
+                    ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
+                )
+            }
 
             subscription.subscriptionUserinfo =
                 Util.getStringBox(response.getHeader("Subscription-Userinfo"))
@@ -90,9 +110,11 @@ object RawUpdater : GroupUpdater() {
         }
 
         val aggregateName = app.getString(R.string.menu_auto_select)
-        val aggregateConfig = sanitizeAggregateConfig(
-            ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
-        )
+        if (aggregateConfig.isBlank()) {
+            aggregateConfig = sanitizeAggregateConfig(
+                ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
+            )
+        }
         if (proxies.none { it is ConfigBean && it.type == 0 }) {
             val aggregate = ConfigBean().apply {
                 applyDefaultValues()
@@ -172,7 +194,8 @@ object RawUpdater : GroupUpdater() {
         val deleted = toDelete.map { it.displayName() }
 
         fun isAggregate(bean: AbstractBean): Boolean {
-            return bean is ConfigBean && bean.type == 0 && bean.name == "sing-box config (all)"
+            return bean is ConfigBean && bean.type == 0 &&
+                (bean.name == "sing-box config (all)" || bean.name == aggregateName)
         }
 
         var userOrder = 1L
@@ -743,6 +766,99 @@ object RawUpdater : GroupUpdater() {
         if (!reality.optBoolean("enabled", false)) return false
         val key = reality.optString("public_key", "").trim()
         return key.isBlank() || !key.matches(Regex("^[A-Za-z0-9_-]{43,64}$"))
+    }
+
+    private fun buildSubscriptionRequest(url: String, userAgent: String) =
+        Libcore.newHttpClient().apply {
+            trySocks5(DataStore.mixedPort)
+            tryH3Direct()
+            when (DataStore.appTLSVersion) {
+                "1.3" -> restrictedTLS()
+            }
+        }.newRequest().apply {
+            if (DataStore.allowInsecureOnRequest) {
+                allowInsecure()
+            }
+            setURL(url)
+            setUserAgent(userAgent)
+        }
+
+    private fun extractSubscriptionLinks(rawText: String): List<String> {
+        return rawText.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+            .filter { it.startsWith("http://") || it.startsWith("https://") }
+            .distinct()
+            .toList()
+    }
+
+    private fun buildAggregateConfig(rawTexts: List<String>): String {
+        if (rawTexts.isEmpty()) return ""
+        val outbounds = JSONArray()
+        val validTags = ArrayList<String>()
+        val usedTags = HashSet<String>()
+        for (raw in rawTexts) {
+            val jsonText = ProxyToSingboxConverter.convertToSingBoxJson(raw).orEmpty()
+            if (jsonText.isBlank()) continue
+            val root = runCatching { JSONObject(jsonText) }.getOrNull() ?: continue
+            val list = root.optJSONArray("outbounds") ?: continue
+            for (i in 0 until list.length()) {
+                val outbound = list.optJSONObject(i) ?: continue
+                val type = outbound.optString("type")
+                if (type == "selector" || type == "urltest" || type == "direct" ||
+                    type == "block" || type == "dns"
+                ) {
+                    continue
+                }
+                var tag = outbound.optString("tag")
+                if (tag.isBlank()) continue
+                if (usedTags.contains(tag)) {
+                    var index = 1
+                    var newTag = "$tag-$index"
+                    while (usedTags.contains(newTag)) {
+                        index++
+                        newTag = "$tag-$index"
+                    }
+                    tag = newTag
+                    outbound.put("tag", tag)
+                }
+                usedTags.add(tag)
+                validTags.add(tag)
+                outbounds.put(outbound)
+            }
+        }
+        if (validTags.isEmpty()) return ""
+        val root = JSONObject()
+        root.put("log", JSONObject().put("level", "warn"))
+        val merged = JSONArray()
+        merged.put(JSONObject().apply {
+            put("type", "selector")
+            put("tag", "proxy")
+            val list = JSONArray()
+            list.put("auto")
+            validTags.forEach { list.put(it) }
+            list.put("direct")
+            put("outbounds", list)
+        })
+        merged.put(JSONObject().apply {
+            put("type", "direct")
+            put("tag", "direct")
+        })
+        merged.put(JSONObject().apply {
+            put("type", "urltest")
+            put("tag", "auto")
+            val list = JSONArray()
+            validTags.forEach { list.put(it) }
+            put("outbounds", list)
+            put("url", "https://www.gstatic.com/generate_204")
+            put("interrupt_exist_connections", false)
+            put("interval", "30s")
+        })
+        for (i in 0 until outbounds.length()) {
+            merged.put(outbounds.getJSONObject(i))
+        }
+        root.put("outbounds", merged)
+        return root.toString()
     }
 
     fun parseWireGuard(conf: String): List<WireGuardBean> {

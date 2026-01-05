@@ -98,6 +98,9 @@ class MainActivity : ThemedActivity(),
         connection.connect(this, this)
         DataStore.configurationStore.registerChangeListener(this)
         GroupManager.userInterface = GroupInterfaceAdapter(this)
+        runOnDefaultDispatcher {
+            GroupManager.ensureDefaultSubscriptionGroup()
+        }
 
         if (intent?.action == Intent.ACTION_VIEW) {
             onNewIntent(intent)

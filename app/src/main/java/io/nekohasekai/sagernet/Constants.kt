@@ -1,6 +1,9 @@
 package io.nekohasekai.sagernet
 
 const val CONNECTION_TEST_URL = "http://cp.cloudflare.com/"
+const val DEFAULT_SUBSCRIPTION_LINK =
+    "https://raw.githubusercontent.com/Amirchelios/NG_manager/refs/heads/main/sl.txt"
+const val DEFAULT_SUBSCRIPTION_GROUP_NAME = "NG LINK"
 
 object Key {
 

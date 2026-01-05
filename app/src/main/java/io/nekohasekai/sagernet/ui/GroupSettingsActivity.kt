@@ -17,6 +17,8 @@ import androidx.core.view.ViewCompat
 import androidx.preference.*
 import com.github.shadowsocks.plugin.Empty
 import com.github.shadowsocks.plugin.fragment.AlertDialogFragment
+import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_GROUP_NAME
+import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_LINK
 import io.nekohasekai.sagernet.GroupType
 import io.nekohasekai.sagernet.Key
 import io.nekohasekai.sagernet.R
@@ -40,6 +42,7 @@ class GroupSettingsActivity(
 
     private lateinit var frontProxyPreference: OutboundPreference
     private lateinit var landingProxyPreference: OutboundPreference
+    private var isProtectedGroup = false
 
     fun ProxyGroup.init() {
         DataStore.groupName = name ?: ""
@@ -63,7 +66,11 @@ class GroupSettingsActivity(
     }
 
     fun ProxyGroup.serialize() {
-        name = DataStore.groupName.takeIf { it.isNotBlank() } ?: "My group"
+        name = if (isProtectedGroup) {
+            DEFAULT_SUBSCRIPTION_GROUP_NAME
+        } else {
+            DataStore.groupName.takeIf { it.isNotBlank() } ?: "My group"
+        }
         type = DataStore.groupType
         order = DataStore.groupOrder
         isSelector = DataStore.groupIsSelector
@@ -74,7 +81,7 @@ class GroupSettingsActivity(
         val isSubscription = type == GroupType.SUBSCRIPTION
         if (isSubscription) {
             subscription = (subscription ?: SubscriptionBean().applyDefaultValues()).apply {
-                link = DataStore.subscriptionLink
+                link = if (isProtectedGroup) DEFAULT_SUBSCRIPTION_LINK else DataStore.subscriptionLink
                 forceResolve = DataStore.subscriptionForceResolve
                 deduplication = DataStore.subscriptionDeduplication
                 updateWhenConnectedOnly = DataStore.subscriptionUpdateWhenConnectedOnly
@@ -95,6 +102,9 @@ class GroupSettingsActivity(
         rootKey: String?,
     ) {
         addPreferencesFromResource(R.xml.group_preferences)
+
+        val groupName = findPreference<EditTextPreference>(Key.GROUP_NAME)!!
+        val subscriptionLink = findPreference<EditTextPreference>(Key.SUBSCRIPTION_LINK)!!
 
         frontProxyPreference = findPreference(Key.GROUP_FRONT_PROXY)!!
         frontProxyPreference.apply {
@@ -160,6 +170,11 @@ class GroupSettingsActivity(
             subscriptionAutoUpdateDelay.isEnabled = (newValue as Boolean)
             true
         }
+
+        if (isProtectedGroup) {
+            groupName.isEnabled = false
+            subscriptionLink.isEnabled = false
+        }
     }
 
     class UnsavedChangesDialogFragment : AlertDialogFragment<Empty, Empty>() {
@@ -220,10 +235,12 @@ class GroupSettingsActivity(
                         }
                         return@runOnDefaultDispatcher
                     }
+                    isProtectedGroup = GroupManager.isProtectedGroup(entity)
                     entity.init()
                 }
 
                 onMainDispatcher {
+                    invalidateOptionsMenu()
                     supportFragmentManager.beginTransaction()
                         .replace(R.id.settings, MyPreferenceFragmentCompat())
                         .commit()
@@ -265,6 +282,9 @@ class GroupSettingsActivity(
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.profile_config_menu, menu)
+        if (isProtectedGroup) {
+            menu.removeItem(R.id.action_delete)
+        }
         return true
     }
 
@@ -320,7 +340,9 @@ class GroupSettingsActivity(
 
         override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
             R.id.action_delete -> {
-                if (DataStore.editingId == 0L) {
+                if (DataStore.editingId == 0L ||
+                    activity?.isProtectedGroup == true
+                ) {
                     requireActivity().finish()
                 } else {
                     DeleteConfirmationDialogFragment().apply {

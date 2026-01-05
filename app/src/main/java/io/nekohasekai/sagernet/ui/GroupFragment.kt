@@ -66,7 +66,9 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder
             ): Int {
                 val proxyGroup = (viewHolder as GroupHolder).proxyGroup
-                if (proxyGroup.ungrouped || proxyGroup.id in GroupUpdater.updating) {
+                if (proxyGroup.ungrouped || proxyGroup.id in GroupUpdater.updating ||
+                    GroupManager.isProtectedGroup(proxyGroup)
+                ) {
                     return 0
                 }
                 return super.getSwipeDirs(recyclerView, viewHolder)
@@ -76,7 +78,9 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder
             ): Int {
                 val proxyGroup = (viewHolder as GroupHolder).proxyGroup
-                if (proxyGroup.ungrouped || proxyGroup.id in GroupUpdater.updating) {
+                if (proxyGroup.ungrouped || proxyGroup.id in GroupUpdater.updating ||
+                    GroupManager.isProtectedGroup(proxyGroup)
+                ) {
                     return 0
                 }
                 return super.getDragDirs(recyclerView, viewHolder)

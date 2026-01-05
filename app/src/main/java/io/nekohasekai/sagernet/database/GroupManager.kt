@@ -1,5 +1,7 @@
 package io.nekohasekai.sagernet.database
 
+import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_GROUP_NAME
+import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_LINK
 import io.nekohasekai.sagernet.GroupType
 import io.nekohasekai.sagernet.bg.SubscriptionUpdater
 import io.nekohasekai.sagernet.ktx.applyDefaultValues
@@ -98,6 +100,8 @@ object GroupManager {
     }
 
     suspend fun deleteGroup(groupId: Long) {
+        val group = SagerDatabase.groupDao.getById(groupId) ?: return
+        if (isProtectedGroup(group)) return
         SagerDatabase.groupDao.deleteById(groupId)
         SagerDatabase.proxyDao.deleteByGroup(groupId)
         iterator { groupRemoved(groupId) }
@@ -105,10 +109,37 @@ object GroupManager {
     }
 
     suspend fun deleteGroup(group: List<ProxyGroup>) {
-        SagerDatabase.groupDao.deleteGroup(group)
-        SagerDatabase.proxyDao.deleteByGroup(group.map { it.id }.toLongArray())
-        for (proxyGroup in group) iterator { groupRemoved(proxyGroup.id) }
+        val deletable = group.filterNot { isProtectedGroup(it) }
+        if (deletable.isEmpty()) return
+        SagerDatabase.groupDao.deleteGroup(deletable)
+        SagerDatabase.proxyDao.deleteByGroup(deletable.map { it.id }.toLongArray())
+        for (proxyGroup in deletable) iterator { groupRemoved(proxyGroup.id) }
         SubscriptionUpdater.reconfigureUpdater()
+    }
+
+    suspend fun ensureDefaultSubscriptionGroup(): ProxyGroup? {
+        val existing = SagerDatabase.groupDao.allGroups().firstOrNull { isProtectedGroup(it) }
+        if (existing != null) {
+            if (existing.name != DEFAULT_SUBSCRIPTION_GROUP_NAME) {
+                existing.name = DEFAULT_SUBSCRIPTION_GROUP_NAME
+                SagerDatabase.groupDao.updateGroup(existing)
+                iterator { groupUpdated(existing) }
+            }
+            return existing
+        }
+        val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
+            name = DEFAULT_SUBSCRIPTION_GROUP_NAME
+            subscription = SubscriptionBean().applyDefaultValues().also {
+                it.link = DEFAULT_SUBSCRIPTION_LINK
+            }
+        }
+        return createGroup(group)
+    }
+
+    fun isProtectedGroup(group: ProxyGroup): Boolean {
+        val link = group.subscription?.link?.trim().orEmpty()
+        return group.type == GroupType.SUBSCRIPTION &&
+            link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true)
     }
 
 }
