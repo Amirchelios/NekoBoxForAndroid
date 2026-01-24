@@ -851,8 +851,10 @@ object RawUpdater : GroupUpdater() {
             validTags.forEach { list.put(it) }
             put("outbounds", list)
             put("url", "https://www.gstatic.com/generate_204")
+            put("timeout", "3s")
             put("interrupt_exist_connections", false)
-            put("interval", "30s")
+            put("interval", "10s")
+            put("tolerance", 50)
         })
         for (i in 0 until outbounds.length()) {
             merged.put(outbounds.getJSONObject(i))

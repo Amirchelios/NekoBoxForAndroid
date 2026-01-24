@@ -382,10 +382,18 @@ class BaseService {
                         val isAggregateConfig = profile.type == TYPE_CONFIG &&
                             (profile.requireBean() as? ConfigBean)?.type == 0
                         if (isAggregateConfig) {
-                            val preferredId = SmartSelector.selectBest(profile.groupId)
-                            val tag = data.proxy?.config?.profileTagMap?.get(preferredId) ?: ""
-                            if (tag.isNotBlank()) {
-                                data.proxy?.box?.selectOutbound(tag)
+                            val cachedPreferredId = DataStore.getSmartPreferredProxy(profile.groupId)
+                            val cachedTag =
+                                data.proxy?.config?.profileTagMap?.get(cachedPreferredId) ?: ""
+                            if (cachedPreferredId > 0 && cachedTag.isNotBlank()) {
+                                data.proxy?.box?.selectOutbound(cachedTag)
+                                SmartSelector.applyCachedOrder(profile.groupId)
+                            } else {
+                                val preferredId = SmartSelector.selectBest(profile.groupId)
+                                val tag = data.proxy?.config?.profileTagMap?.get(preferredId) ?: ""
+                                if (tag.isNotBlank()) {
+                                    data.proxy?.box?.selectOutbound(tag)
+                                }
                             }
                             SmartGeoTagger.runForGroup(profile.groupId)
                         }
