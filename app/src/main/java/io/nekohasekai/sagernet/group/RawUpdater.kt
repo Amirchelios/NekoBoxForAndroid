@@ -728,6 +728,10 @@ object RawUpdater : GroupUpdater() {
             val newOutbounds = JSONArray()
             for (i in 0 until outbounds.length()) {
                 val outbound = outbounds.optJSONObject(i) ?: continue
+                if (outbound.optString("type") == "urltest") {
+                    outbound.remove("timeout")
+                    outbound.remove("timeoout")
+                }
                 if (outbound.optString("type") == "shadowsocks") {
                     outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
                     continue
@@ -851,7 +855,6 @@ object RawUpdater : GroupUpdater() {
             validTags.forEach { list.put(it) }
             put("outbounds", list)
             put("url", "https://www.gstatic.com/generate_204")
-            put("timeout", "3s")
             put("interrupt_exist_connections", false)
             put("interval", "10s")
             put("tolerance", 50)
