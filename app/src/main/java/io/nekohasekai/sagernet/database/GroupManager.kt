@@ -3,8 +3,11 @@ package io.nekohasekai.sagernet.database
 import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_GROUP_NAME
 import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_LINK
 import io.nekohasekai.sagernet.GroupType
+import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.bg.SubscriptionUpdater
 import io.nekohasekai.sagernet.ktx.applyDefaultValues
+import io.nekohasekai.sagernet.ktx.Logs
+import moe.matsuri.nb4a.proxy.config.ConfigBean
 
 object GroupManager {
 
@@ -125,6 +128,7 @@ object GroupManager {
                 SagerDatabase.groupDao.updateGroup(existing)
                 iterator { groupUpdated(existing) }
             }
+            ensureDefaultYoutubeConfig(existing)
             return existing
         }
         val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
@@ -133,7 +137,11 @@ object GroupManager {
                 it.link = DEFAULT_SUBSCRIPTION_LINK
             }
         }
-        return createGroup(group)
+        return createGroup(group).also {
+            if (it != null) {
+                ensureDefaultYoutubeConfig(it)
+            }
+        }
     }
 
     fun isProtectedGroup(group: ProxyGroup): Boolean {
@@ -142,4 +150,29 @@ object GroupManager {
             link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true)
     }
 
+}
+
+private suspend fun ensureDefaultYoutubeConfig(group: ProxyGroup) {
+    val existing = SagerDatabase.proxyDao.getByGroup(group.id).firstOrNull { proxy ->
+        if (proxy.type != ProxyEntity.TYPE_CONFIG) return@firstOrNull false
+        val bean = proxy.requireBean() as? ConfigBean ?: return@firstOrNull false
+        bean.type == 0 && bean.name == "کانفیگ یوتیوب"
+    }
+    if (existing != null) return
+
+    val configText = runCatching {
+        SagerNet.application.assets.open("sing-box-config-all.json").bufferedReader().use {
+            it.readText()
+        }
+    }.getOrElse {
+        Logs.w(it)
+        return
+    }
+
+    val bean = ConfigBean().applyDefaultValues().apply {
+        type = 0
+        config = configText
+        name = "کانفیگ یوتیوب"
+    }
+    ProfileManager.createProfile(group.id, bean)
 }

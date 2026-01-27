@@ -13,7 +13,6 @@ import androidx.lifecycle.whenStarted
 import com.google.android.material.bottomappbar.BottomAppBar
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.bg.BaseService
-import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.ktx.*
 import io.nekohasekai.sagernet.ui.MainActivity
 import kotlinx.coroutines.Dispatchers
@@ -120,42 +119,6 @@ class StatsBar @JvmOverloads constructor(
                 R.string.speed, Formatter.formatFileSize(context, rxRate)
             )
         }"
-    }
-
-    fun testConnection() {
-        val activity = context as MainActivity
-        isEnabled = false
-        setStatus(app.getText(R.string.connection_test_testing))
-        runOnDefaultDispatcher {
-            try {
-                val elapsed = activity.urlTest()
-                onMainDispatcher {
-                    isEnabled = true
-                    setStatus(
-                        app.getString(
-                            if (DataStore.connectionTestURL.startsWith("https://")) {
-                                R.string.connection_test_available
-                            } else {
-                                R.string.connection_test_available_http
-                            }, elapsed
-                        )
-                    )
-                }
-
-            } catch (e: Exception) {
-                Logs.w(e.toString())
-                onMainDispatcher {
-                    isEnabled = true
-                    setStatus(app.getText(R.string.connection_test_testing))
-
-                    activity.snackbar(
-                        app.getString(
-                            R.string.connection_test_error, e.readableMessage
-                        )
-                    ).show()
-                }
-            }
-        }
     }
 
 }
