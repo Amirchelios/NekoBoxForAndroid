@@ -109,7 +109,13 @@ object RawUpdater : GroupUpdater() {
             }
         }
 
-        val aggregateName = app.getString(R.string.menu_auto_select)
+        val aggregateName = if (proxyGroup.subscription?.link?.trim()
+                ?.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true) == true
+        ) {
+            GroupManager.DEDICATED_CONFIG_NAME
+        } else {
+            app.getString(R.string.menu_auto_select)
+        }
         if (aggregateConfig.isBlank()) {
             aggregateConfig = sanitizeAggregateConfig(
                 ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()

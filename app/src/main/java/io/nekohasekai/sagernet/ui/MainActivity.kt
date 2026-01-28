@@ -100,6 +100,7 @@ class MainActivity : ThemedActivity(),
         GroupManager.userInterface = GroupInterfaceAdapter(this)
         runOnDefaultDispatcher {
             GroupManager.ensureDefaultSubscriptionGroup()
+            GroupManager.ensureDedicatedSubscriptionGroup()
         }
 
         if (intent?.action == Intent.ACTION_VIEW) {
