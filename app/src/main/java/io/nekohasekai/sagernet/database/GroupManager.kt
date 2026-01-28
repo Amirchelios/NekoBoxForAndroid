@@ -158,6 +158,12 @@ object GroupManager {
         return bean.type == 0 && bean.name == YOUTUBE_INSTAGRAM_CONFIG_NAME
     }
 
+    fun isAutoSelectConfig(proxy: ProxyEntity): Boolean {
+        if (proxy.type != ProxyEntity.TYPE_CONFIG) return false
+        val bean = proxy.requireBean() as? ConfigBean ?: return false
+        return bean.type == 0
+    }
+
     fun isProtectedProfile(group: ProxyGroup, proxy: ProxyEntity): Boolean {
         return isProtectedGroup(group) && isYoutubeInstagramConfig(proxy)
     }
@@ -165,6 +171,15 @@ object GroupManager {
     fun isProtectedProfile(proxy: ProxyEntity): Boolean {
         val group = SagerDatabase.groupDao.getById(proxy.groupId) ?: return false
         return isProtectedProfile(group, proxy)
+    }
+
+    fun isRemovalBlocked(group: ProxyGroup, proxy: ProxyEntity): Boolean {
+        return isProtectedProfile(group, proxy) || isAutoSelectConfig(proxy)
+    }
+
+    fun isRemovalBlocked(proxy: ProxyEntity): Boolean {
+        val group = SagerDatabase.groupDao.getById(proxy.groupId) ?: return false
+        return isRemovalBlocked(group, proxy)
     }
 
 }

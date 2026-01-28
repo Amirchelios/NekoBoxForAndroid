@@ -185,7 +185,7 @@ object RawUpdater : GroupUpdater() {
             }
         }.toMap()
 
-        val protectedDelete = toDelete.filter { GroupManager.isProtectedProfile(proxyGroup, it) }
+        val protectedDelete = toDelete.filter { GroupManager.isRemovalBlocked(proxyGroup, it) }
         if (protectedDelete.isNotEmpty()) {
             toDelete.removeAll(protectedDelete)
         }

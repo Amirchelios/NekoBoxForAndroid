@@ -1246,7 +1246,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
 
                 removeButton.setOnClickListener {
-                    if (GroupManager.isProtectedProfile(proxyGroup, proxyEntity)) return@setOnClickListener
+                    if (GroupManager.isRemovalBlocked(proxyGroup, proxyEntity)) return@setOnClickListener
                     adapter?.let {
                         val index = it.configurationIdList.indexOf(proxyEntity.id)
                         it.remove(index)
@@ -1255,10 +1255,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
 
                 val isProtected = GroupManager.isProtectedProfile(proxyGroup, proxyEntity)
+                val isRemovalBlocked = GroupManager.isRemovalBlocked(proxyGroup, proxyEntity)
                 val selectOrChain = select || proxyEntity.type == ProxyEntity.TYPE_CHAIN
                 shareLayout.isGone = selectOrChain
                 editButton.isGone = select || isProtected
-                removeButton.isGone = select || isProtected
+                removeButton.isGone = select || isRemovalBlocked
 
                 proxyEntity.nekoBean?.apply {
                     shareLayout.isGone = true

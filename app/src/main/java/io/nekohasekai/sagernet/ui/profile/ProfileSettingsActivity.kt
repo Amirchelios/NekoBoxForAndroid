@@ -169,7 +169,7 @@ abstract class ProfileSettingsActivity<T : AbstractBean>(
         // shared menu item
         menu.findItem(R.id.action_custom_outbound_json)?.isVisible = true
         menu.findItem(R.id.action_custom_config_json)?.isVisible = true
-        if (proxyEntity?.let { GroupManager.isProtectedProfile(it) } == true) {
+        if (proxyEntity?.let { GroupManager.isRemovalBlocked(it) } == true) {
             menu.findItem(R.id.action_delete)?.isVisible = false
         }
         return true
@@ -261,7 +261,7 @@ abstract class ProfileSettingsActivity<T : AbstractBean>(
         override fun onOptionsItemSelected(item: MenuItem): Boolean {
             return when (item.itemId) {
                 R.id.action_delete -> {
-                    if (activity?.proxyEntity?.let { GroupManager.isProtectedProfile(it) } == true) {
+                    if (activity?.proxyEntity?.let { GroupManager.isRemovalBlocked(it) } == true) {
                         true
                     } else {
                         if (DataStore.editingId == 0L) {
