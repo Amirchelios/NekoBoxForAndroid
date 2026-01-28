@@ -16,7 +16,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.Toolbar
 import androidx.core.net.toUri
 import androidx.core.view.isGone
@@ -98,7 +97,6 @@ class ConfigurationFragment @JvmOverloads constructor(
 ) : ToolbarFragment(R.layout.layout_group_list),
     PopupMenu.OnMenuItemClickListener,
     Toolbar.OnMenuItemClickListener,
-    SearchView.OnQueryTextListener,
     OnPreferenceDataStoreChangeListener {
 
     private val showAllProfiles = true
@@ -138,13 +136,6 @@ class ConfigurationFragment @JvmOverloads constructor(
         }
     }
 
-    override fun onQueryTextChange(query: String): Boolean {
-        getCurrentGroupFragment()?.adapter?.filter(query)
-        return false
-    }
-
-    override fun onQueryTextSubmit(query: String): Boolean = false
-
     @SuppressLint("DetachAndAttachSameFragment")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -169,18 +160,6 @@ class ConfigurationFragment @JvmOverloads constructor(
             toolbar.setNavigationIcon(R.drawable.ic_navigation_close)
             toolbar.setNavigationOnClickListener {
                 requireActivity().finish()
-            }
-        }
-
-        val searchView = toolbar.findViewById<SearchView>(R.id.action_search)
-        if (searchView != null) {
-            searchView.setOnQueryTextListener(this)
-            searchView.maxWidth = Int.MAX_VALUE
-
-            searchView.setOnQueryTextFocusChangeListener { _, hasFocus ->
-                if (!hasFocus) {
-                    cancelSearch(searchView)
-                }
             }
         }
 
@@ -334,8 +313,26 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (showAllProfiles) {
+            runOnDefaultDispatcher {
+                GroupManager.ensureDefaultSubscriptionGroup()
+                GroupManager.ensureDedicatedSubscriptionGroup()
+                onMainDispatcher {
+                    adapter.reload(true)
+                }
+            }
+        }
+    }
+
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.action_singbox_gui -> {
+                (requireActivity() as MainActivity).displayFragmentWithId(R.id.nav_singbox_dashboard)
+                return true
+            }
+
             R.id.action_scan_qr_code -> {
                 startActivity(Intent(context, ScannerActivity::class.java))
             }
@@ -1464,9 +1461,6 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
         }
 
-    private fun cancelSearch(searchView: SearchView) {
-        searchView.onActionViewCollapsed()
-        searchView.clearFocus()
-    }
+    // search removed
 
 }

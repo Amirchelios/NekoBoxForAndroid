@@ -2,9 +2,9 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/action_search"
-        android:title="@android:string/search_go"
-        app:actionViewClass="androidx.appcompat.widget.SearchView"
+        android:id="@+id/action_singbox_gui"
+        android:icon="@drawable/baseline_public_24"
+        android:title="@string/menu_dashboard"
         app:showAsAction="always" />
 
     <item
