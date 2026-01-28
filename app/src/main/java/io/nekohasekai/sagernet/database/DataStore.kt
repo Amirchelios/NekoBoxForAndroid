@@ -274,6 +274,26 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         configurationStore.putString("smartPreferredOrder.$groupId", raw)
     }
 
+    private val smartPreferredOrderDirty = mutableSetOf<Long>()
+
+    fun markSmartPreferredOrderDirty(groupId: Long) {
+        synchronized(smartPreferredOrderDirty) {
+            smartPreferredOrderDirty.add(groupId)
+        }
+    }
+
+    fun clearSmartPreferredOrderDirty(groupId: Long) {
+        synchronized(smartPreferredOrderDirty) {
+            smartPreferredOrderDirty.remove(groupId)
+        }
+    }
+
+    fun isSmartPreferredOrderDirty(groupId: Long): Boolean {
+        return synchronized(smartPreferredOrderDirty) {
+            smartPreferredOrderDirty.contains(groupId)
+        }
+    }
+
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {
     }
 }

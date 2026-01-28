@@ -521,6 +521,7 @@ fun buildConfig(
             } else {
                 tagMap.values.toList()
             }
+            DataStore.clearSmartPreferredOrderDirty(groupId)
             outbounds.add(0, Outbound_SelectorOptions().apply {
                 type = "selector"
                 tag = TAG_PROXY

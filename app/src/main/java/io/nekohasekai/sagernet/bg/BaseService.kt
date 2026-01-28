@@ -13,7 +13,9 @@ import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.aidl.ISagerNetService
 import io.nekohasekai.sagernet.aidl.ISagerNetServiceCallback
 import io.nekohasekai.sagernet.bg.proto.ProxyInstance
+import io.nekohasekai.sagernet.bg.proto.SmartSelector
 import io.nekohasekai.sagernet.database.DataStore
+import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.ktx.*
 import io.nekohasekai.sagernet.plugin.PluginManager
@@ -203,6 +205,7 @@ class BaseService {
         fun canReloadSelector(): Boolean {
             if ((data.proxy?.config?.selectorGroupId ?: -1L) < 0) return false
             val ent = SagerDatabase.proxyDao.getById(DataStore.selectedProxy) ?: return false
+            if (DataStore.isSmartPreferredOrderDirty(ent.groupId)) return false
             val tmpBox = ProxyInstance(ent)
             tmpBox.buildConfigTmp()
             if (tmpBox.lastSelectorGroupId == data.proxy?.lastSelectorGroupId) {
@@ -372,6 +375,15 @@ class BaseService {
 
                     startProcesses()
                     data.changeState(State.Connected)
+
+                    if (GroupManager.isAutoSelectAggregate(profile)) {
+                        runOnDefaultDispatcher {
+                            val best = SmartSelector.selectBest(profile.groupId)
+                            if (best != null) {
+                                SagerNet.reloadService()
+                            }
+                        }
+                    }
 
                     lateInit()
                 } catch (_: CancellationException) { // if the job was cancelled, it is canceller's responsibility to call stopRunner

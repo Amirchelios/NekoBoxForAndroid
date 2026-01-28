@@ -164,6 +164,12 @@ object GroupManager {
         return bean.type == 0
     }
 
+    fun isAutoSelectAggregate(proxy: ProxyEntity): Boolean {
+        if (proxy.type != ProxyEntity.TYPE_CONFIG) return false
+        val bean = proxy.requireBean() as? ConfigBean ?: return false
+        return bean.type == 0 && bean.config.isBlank()
+    }
+
     fun isProtectedProfile(group: ProxyGroup, proxy: ProxyEntity): Boolean {
         return isProtectedGroup(group) && isYoutubeInstagramConfig(proxy)
     }

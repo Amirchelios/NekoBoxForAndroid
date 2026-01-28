@@ -75,6 +75,7 @@ object SmartSelector {
         val best = sortedResults.firstOrNull() ?: return null
         DataStore.setSmartPreferredProxy(groupId, best.first.id)
         DataStore.setSmartPreferredOrder(groupId, sortedResults.map { it.first.id })
+        DataStore.markSmartPreferredOrderDirty(groupId)
 
         results.forEach { (profile, score) ->
             profile.status = 1
