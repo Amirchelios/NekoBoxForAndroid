@@ -98,6 +98,9 @@ object ProfileManager {
     }
 
     suspend fun deleteProfile2(groupId: Long, profileId: Long) {
+        SagerDatabase.proxyDao.getById(profileId)?.let { profile ->
+            if (GroupManager.isProtectedProfile(profile)) return
+        }
         if (SagerDatabase.proxyDao.deleteById(profileId) == 0) return
         if (DataStore.selectedProxy == profileId) {
             DataStore.selectedProxy = 0L
@@ -105,6 +108,9 @@ object ProfileManager {
     }
 
     suspend fun deleteProfile(groupId: Long, profileId: Long) {
+        SagerDatabase.proxyDao.getById(profileId)?.let { profile ->
+            if (GroupManager.isProtectedProfile(profile)) return
+        }
         if (SagerDatabase.proxyDao.deleteById(profileId) == 0) return
         if (DataStore.selectedProxy == profileId) {
             DataStore.selectedProxy = 0L

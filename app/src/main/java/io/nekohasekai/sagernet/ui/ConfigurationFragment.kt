@@ -791,7 +791,15 @@ class ConfigurationFragment @JvmOverloads constructor(
                     override fun getDragDirs(
                         recyclerView: RecyclerView,
                         viewHolder: RecyclerView.ViewHolder,
-                    ) = if (isEnabled) super.getDragDirs(recyclerView, viewHolder) else 0
+                    ): Int {
+                        if (!isEnabled) return 0
+                        val entity = (viewHolder as? ConfigurationHolder)?.entity
+                        return if (entity != null && GroupManager.isProtectedProfile(proxyGroup, entity)) {
+                            0
+                        } else {
+                            super.getDragDirs(recyclerView, viewHolder)
+                        }
+                    }
 
                     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                     }
@@ -800,6 +808,10 @@ class ConfigurationFragment @JvmOverloads constructor(
                         recyclerView: RecyclerView,
                         viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder,
                     ): Boolean {
+                        val source = (viewHolder as? ConfigurationHolder)?.entity
+                        val dest = (target as? ConfigurationHolder)?.entity
+                        if (source != null && GroupManager.isProtectedProfile(proxyGroup, source)) return false
+                        if (dest != null && GroupManager.isProtectedProfile(proxyGroup, dest)) return false
                         adapter?.move(
                             viewHolder.bindingAdapterPosition, target.bindingAdapterPosition
                         )
@@ -1234,6 +1246,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
 
                 removeButton.setOnClickListener {
+                    if (GroupManager.isProtectedProfile(proxyGroup, proxyEntity)) return@setOnClickListener
                     adapter?.let {
                         val index = it.configurationIdList.indexOf(proxyEntity.id)
                         it.remove(index)
@@ -1241,10 +1254,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                     }
                 }
 
+                val isProtected = GroupManager.isProtectedProfile(proxyGroup, proxyEntity)
                 val selectOrChain = select || proxyEntity.type == ProxyEntity.TYPE_CHAIN
                 shareLayout.isGone = selectOrChain
-                editButton.isGone = select
-                removeButton.isGone = select
+                editButton.isGone = select || isProtected
+                removeButton.isGone = select || isProtected
 
                 proxyEntity.nekoBean?.apply {
                     shareLayout.isGone = true

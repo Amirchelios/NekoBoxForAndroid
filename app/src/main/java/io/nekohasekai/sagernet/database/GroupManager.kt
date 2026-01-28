@@ -11,6 +11,8 @@ import moe.matsuri.nb4a.proxy.config.ConfigBean
 
 object GroupManager {
 
+    const val YOUTUBE_INSTAGRAM_CONFIG_NAME = "باز کننده یوتویب و اینستاگرام"
+
     interface Listener {
         suspend fun groupAdd(group: ProxyGroup)
         suspend fun groupUpdated(group: ProxyGroup)
@@ -128,7 +130,7 @@ object GroupManager {
                 SagerDatabase.groupDao.updateGroup(existing)
                 iterator { groupUpdated(existing) }
             }
-            ensureDefaultYoutubeConfig(existing)
+            ensureDefaultYoutubeInstagramConfig(existing)
             return existing
         }
         val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
@@ -139,7 +141,7 @@ object GroupManager {
         }
         return createGroup(group).also {
             if (it != null) {
-                ensureDefaultYoutubeConfig(it)
+                ensureDefaultYoutubeInstagramConfig(it)
             }
         }
     }
@@ -150,13 +152,28 @@ object GroupManager {
             link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true)
     }
 
+    fun isYoutubeInstagramConfig(proxy: ProxyEntity): Boolean {
+        if (proxy.type != ProxyEntity.TYPE_CONFIG) return false
+        val bean = proxy.requireBean() as? ConfigBean ?: return false
+        return bean.type == 0 && bean.name == YOUTUBE_INSTAGRAM_CONFIG_NAME
+    }
+
+    fun isProtectedProfile(group: ProxyGroup, proxy: ProxyEntity): Boolean {
+        return isProtectedGroup(group) && isYoutubeInstagramConfig(proxy)
+    }
+
+    fun isProtectedProfile(proxy: ProxyEntity): Boolean {
+        val group = SagerDatabase.groupDao.getById(proxy.groupId) ?: return false
+        return isProtectedProfile(group, proxy)
+    }
+
 }
 
-private suspend fun ensureDefaultYoutubeConfig(group: ProxyGroup) {
+private suspend fun ensureDefaultYoutubeInstagramConfig(group: ProxyGroup) {
     val existing = SagerDatabase.proxyDao.getByGroup(group.id).firstOrNull { proxy ->
         if (proxy.type != ProxyEntity.TYPE_CONFIG) return@firstOrNull false
         val bean = proxy.requireBean() as? ConfigBean ?: return@firstOrNull false
-        bean.type == 0 && bean.name == "کانفیگ یوتیوب"
+        bean.type == 0 && bean.name == GroupManager.YOUTUBE_INSTAGRAM_CONFIG_NAME
     }
     if (existing != null) return
 
@@ -172,7 +189,7 @@ private suspend fun ensureDefaultYoutubeConfig(group: ProxyGroup) {
     val bean = ConfigBean().applyDefaultValues().apply {
         type = 0
         config = configText
-        name = "کانفیگ یوتیوب"
+        name = GroupManager.YOUTUBE_INSTAGRAM_CONFIG_NAME
     }
     ProfileManager.createProfile(group.id, bean)
 }
