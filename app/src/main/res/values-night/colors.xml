@@ -2,4 +2,13 @@
 <resources>
     <color name="fab_color_progress">@color/material_light_white</color>
     <color name="preference_simple_menu_background">#303030</color>
+    <color name="brand_primary">#4B8BFF</color>
+    <color name="brand_primary_dark">#2C58B8</color>
+    <color name="brand_accent">#3CD0E6</color>
+    <color name="brand_material_100">#1D2A4A</color>
+    <color name="brand_material_300">#5A7ED6</color>
+
+    <color name="connect_fab_background">@color/brand_primary</color>
+    <color name="connect_fab_ripple">#76A9FF</color>
+    <color name="connect_progress">@color/brand_material_300</color>
 </resources>

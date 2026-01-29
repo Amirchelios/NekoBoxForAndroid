@@ -198,6 +198,15 @@
     <color name="material_orange_300">#FFB74D</color>
     <color name="material_orange_400">#FFA726</color>
     <color name="material_orange_50">#FFF3E0</color>
+    <color name="brand_primary">#2B6DFF</color>
+    <color name="brand_primary_dark">#1E4FBF</color>
+    <color name="brand_accent">#24B0C7</color>
+    <color name="brand_material_100">#CFE0FF</color>
+    <color name="brand_material_300">#8FB3FF</color>
+
+    <color name="connect_fab_background">@color/brand_primary</color>
+    <color name="connect_fab_ripple">#3E86FF</color>
+    <color name="connect_progress">@color/brand_material_300</color>
     <color name="material_orange_500">#FF9800</color>
     <color name="material_orange_600">#FB8C00</color>
     <color name="material_orange_700">#F57C00</color>

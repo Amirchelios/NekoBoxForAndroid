@@ -1,5 +1,8 @@
 package io.nekohasekai.sagernet.widget
 
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.os.Build
@@ -11,6 +14,7 @@ import androidx.appcompat.widget.TooltipCompat
 import androidx.dynamicanimation.animation.DynamicAnimation
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.vectordrawable.graphics.drawable.Animatable2Compat
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -81,6 +85,7 @@ class ServiceButton @JvmOverloads constructor(
     private var checked = false
     private var delayedAnimation: Job? = null
     private lateinit var progress: BaseProgressIndicator<*>
+    private var pulseAnimator: ObjectAnimator? = null
     fun initProgress(progress: BaseProgressIndicator<*>) {
         this.progress = progress
         progress.progressDrawable?.addSpringAnimationEndListener(this)
@@ -109,12 +114,22 @@ class ServiceButton @JvmOverloads constructor(
 
     fun changeState(state: BaseService.State, previousState: BaseService.State, animate: Boolean) {
         when (state) {
-            BaseService.State.Connecting -> changeState(iconConnecting, animate)
-            BaseService.State.Connected -> changeState(iconConnected, animate)
+            BaseService.State.Connecting -> {
+                startPulse()
+                changeState(iconConnecting, animate)
+            }
+            BaseService.State.Connected -> {
+                stopPulse()
+                changeState(iconConnected, animate)
+            }
             BaseService.State.Stopping -> {
+                stopPulse()
                 changeState(iconStopping, animate && previousState == BaseService.State.Connected)
             }
-            else -> changeState(iconStopped, animate)
+            else -> {
+                stopPulse()
+                changeState(iconStopped, animate)
+            }
         }
         checked = state == BaseService.State.Connected
         refreshDrawableState()
@@ -127,6 +142,32 @@ class ServiceButton @JvmOverloads constructor(
             context,
             if (enabled) PointerIcon.TYPE_HAND else PointerIcon.TYPE_WAIT
         )
+    }
+
+    private fun startPulse() {
+        if (pulseAnimator?.isRunning == true) return
+        pulseAnimator?.cancel()
+        pulseAnimator = ObjectAnimator.ofPropertyValuesHolder(
+            this,
+            PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.06f),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.06f),
+            PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.92f)
+        ).apply {
+            duration = 900L
+            interpolator = FastOutSlowInInterpolator()
+            repeatMode = ValueAnimator.REVERSE
+            repeatCount = ValueAnimator.INFINITE
+            start()
+        }
+    }
+
+    private fun stopPulse() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        animate().cancel()
+        scaleX = 1f
+        scaleY = 1f
+        alpha = 1f
     }
 
     private fun changeState(icon: AnimatedState, animate: Boolean) {

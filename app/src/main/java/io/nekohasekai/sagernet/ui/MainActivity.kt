@@ -8,8 +8,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.RemoteException
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
+import android.animation.ValueAnimator
 import android.view.KeyEvent
 import android.view.MenuItem
+import android.view.View
 import androidx.activity.addCallback
 import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
@@ -57,6 +61,7 @@ class MainActivity : ThemedActivity(),
 
     lateinit var binding: LayoutMainBinding
     lateinit var navigation: NavigationView
+    private var glowAnimator: ObjectAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,6 +99,7 @@ class MainActivity : ThemedActivity(),
         binding.stats.setOnClickListener(null)
 
         setContentView(binding.root)
+        animateEntrance()
         changeState(BaseService.State.Idle)
         connection.connect(this, this)
         DataStore.configurationStore.registerChangeListener(this)
@@ -357,7 +363,57 @@ class MainActivity : ThemedActivity(),
 
         binding.fab.changeState(state, DataStore.serviceState, animate)
         binding.stats.changeState(state)
+        updateGlow(state)
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
+    }
+
+    private fun animateEntrance() {
+        binding.fragmentHolder.apply {
+            alpha = 0f
+            animate().alpha(1f).setDuration(360L).setStartDelay(80L).start()
+        }
+        binding.stats.apply {
+            alpha = 0f
+            translationY = 48f
+            animate().alpha(1f).translationY(0f).setDuration(420L).setStartDelay(160L).start()
+        }
+        binding.fab.apply {
+            alpha = 0f
+            scaleX = 0.9f
+            scaleY = 0.9f
+            animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(420L).setStartDelay(120L).start()
+        }
+        binding.fabProgress.apply {
+            alpha = 0f
+            animate().alpha(1f).setDuration(420L).setStartDelay(140L).start()
+        }
+    }
+
+    private fun updateGlow(state: BaseService.State) {
+        val glow = binding.connectGlow
+        if (state == BaseService.State.Connected) {
+            if (glowAnimator?.isRunning == true) return
+            glow.visibility = View.VISIBLE
+            glowAnimator?.cancel()
+            glowAnimator = ObjectAnimator.ofPropertyValuesHolder(
+                glow,
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.35f, 0.15f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.08f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.08f)
+            ).apply {
+                duration = 1400L
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+                start()
+            }
+        } else {
+            glowAnimator?.cancel()
+            glowAnimator = null
+            glow.alpha = 0f
+            glow.scaleX = 1f
+            glow.scaleY = 1f
+            glow.visibility = View.INVISIBLE
+        }
     }
 
     override fun snackbarInternal(text: CharSequence): Snackbar {
