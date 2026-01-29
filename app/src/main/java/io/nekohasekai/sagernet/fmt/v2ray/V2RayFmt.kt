@@ -319,7 +319,6 @@ fun parseV2RayN(link: String): VMessBean {
     if (TextUtils.isEmpty(vmessQRCode.add)
         || TextUtils.isEmpty(vmessQRCode.port)
         || TextUtils.isEmpty(vmessQRCode.id)
-        || TextUtils.isEmpty(vmessQRCode.net)
     ) {
         throw Exception("invalid VmessQRCode")
     }
@@ -330,10 +329,18 @@ fun parseV2RayN(link: String): VMessBean {
     bean.encryption = vmessQRCode.scy
     bean.uuid = vmessQRCode.id
     bean.alterId = vmessQRCode.aid.toIntOrNull()
-    bean.type = vmessQRCode.net
+    val net = vmessQRCode.net
+    bean.type = when {
+        net.isNullOrBlank() -> "tcp"
+        net == "raw" || net == "none" -> "tcp"
+        else -> net
+    }
     bean.host = vmessQRCode.host
     bean.path = vmessQRCode.path
     val headerType = vmessQRCode.type
+    if (bean.encryption.isNullOrBlank()) bean.encryption = "auto"
+    if (bean.alterId == null) bean.alterId = 0
+    if (bean.serverPort == null) throw Exception("invalid VmessQRCode")
 
     when (bean.type) {
         "tcp" -> {
@@ -349,6 +356,9 @@ fun parseV2RayN(link: String): VMessBean {
             if (bean.sni.isNullOrBlank()) bean.sni = bean.host
             bean.alpn = vmessQRCode.alpn
             bean.utlsFingerprint = vmessQRCode.fp
+        }
+        else -> {
+            bean.security = "none"
         }
     }
 

@@ -39,7 +39,7 @@ constructor(
             concurrent?.apply {
                 var newConcurrent = text?.toString()?.toIntOrNull()
                 if (newConcurrent == null || newConcurrent <= 0) {
-                    newConcurrent = 5
+                    newConcurrent = 50
                 }
                 DataStore.connectionTestConcurrent = newConcurrent
             }

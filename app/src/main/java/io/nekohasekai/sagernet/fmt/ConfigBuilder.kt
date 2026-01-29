@@ -39,6 +39,8 @@ import moe.matsuri.nb4a.utils.JavaUtil.gson
 import moe.matsuri.nb4a.utils.Util
 import moe.matsuri.nb4a.utils.listByLineOrComma
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 
 const val TAG_MIXED = "mixed-in"
 
@@ -389,7 +391,7 @@ fun buildConfig(
                     // internal outbound
 
                     currentOutbound = when (bean) {
-                        is ConfigBean -> CustomSingBoxOption(bean.config)
+                        is ConfigBean -> CustomSingBoxOption(sanitizeCustomConfig(bean.config))
 
                         is ShadowTLSBean -> // before StandardV2RayBean
                             buildSingBoxOutboundShadowTLSBean(bean)
@@ -813,8 +815,9 @@ fun buildConfig(
     }.let {
         val configMap = it.asMap()
         Util.mergeJSON(configMap, proxy.requireBean().customConfigJson)
+        val configJson = gson.toJson(configMap)
         ConfigBuildResult(
-            gson.toJson(configMap),
+            sanitizeGeneratedConfig(configJson),
             externalIndexMap,
             proxy.id,
             trafficMap,
@@ -823,4 +826,48 @@ fun buildConfig(
         )
     }
 
+}
+
+private fun sanitizeCustomConfig(config: String): String {
+    if (config.isBlank()) return config
+    return runCatching {
+        val root = JSONObject(config)
+        fixVmessSecurity(root)
+        root.toString()
+    }.getOrDefault(config)
+}
+
+private fun sanitizeGeneratedConfig(config: String): String {
+    if (config.isBlank()) return config
+    return runCatching {
+        val root = JSONObject(config)
+        fixVmessSecurity(root)
+        root.toString()
+    }.getOrDefault(config)
+}
+
+private fun fixVmessSecurity(value: Any?) {
+    when (value) {
+        is JSONObject -> {
+            val type = value.optString("type")
+            if (type == "vmess") {
+                val sec = value.opt("security")
+                val secStr = sec?.toString()?.trim()
+                val allowed = setOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305", "aes-128-ctr")
+                if (sec == JSONObject.NULL || sec == null || secStr.isNullOrBlank() || secStr == "null" || secStr !in allowed) {
+                    value.put("security", "auto")
+                }
+            }
+            val keys = value.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                fixVmessSecurity(value.opt(k))
+            }
+        }
+        is JSONArray -> {
+            for (i in 0 until value.length()) {
+                fixVmessSecurity(value.opt(i))
+            }
+        }
+    }
 }

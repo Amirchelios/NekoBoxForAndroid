@@ -132,6 +132,12 @@ object RawUpdater : GroupUpdater() {
         }
 
         val proxiesMap = LinkedHashMap<String, AbstractBean>()
+        // normalize any embedded sing-box configs to avoid invalid vmess security fields
+        proxies.forEach {
+            if (it is ConfigBean && it.type == 0 && it.config.isNotBlank()) {
+                it.config = sanitizeSingBoxConfig(it.config)
+            }
+        }
         for (proxy in proxies) {
             var index = 0
             var name = proxy.displayName()
@@ -734,11 +740,18 @@ object RawUpdater : GroupUpdater() {
         if (config.isBlank()) return config
         return runCatching {
             val root = JSONObject(config)
+            fixVmessSecurity(root)
             val outbounds = root.optJSONArray("outbounds") ?: return@runCatching config
             val invalidTags = HashSet<String>()
             val newOutbounds = JSONArray()
             for (i in 0 until outbounds.length()) {
                 val outbound = outbounds.optJSONObject(i) ?: continue
+                if (outbound.optString("type") == "vmess") {
+                    val sec = outbound.opt("security")
+                    if (sec == JSONObject.NULL || (sec is String && sec.isBlank())) {
+                        outbound.put("security", "auto")
+                    }
+                }
                 if (outbound.optString("type") == "urltest") {
                     outbound.remove("timeout")
                     outbound.remove("timeoout")
@@ -773,6 +786,41 @@ object RawUpdater : GroupUpdater() {
             root.put("outbounds", newOutbounds)
             root.toString()
         }.getOrDefault(config)
+    }
+
+    private fun sanitizeSingBoxConfig(config: String): String {
+        if (config.isBlank()) return config
+        return runCatching {
+            val root = JSONObject(config)
+            fixVmessSecurity(root)
+            root.toString()
+        }.getOrDefault(config)
+    }
+
+    private fun fixVmessSecurity(value: Any?) {
+        when (value) {
+            is JSONObject -> {
+                val type = value.optString("type")
+                if (type == "vmess") {
+                    val sec = value.opt("security")
+                    val secStr = sec?.toString()?.trim()
+                    val allowed = setOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305", "aes-128-ctr")
+                    if (sec == JSONObject.NULL || sec == null || secStr.isNullOrBlank() || secStr == "null" || secStr !in allowed) {
+                        value.put("security", "auto")
+                    }
+                }
+                val keys = value.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    fixVmessSecurity(value.opt(k))
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until value.length()) {
+                    fixVmessSecurity(value.opt(i))
+                }
+            }
+        }
     }
 
     private fun isInvalidRealityOutbound(outbound: JSONObject): Boolean {
