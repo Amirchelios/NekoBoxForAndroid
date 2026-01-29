@@ -3,7 +3,9 @@ package io.nekohasekai.sagernet.group
 import io.nekohasekai.sagernet.*
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
+import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.ProxyGroup
+import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.database.SubscriptionBean
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.http.HttpBean
@@ -14,6 +16,7 @@ import io.nekohasekai.sagernet.fmt.trojan_go.TrojanGoBean
 import io.nekohasekai.sagernet.fmt.v2ray.StandardV2RayBean
 import io.nekohasekai.sagernet.fmt.v2ray.isTLS
 import io.nekohasekai.sagernet.ktx.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.*
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -148,6 +151,9 @@ abstract class GroupUpdater {
                 }
 
                 try {
+                    if (!connected) {
+                        ensureInternalProxyForUpdate()
+                    }
                     RawUpdater.doUpdate(proxyGroup, subscription, userInterface, byUser)
                     true
                 } catch (e: Throwable) {
@@ -159,6 +165,66 @@ abstract class GroupUpdater {
             }
         }
 
+
+        private suspend fun ensureInternalProxyForUpdate() {
+            if (DataStore.serviceState.connected) return
+
+            val all = SagerDatabase.proxyDao.getAll()
+            val dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) }
+            val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
+            val candidates = listOfNotNull(dedicated, auto)
+            if (candidates.isEmpty()) return
+
+            if (!DataStore.internalProxyActive) {
+                DataStore.internalProxyUserSelected = DataStore.selectedProxy
+            }
+            val prevMode = DataStore.serviceMode
+            val prevSelected = DataStore.selectedProxy
+            val prevCurrent = DataStore.currentProfile
+            val wasStarted = DataStore.serviceState.started
+
+            suspend fun tryConnectWith(profile: ProxyEntity): Boolean {
+                DataStore.selectedProxy = profile.id
+                DataStore.currentProfile = profile.id
+                DataStore.serviceMode = Key.MODE_PROXY
+                DataStore.internalProxyProfileId = profile.id
+                DataStore.internalProxyActive = true
+
+                if (!DataStore.serviceState.started) {
+                    SagerNet.startService()
+                } else {
+                    SagerNet.reloadService()
+                }
+
+                val timeoutMs = 60_000L
+                val start = System.currentTimeMillis()
+                while (System.currentTimeMillis() - start < timeoutMs) {
+                    if (DataStore.serviceState.connected) return true
+                    delay(500L)
+                }
+                return false
+            }
+
+            var connected = false
+            for (candidate in candidates) {
+                connected = tryConnectWith(candidate)
+                if (connected) break
+            }
+
+            if (connected) {
+                delay(60_000L)
+                return
+            }
+
+            DataStore.internalProxyActive = false
+            DataStore.internalProxyProfileId = 0L
+            DataStore.selectedProxy = prevSelected
+            DataStore.currentProfile = prevCurrent
+            DataStore.serviceMode = prevMode
+            if (!wasStarted) {
+                SagerNet.stopService()
+            }
+        }
 
         suspend fun finishUpdate(proxyGroup: ProxyGroup) {
             updating.remove(proxyGroup.id)

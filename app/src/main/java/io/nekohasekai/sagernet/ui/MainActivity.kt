@@ -37,6 +37,7 @@ import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.database.ProxyGroup
 import io.nekohasekai.sagernet.database.SubscriptionBean
+import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.database.preference.OnPreferenceDataStoreChangeListener
 import io.nekohasekai.sagernet.databinding.LayoutMainBinding
 import io.nekohasekai.sagernet.fmt.AbstractBean
@@ -93,9 +94,24 @@ class MainActivity : ThemedActivity(),
         }
 
         binding.fab.setOnClickListener {
-            if (DataStore.serviceState.canStop) SagerNet.stopService() else connect.launch(
-                null
-            )
+            if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
+                val restoreId = DataStore.internalProxyUserSelected
+                if (restoreId > 0L) {
+                    DataStore.selectedProxy = restoreId
+                    DataStore.currentProfile = restoreId
+                }
+                DataStore.internalProxyActive = false
+                DataStore.internalProxyProfileId = 0L
+                DataStore.serviceMode = Key.MODE_VPN
+                if (DataStore.serviceState.canStop) {
+                    SagerNet.stopService()
+                }
+                connect.launch(null)
+            } else if (DataStore.serviceState.canStop) {
+                SagerNet.stopService()
+            } else {
+                connect.launch(null)
+            }
         }
         binding.stats.setOnClickListener(null)
 
@@ -109,6 +125,7 @@ class MainActivity : ThemedActivity(),
             GroupManager.ensureDefaultSubscriptionGroup()
             GroupManager.ensureDedicatedSubscriptionGroup()
         }
+        ensureInternalProxyOnAppStart()
 
         if (intent?.action == Intent.ACTION_VIEW) {
             onNewIntent(intent)
@@ -361,11 +378,16 @@ class MainActivity : ThemedActivity(),
     ) {
         DataStore.serviceState = state
 
-        binding.fab.changeState(state, DataStore.serviceState, animate)
-        binding.stats.changeState(state)
-        updateGlow(state)
-        updateStateAnimation(state)
-        updateStatsAnimation(state)
+        val uiState = if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
+            BaseService.State.Stopped
+        } else {
+            state
+        }
+        binding.fab.changeState(uiState, DataStore.serviceState, animate)
+        binding.stats.changeState(uiState)
+        updateGlow(uiState)
+        updateStateAnimation(uiState)
+        updateStatsAnimation(uiState)
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
     }
 
@@ -476,6 +498,24 @@ class MainActivity : ThemedActivity(),
                 .setDuration(220L)
                 .withEndAction { stats.visibility = View.INVISIBLE }
                 .start()
+        }
+    }
+
+    private fun ensureInternalProxyOnAppStart() {
+        runOnDefaultDispatcher {
+            if (DataStore.internalProxyActive || DataStore.serviceState.connected) return@runOnDefaultDispatcher
+            val all = SagerDatabase.proxyDao.getAll()
+            val dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) }
+            val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
+            val target = dedicated ?: auto ?: return@runOnDefaultDispatcher
+
+            DataStore.internalProxyUserSelected = DataStore.selectedProxy
+            DataStore.internalProxyProfileId = target.id
+            DataStore.internalProxyActive = true
+            DataStore.selectedProxy = target.id
+            DataStore.currentProfile = target.id
+            DataStore.serviceMode = Key.MODE_PROXY
+            SagerNet.startService()
         }
     }
 

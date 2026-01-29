@@ -28,6 +28,14 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     @Volatile
     var serviceState = BaseService.State.Idle
 
+    // internal proxy state (hidden from UI)
+    @Volatile
+    var internalProxyActive = false
+    @Volatile
+    var internalProxyProfileId: Long = 0L
+    @Volatile
+    var internalProxyUserSelected: Long = 0L
+
     val configurationStore = RoomPreferenceDataStore(PublicDatabase.kvPairDao)
     val profileCacheStore = RoomPreferenceDataStore(TempDatabase.profileCacheDao)
 

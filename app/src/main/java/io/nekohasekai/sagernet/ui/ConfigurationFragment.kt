@@ -255,10 +255,20 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     private enum class SpecialProfile { YOUTUBE, AUTO, DEDICATED }
 
+    private fun userSelectedId(): Long {
+        return if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY &&
+            DataStore.internalProxyUserSelected > 0L
+        ) {
+            DataStore.internalProxyUserSelected
+        } else {
+            DataStore.selectedProxy
+        }
+    }
+
     private fun updateQuickBarSelection() {
         if (!showAllProfiles) return
         runOnDefaultDispatcher {
-            val selectedId = DataStore.selectedProxy
+            val selectedId = userSelectedId()
             val proxy = SagerDatabase.proxyDao.getById(selectedId) ?: return@runOnDefaultDispatcher
             val checkedId = when {
                 GroupManager.isYoutubeInstagramConfig(proxy) -> R.id.quick_youtube
@@ -290,13 +300,17 @@ class ConfigurationFragment @JvmOverloads constructor(
                 SpecialProfile.AUTO -> all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
                 SpecialProfile.DEDICATED -> all.firstOrNull { GroupManager.isDedicatedConfig(it) }
             } ?: return@runOnDefaultDispatcher
-            val lastSelected = DataStore.selectedProxy
+            val lastSelected = userSelectedId()
             if (lastSelected == target.id) return@runOnDefaultDispatcher
-            DataStore.selectedProxy = target.id
-            DataStore.currentProfile = target.id
-            ProfileManager.postUpdate(lastSelected)
-            if (DataStore.serviceState.canStop) {
-                SagerNet.reloadService()
+            if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
+                DataStore.internalProxyUserSelected = target.id
+            } else {
+                DataStore.selectedProxy = target.id
+                DataStore.currentProfile = target.id
+                ProfileManager.postUpdate(lastSelected)
+                if (DataStore.serviceState.canStop) {
+                    SagerNet.reloadService()
+                }
             }
             onMainDispatcher {
                 val fragment = getCurrentGroupFragment()
@@ -1251,19 +1265,24 @@ class ConfigurationFragment @JvmOverloads constructor(
                             var update: Boolean
                             var lastSelected: Long
                             profileAccess.withLock {
-                                update = DataStore.selectedProxy != proxyEntity.id
-                                lastSelected = DataStore.selectedProxy
-                                DataStore.selectedProxy = proxyEntity.id
-                                onMainDispatcher {
-                                    selectedView.visibility = View.VISIBLE
+                                lastSelected = (parentFragment as? ConfigurationFragment)?.userSelectedId()
+                                    ?: DataStore.selectedProxy
+                                update = lastSelected != proxyEntity.id
+                                if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
+                                    DataStore.internalProxyUserSelected = proxyEntity.id
+                                } else {
+                                    DataStore.selectedProxy = proxyEntity.id
                                 }
+                                onMainDispatcher { selectedView.visibility = View.VISIBLE }
                             }
 
                             if (update) {
-                                ProfileManager.postUpdate(lastSelected)
-                                if (DataStore.serviceState.canStop && reloadAccess.tryLock()) {
-                                    SagerNet.reloadService()
-                                    reloadAccess.unlock()
+                                if (!(DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY)) {
+                                    ProfileManager.postUpdate(lastSelected)
+                                    if (DataStore.serviceState.canStop && reloadAccess.tryLock()) {
+                                        SagerNet.reloadService()
+                                        reloadAccess.unlock()
+                                    }
                                 }
                             } else if (SagerNet.isTv) {
                                 if (DataStore.serviceState.started) {
@@ -1381,7 +1400,9 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
 
                 runOnDefaultDispatcher {
-                    val selected = (selectedItem?.id ?: DataStore.selectedProxy) == proxyEntity.id
+                    val selected = (selectedItem?.id
+                        ?: (parentFragment as? ConfigurationFragment)?.userSelectedId()
+                        ?: DataStore.selectedProxy) == proxyEntity.id
                     val started =
                         selected && DataStore.serviceState.started && DataStore.currentProfile == proxyEntity.id
                     onMainDispatcher {
