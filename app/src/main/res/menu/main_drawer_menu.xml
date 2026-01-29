@@ -31,6 +31,10 @@
             android:icon="@drawable/ic_baseline_bug_report_24"
             android:title="@string/menu_log" />
         <item
+            android:id="@+id/nav_internal_browser"
+            android:icon="@drawable/baseline_public_24"
+            android:title="@string/menu_browser" />
+        <item
             android:id="@+id/nav_singbox_dashboard"
             android:icon="@drawable/ic_baseline_transform_24"
             android:title="Sing-Box GUI" />

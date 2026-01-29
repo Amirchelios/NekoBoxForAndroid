@@ -14,6 +14,10 @@
     <string name="quick_youtube_instagram">بازکننده یوتویب</string>
     <string name="quick_dedicated_config">کانفیگ اختصاصی</string>
     <string name="quick_connection_method">متد اتصال</string>
+    <string name="menu_browser">مرورگر</string>
+    <string name="set_browser_url">تنظیم آدرس</string>
+    <string name="browser_proxy_unsupported">پراکسی وب‌ویو نیاز به اندروید ۱۰ دارد؛ از شبکه سیستم استفاده می‌شود.</string>
+    <string name="menu_refresh">تازه‌سازی</string>
     <string name="menu_group">گروه‌ها</string>
     <string name="menu_about">درباره برنامه</string>
     <string name="theme">ظاهر</string>

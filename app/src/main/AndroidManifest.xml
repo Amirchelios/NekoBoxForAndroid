@@ -73,6 +73,12 @@
             android:configChanges="uiMode" />
 
         <activity
+            android:name="io.nekohasekai.sagernet.ui.InternalBrowserActivity"
+            android:configChanges="uiMode"
+            android:exported="false"
+            android:parentActivityName="io.nekohasekai.sagernet.ui.MainActivity" />
+
+        <activity
             android:name="io.nekohasekai.sagernet.ui.MainActivity"
             android:configChanges="uiMode"
             android:exported="true"

@@ -172,6 +172,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var profileTrafficStatistics by configurationStore.boolean(Key.PROFILE_TRAFFIC_STATISTICS) { true }
 
     var yacdURL by configurationStore.string("yacdURL") { "http://127.0.0.1:9090/ui" }
+    var internalBrowserUrl by configurationStore.string("internalBrowserUrl") { "https://www.google.com" }
 
     // protocol
 

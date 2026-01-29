@@ -386,6 +386,10 @@ class MainActivity : ThemedActivity(),
             }
             R.id.nav_tools -> displayFragment(ToolsFragment())
             R.id.nav_logcat -> displayFragment(LogcatFragment())
+            R.id.nav_internal_browser -> {
+                startActivity(Intent(this, InternalBrowserActivity::class.java))
+                return false
+            }
             R.id.nav_about -> displayFragment(AboutFragment())
 
             else -> return false

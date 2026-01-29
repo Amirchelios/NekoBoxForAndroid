@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_set_url"
+        android:title="@string/set_browser_url" />
+    <item
+        android:id="@+id/action_refresh"
+        android:icon="@drawable/ic_baseline_refresh_24"
+        android:title="@string/menu_refresh"
+        android:showAsAction="always" />
+</menu>
