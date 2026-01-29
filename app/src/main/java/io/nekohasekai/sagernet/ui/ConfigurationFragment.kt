@@ -193,6 +193,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             toolbar.elevation = 0F
             quickBarCard.isVisible = true
         }
+        if (DataStore.clientMode) {
+            quickBarCard.isGone = true
+        }
 
         TabLayoutMediator(tabLayout, groupPager) { tab, position ->
             if (adapter.groupList.size > position) {
@@ -234,7 +237,7 @@ class ConfigurationFragment @JvmOverloads constructor(
     }
 
     private fun setupQuickBar() {
-        if (!showAllProfiles) {
+        if (!showAllProfiles || DataStore.clientMode) {
             quickBarCard.isGone = true
             return
         }

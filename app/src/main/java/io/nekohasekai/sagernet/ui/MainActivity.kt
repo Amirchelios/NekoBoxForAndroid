@@ -11,6 +11,7 @@ import android.os.RemoteException
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MenuItem
 import android.view.View
@@ -138,6 +139,7 @@ class MainActivity : ThemedActivity(),
         binding.stats.setOnClickListener(null)
 
         setContentView(binding.root)
+        applyClientModeUi()
         animateEntrance()
         changeState(BaseService.State.Idle)
         connection.connect(this, this)
@@ -180,6 +182,7 @@ class MainActivity : ThemedActivity(),
     fun refreshNavMenu(clashApi: Boolean) {
         if (::navigation.isInitialized) {
             navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isVisible = clashApi
+            navigation.menu.findItem(R.id.nav_client_mode)?.isChecked = DataStore.clientMode
         }
     }
 
@@ -349,26 +352,91 @@ class MainActivity : ThemedActivity(),
     }
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
-        if (item.isChecked) binding.drawerLayout.closeDrawers() else {
-            return displayFragmentWithId(item.itemId)
+        return when (item.itemId) {
+            R.id.nav_client_mode -> {
+                DataStore.clientMode = !DataStore.clientMode
+                item.isChecked = DataStore.clientMode
+                applyClientModeUi()
+                if (DataStore.clientMode) {
+                    displayFragmentWithId(R.id.nav_configuration)
+                }
+                binding.drawerLayout.closeDrawers()
+                true
+            }
+            else -> {
+                if (item.isChecked) {
+                    binding.drawerLayout.closeDrawers()
+                    true
+                } else {
+                    displayFragmentWithId(item.itemId)
+                }
+            }
         }
-        return true
     }
 
 
     @SuppressLint("CommitTransaction")
     fun displayFragment(fragment: ToolbarFragment) {
-        if (fragment is ConfigurationFragment) {
-            binding.stats.visibility = View.VISIBLE
-            binding.fab.show()
-        } else if (!DataStore.showBottomBar) {
+        if (DataStore.clientMode) {
             binding.stats.visibility = View.GONE
-            binding.fab.hide()
+            binding.fab.show()
+        } else {
+            if (fragment is ConfigurationFragment) {
+                binding.stats.visibility = View.VISIBLE
+                binding.fab.show()
+            } else if (!DataStore.showBottomBar) {
+                binding.stats.visibility = View.GONE
+                binding.fab.hide()
+            }
         }
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_holder, fragment)
             .commitAllowingStateLoss()
         binding.drawerLayout.closeDrawers()
+    }
+
+    private fun applyClientModeUi() {
+        val params = binding.fab.layoutParams as androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams
+        val progressParams = binding.fabProgress.layoutParams as androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams
+        val density = resources.displayMetrics.density
+        if (::navigation.isInitialized) {
+            navigation.menu.findItem(R.id.nav_client_mode)?.isChecked = DataStore.clientMode
+        }
+        if (DataStore.clientMode) {
+            if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
+                DataStore.internalProxyActive = false
+                DataStore.internalProxyProfileId = 0L
+                DataStore.internalProxyUserSelected = 0L
+                if (DataStore.serviceState.canStop) {
+                    SagerNet.stopService()
+                }
+            }
+            val margin = (20 * density).toInt()
+            params.anchorGravity = Gravity.END or Gravity.BOTTOM
+            params.marginEnd = margin
+            params.bottomMargin = margin
+            binding.fab.translationY = 0f
+            binding.fab.customSize = (72 * density).toInt()
+            progressParams.anchorGravity = Gravity.END or Gravity.BOTTOM
+            progressParams.marginEnd = margin
+            progressParams.bottomMargin = margin
+            binding.fabProgress.indicatorSize = (110 * density).toInt()
+            binding.connectGlow.visibility = View.GONE
+            binding.stats.visibility = View.GONE
+        } else {
+            params.anchorGravity = Gravity.CENTER_HORIZONTAL or Gravity.CENTER_VERTICAL
+            params.marginEnd = 0
+            params.bottomMargin = 0
+            binding.fab.translationY = 48 * density
+            binding.fab.customSize = (136 * density).toInt()
+            progressParams.anchorGravity = Gravity.CENTER
+            progressParams.marginEnd = 0
+            progressParams.bottomMargin = 0
+            binding.fabProgress.indicatorSize = (180 * density).toInt()
+            binding.connectGlow.visibility = View.VISIBLE
+        }
+        binding.fab.layoutParams = params
+        binding.fabProgress.layoutParams = progressParams
     }
 
     fun displayFragmentWithId(@IdRes id: Int): Boolean {
@@ -416,13 +484,14 @@ class MainActivity : ThemedActivity(),
         updateStateAnimation(uiState)
         updateStatsAnimation(uiState)
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
-        if (state == BaseService.State.Stopped) {
+        if (state == BaseService.State.Stopped && !DataStore.clientMode) {
             scheduleInternalProxyRestart()
         }
     }
 
     private fun scheduleInternalProxyRestart() {
         if (isFinishing || isDestroyed) return
+        if (DataStore.clientMode) return
         if (DataStore.internalProxyActive) return
         internalProxyRestartJob?.cancel()
         internalProxyRestartJob = lifecycleScope.launchWhenStarted {
@@ -546,6 +615,7 @@ class MainActivity : ThemedActivity(),
 
     private fun ensureInternalProxyOnAppStart() {
         runOnDefaultDispatcher {
+            if (DataStore.clientMode) return@runOnDefaultDispatcher
             if (DataStore.internalProxyActive || DataStore.serviceState.connected) return@runOnDefaultDispatcher
             val all = SagerDatabase.proxyDao.getAll()
             val dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) }

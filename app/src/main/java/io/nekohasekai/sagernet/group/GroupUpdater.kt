@@ -167,6 +167,7 @@ abstract class GroupUpdater {
 
 
         private suspend fun ensureInternalProxyForUpdate() {
+            if (DataStore.clientMode) return
             if (DataStore.serviceState.connected) return
 
             val all = SagerDatabase.proxyDao.getAll()

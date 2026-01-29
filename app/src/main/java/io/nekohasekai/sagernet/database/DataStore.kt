@@ -173,6 +173,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     var yacdURL by configurationStore.string("yacdURL") { "http://127.0.0.1:9090/ui" }
     var internalBrowserUrl by configurationStore.string("internalBrowserUrl") { "https://www.google.com" }
+    var clientMode by configurationStore.boolean("clientMode") { false }
 
     // protocol
 
