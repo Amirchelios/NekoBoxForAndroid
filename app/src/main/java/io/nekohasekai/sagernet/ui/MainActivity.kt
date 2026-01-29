@@ -147,6 +147,7 @@ class MainActivity : ThemedActivity(),
             GroupManager.ensureDefaultSubscriptionGroup()
             GroupManager.ensureDedicatedSubscriptionGroup()
         }
+        ensureDefaultAutoSelectOnFirstRun()
         ensureInternalProxyOnAppStart()
 
         if (intent?.action == Intent.ACTION_VIEW) {
@@ -547,13 +548,34 @@ class MainActivity : ThemedActivity(),
             val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
             val target = dedicated ?: auto ?: return@runOnDefaultDispatcher
 
-            DataStore.internalProxyUserSelected = DataStore.selectedProxy
+            if (auto != null) {
+                DataStore.internalProxyUserSelected = auto.id
+            } else if (DataStore.internalProxyUserSelected == 0L) {
+                DataStore.internalProxyUserSelected = DataStore.selectedProxy
+            }
             DataStore.internalProxyProfileId = target.id
             DataStore.internalProxyActive = true
             DataStore.selectedProxy = target.id
             DataStore.currentProfile = target.id
             DataStore.serviceMode = Key.MODE_PROXY
             SagerNet.startService()
+        }
+    }
+
+    private fun ensureDefaultAutoSelectOnFirstRun() {
+        runOnDefaultDispatcher {
+            val all = SagerDatabase.proxyDao.getAll()
+            val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) } ?: return@runOnDefaultDispatcher
+            if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
+                if (DataStore.internalProxyUserSelected == 0L) {
+                    DataStore.internalProxyUserSelected = auto.id
+                }
+            } else {
+                if (DataStore.selectedProxy == 0L) {
+                    DataStore.selectedProxy = auto.id
+                    DataStore.currentProfile = auto.id
+                }
+            }
         }
     }
 
