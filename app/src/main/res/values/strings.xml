@@ -11,6 +11,9 @@
     <string name="version_x">Version (%s)</string>
     <string name="logcat">Export debug information</string>
     <string name="menu_configuration">Configuration</string>
+    <string name="quick_youtube_instagram">YouTube / Instagram</string>
+    <string name="quick_dedicated_config">Dedicated Config</string>
+    <string name="quick_connection_method">Connection method</string>
     <string name="menu_group">Group</string>
     <string name="menu_about">About</string>
     <string name="theme">Theme</string>

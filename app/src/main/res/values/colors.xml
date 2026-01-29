@@ -215,6 +215,12 @@
     <color name="glass_surface">#A8FFFFFF</color>
     <color name="glass_stroke">#66BFD2FF</color>
     <color name="glass_text">#233048</color>
+
+    <color name="quick_bar_stroke">#6B8BFF</color>
+    <color name="quick_bar_active">#2B6DFF</color>
+    <color name="quick_bar_inactive">#E6EEFF</color>
+    <color name="quick_bar_text_active">#FFFFFF</color>
+    <color name="quick_bar_text_inactive">#2B3A57</color>
     <color name="material_orange_500">#FF9800</color>
     <color name="material_orange_600">#FB8C00</color>
     <color name="material_orange_700">#F57C00</color>

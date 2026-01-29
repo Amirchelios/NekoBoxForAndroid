@@ -11,6 +11,9 @@
     <string name="version_x">نسخه (%s)</string>
     <string name="logcat">صدور اطلاعات عیب‌یابی</string>
     <string name="menu_configuration">پیکربندی</string>
+    <string name="quick_youtube_instagram">بازکننده یوتویب</string>
+    <string name="quick_dedicated_config">کانفیگ اختصاصی</string>
+    <string name="quick_connection_method">متد اتصال</string>
     <string name="menu_group">گروه‌ها</string>
     <string name="menu_about">درباره برنامه</string>
     <string name="theme">ظاهر</string>

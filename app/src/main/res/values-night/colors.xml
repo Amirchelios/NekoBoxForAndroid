@@ -19,4 +19,10 @@
     <color name="glass_surface">#2BFFFFFF</color>
     <color name="glass_stroke">#5A7CCBFF</color>
     <color name="glass_text">#E7EEF8</color>
+
+    <color name="quick_bar_stroke">#3F5BA8</color>
+    <color name="quick_bar_active">#4B8BFF</color>
+    <color name="quick_bar_inactive">#1B2745</color>
+    <color name="quick_bar_text_active">#FFFFFF</color>
+    <color name="quick_bar_text_inactive">#B6C4E6</color>
 </resources>
