@@ -15,6 +15,8 @@ import androidx.dynamicanimation.animation.DynamicAnimation
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
+import androidx.core.content.ContextCompat
+import android.content.res.ColorStateList
 import androidx.vectordrawable.graphics.drawable.Animatable2Compat
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -86,6 +88,7 @@ class ServiceButton @JvmOverloads constructor(
     private var delayedAnimation: Job? = null
     private lateinit var progress: BaseProgressIndicator<*>
     private var pulseAnimator: ObjectAnimator? = null
+    private var connectedAnimator: ObjectAnimator? = null
     fun initProgress(progress: BaseProgressIndicator<*>) {
         this.progress = progress
         progress.progressDrawable?.addSpringAnimationEndListener(this)
@@ -116,18 +119,22 @@ class ServiceButton @JvmOverloads constructor(
         when (state) {
             BaseService.State.Connecting -> {
                 startPulse()
+                stopConnectedBlink()
                 changeState(iconConnecting, animate)
             }
             BaseService.State.Connected -> {
                 stopPulse()
+                startConnectedBlink()
                 changeState(iconConnected, animate)
             }
             BaseService.State.Stopping -> {
                 stopPulse()
+                stopConnectedBlink()
                 changeState(iconStopping, animate && previousState == BaseService.State.Connected)
             }
             else -> {
                 stopPulse()
+                stopConnectedBlink()
                 changeState(iconStopped, animate)
             }
         }
@@ -144,16 +151,43 @@ class ServiceButton @JvmOverloads constructor(
         )
     }
 
+    private fun startConnectedBlink() {
+        if (connectedAnimator?.isRunning == true) return
+        connectedAnimator?.cancel()
+        val connectedColor = ContextCompat.getColor(context, R.color.connect_fab_connected)
+        backgroundTintList = ColorStateList.valueOf(connectedColor)
+        connectedAnimator = ObjectAnimator.ofPropertyValuesHolder(
+            this,
+            PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.88f, 1f)
+        ).apply {
+            duration = 900L
+            repeatCount = ValueAnimator.INFINITE
+            start()
+        }
+        // keep ripple consistent with green
+        setRippleColor(connectedColor)
+    }
+
+    private fun stopConnectedBlink() {
+        connectedAnimator?.cancel()
+        connectedAnimator = null
+        alpha = 1f
+        val defaultColor = ContextCompat.getColor(context, R.color.connect_fab_background)
+        backgroundTintList = ColorStateList.valueOf(defaultColor)
+        setRippleColor(ContextCompat.getColor(context, R.color.connect_fab_ripple))
+    }
+
     private fun startPulse() {
         if (pulseAnimator?.isRunning == true) return
         pulseAnimator?.cancel()
         pulseAnimator = ObjectAnimator.ofPropertyValuesHolder(
             this,
-            PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.06f),
-            PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.06f),
-            PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.92f)
+            PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.12f),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.12f),
+            PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.85f),
+            PropertyValuesHolder.ofFloat(View.ROTATION, 0f, -2f, 2f, 0f)
         ).apply {
-            duration = 900L
+            duration = 1100L
             interpolator = FastOutSlowInInterpolator()
             repeatMode = ValueAnimator.REVERSE
             repeatCount = ValueAnimator.INFINITE
@@ -168,6 +202,7 @@ class ServiceButton @JvmOverloads constructor(
         scaleX = 1f
         scaleY = 1f
         alpha = 1f
+        rotation = 0f
     }
 
     private fun changeState(icon: AnimatedState, animate: Boolean) {

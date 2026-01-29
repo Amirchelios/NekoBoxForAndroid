@@ -62,6 +62,7 @@ class MainActivity : ThemedActivity(),
     lateinit var binding: LayoutMainBinding
     lateinit var navigation: NavigationView
     private var glowAnimator: ObjectAnimator? = null
+    private var stateAnimator: ObjectAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -318,11 +319,10 @@ class MainActivity : ThemedActivity(),
     @SuppressLint("CommitTransaction")
     fun displayFragment(fragment: ToolbarFragment) {
         if (fragment is ConfigurationFragment) {
-            binding.stats.allowShow = true
+            binding.stats.visibility = View.VISIBLE
             binding.fab.show()
         } else if (!DataStore.showBottomBar) {
-            binding.stats.allowShow = false
-            binding.stats.performHide()
+            binding.stats.visibility = View.GONE
             binding.fab.hide()
         }
         supportFragmentManager.beginTransaction()
@@ -364,6 +364,8 @@ class MainActivity : ThemedActivity(),
         binding.fab.changeState(state, DataStore.serviceState, animate)
         binding.stats.changeState(state)
         updateGlow(state)
+        updateStateAnimation(state)
+        updateStatsAnimation(state)
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
     }
 
@@ -374,8 +376,7 @@ class MainActivity : ThemedActivity(),
         }
         binding.stats.apply {
             alpha = 0f
-            translationY = 48f
-            animate().alpha(1f).translationY(0f).setDuration(420L).setStartDelay(160L).start()
+            visibility = View.INVISIBLE
         }
         binding.fab.apply {
             alpha = 0f
@@ -413,6 +414,68 @@ class MainActivity : ThemedActivity(),
             glow.scaleX = 1f
             glow.scaleY = 1f
             glow.visibility = View.INVISIBLE
+        }
+    }
+
+    private fun updateStateAnimation(state: BaseService.State) {
+        stateAnimator?.cancel()
+        stateAnimator = null
+        when (state) {
+            BaseService.State.Connecting -> {
+                stateAnimator = ObjectAnimator.ofPropertyValuesHolder(
+                    binding.fragmentHolder,
+                    PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.01f),
+                    PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.01f)
+                ).apply {
+                    duration = 1200L
+                    repeatMode = ValueAnimator.REVERSE
+                    repeatCount = ValueAnimator.INFINITE
+                    start()
+                }
+            }
+            BaseService.State.Stopping -> {
+                stateAnimator = ObjectAnimator.ofPropertyValuesHolder(
+                    binding.fragmentHolder,
+                    PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.9f, 1f)
+                ).apply {
+                    duration = 360L
+                    repeatCount = 0
+                    start()
+                }
+            }
+            else -> {
+                binding.fragmentHolder.scaleX = 1f
+                binding.fragmentHolder.scaleY = 1f
+                binding.fragmentHolder.alpha = 1f
+            }
+        }
+    }
+
+    private fun updateStatsAnimation(state: BaseService.State) {
+        val stats = binding.stats
+        stats.animate().cancel()
+        if (state == BaseService.State.Connected) {
+            stats.visibility = View.VISIBLE
+            stats.alpha = 0f
+            stats.scaleX = 0.9f
+            stats.scaleY = 0.9f
+            stats.translationY = 196f
+            stats.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationY(156f)
+                .setDuration(420L)
+                .setStartDelay(80L)
+                .start()
+        } else {
+            stats.animate()
+                .alpha(0f)
+                .scaleX(0.9f)
+                .scaleY(0.9f)
+                .setDuration(220L)
+                .withEndAction { stats.visibility = View.INVISIBLE }
+                .start()
         }
     }
 

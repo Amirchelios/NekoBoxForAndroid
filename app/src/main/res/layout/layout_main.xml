@@ -62,56 +62,57 @@
 
         <io.nekohasekai.sagernet.widget.StatsBar
             android:id="@+id/stats"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="12dp"
             android:nextFocusUp="@+id/fab"
-            app:backgroundTint="?colorMaterial300"
-            app:contentInsetStart="0dp"
-            app:hideOnScroll="true"
-            app:layout_scrollFlags="enterAlways|scroll">
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:translationY="156dp"
+            app:layout_anchor="@id/fab"
+            app:layout_anchorGravity="center_horizontal|bottom">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?android:attr/selectableItemBackground"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:id="@+id/tx"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_columnWeight="1"
-                    android:layout_gravity="fill_horizontal"
-                    android:ellipsize="marquee"
-                    android:singleLine="true"
-                    android:textColor="?whiteOrTextPrimary"
-                    android:textSize="14sp" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="104dp"
+                android:layout_height="46dp"
+                android:layout_marginEnd="8dp"
+                app:cardBackgroundColor="@color/glass_surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="6dp"
+                app:strokeColor="@color/glass_stroke"
+                app:strokeWidth="1dp">
 
                 <TextView
                     android:id="@+id/rx"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_columnWeight="1"
-                    android:layout_gravity="fill_horizontal"
-                    android:ellipsize="marquee"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
                     android:singleLine="true"
-                    android:textColor="?whiteOrTextPrimary"
-                    android:textSize="14sp" />
+                    android:textColor="@color/glass_text"
+                    android:textSize="12sp"
+                    tools:text="↓  24 KB/s" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="104dp"
+                android:layout_height="46dp"
+                app:cardBackgroundColor="@color/glass_surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="6dp"
+                app:strokeColor="@color/glass_stroke"
+                app:strokeWidth="1dp">
 
                 <TextView
-                    android:id="@+id/status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="fill_horizontal"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="?whiteOrTextPrimary"
-                    android:textSize="16sp"
-                    tools:text="@string/connection_test_available" />
-
-            </LinearLayout>
+                    android:id="@+id/tx"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:singleLine="true"
+                    android:textColor="@color/glass_text"
+                    android:textSize="12sp"
+                    tools:text="↑  8 KB/s" />
+            </com.google.android.material.card.MaterialCardView>
 
         </io.nekohasekai.sagernet.widget.StatsBar>
 
