@@ -18,6 +18,7 @@ import androidx.activity.addCallback
 import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceDataStore
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.navigation.NavigationView
@@ -54,6 +55,8 @@ import io.nekohasekai.sagernet.ktx.parseProxies
 import io.nekohasekai.sagernet.ktx.readableMessage
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import moe.matsuri.nb4a.utils.Util
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 class MainActivity : ThemedActivity(),
     SagerConnection.Callback,
@@ -64,6 +67,8 @@ class MainActivity : ThemedActivity(),
     lateinit var navigation: NavigationView
     private var glowAnimator: ObjectAnimator? = null
     private var stateAnimator: ObjectAnimator? = null
+    private var internalProxyRestartJob: Job? = null
+    private var pendingVpnStartJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,13 +105,30 @@ class MainActivity : ThemedActivity(),
                     DataStore.selectedProxy = restoreId
                     DataStore.currentProfile = restoreId
                 }
-                DataStore.internalProxyActive = false
-                DataStore.internalProxyProfileId = 0L
                 DataStore.serviceMode = Key.MODE_VPN
                 if (DataStore.serviceState.canStop) {
                     SagerNet.stopService()
+                    pendingVpnStartJob?.cancel()
+                    pendingVpnStartJob = lifecycleScope.launchWhenStarted {
+                        val timeoutMs = 5_000L
+                        val start = System.currentTimeMillis()
+                        while (System.currentTimeMillis() - start < timeoutMs) {
+                            if (DataStore.serviceState == BaseService.State.Stopped ||
+                                DataStore.serviceState == BaseService.State.Idle
+                            ) {
+                                break
+                            }
+                            delay(100L)
+                        }
+                        DataStore.internalProxyActive = false
+                        DataStore.internalProxyProfileId = 0L
+                        connect.launch(null)
+                    }
+                } else {
+                    DataStore.internalProxyActive = false
+                    DataStore.internalProxyProfileId = 0L
+                    connect.launch(null)
                 }
-                connect.launch(null)
             } else if (DataStore.serviceState.canStop) {
                 SagerNet.stopService()
             } else {
@@ -389,6 +411,22 @@ class MainActivity : ThemedActivity(),
         updateStateAnimation(uiState)
         updateStatsAnimation(uiState)
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
+        if (state == BaseService.State.Stopped) {
+            scheduleInternalProxyRestart()
+        }
+    }
+
+    private fun scheduleInternalProxyRestart() {
+        if (isFinishing || isDestroyed) return
+        if (DataStore.internalProxyActive) return
+        internalProxyRestartJob?.cancel()
+        internalProxyRestartJob = lifecycleScope.launchWhenStarted {
+            delay(300L)
+            if (isFinishing || isDestroyed) return@launchWhenStarted
+            if (DataStore.serviceState != BaseService.State.Stopped) return@launchWhenStarted
+            if (DataStore.internalProxyActive) return@launchWhenStarted
+            ensureInternalProxyOnAppStart()
+        }
     }
 
     private fun animateEntrance() {
