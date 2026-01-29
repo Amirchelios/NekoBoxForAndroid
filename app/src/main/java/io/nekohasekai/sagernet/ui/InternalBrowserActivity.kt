@@ -26,6 +26,7 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
     private lateinit var binding: LayoutWebviewBinding
     private lateinit var webView: WebView
     private val homeUrl = "file:///android_asset/browser_home.html"
+    private var allowSelectAllClick = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +67,20 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
         binding.addressGo.setOnClickListener { navigateFromInput() }
         binding.addressHide.setOnClickListener { setAddressBarVisible(false) }
         binding.addressShow.setOnClickListener { setAddressBarVisible(true) }
+        binding.addressInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                binding.addressInput.selectAll()
+                allowSelectAllClick = true
+            } else {
+                allowSelectAllClick = false
+            }
+        }
+        binding.addressInput.setOnClickListener {
+            if (allowSelectAllClick) {
+                binding.addressInput.selectAll()
+                allowSelectAllClick = false
+            }
+        }
         binding.addressInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO) {
                 navigateFromInput()
