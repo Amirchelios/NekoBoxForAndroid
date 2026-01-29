@@ -7,6 +7,7 @@ import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.ProxyEntity.Companion.TYPE_CONFIG
 import io.nekohasekai.sagernet.database.SagerDatabase
+import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.fmt.ConfigBuildResult.IndexEntity
 import io.nekohasekai.sagernet.fmt.hysteria.HysteriaBean
 import io.nekohasekai.sagernet.fmt.hysteria.buildSingBoxOutboundHysteriaBean
@@ -173,8 +174,21 @@ fun buildConfig(
     val bypassDNSBeans = hashSetOf<AbstractBean>()
     val isVPN = DataStore.serviceMode == Key.MODE_VPN
     val bind = if (!forTest && DataStore.allowAccess) "0.0.0.0" else LOCALHOST
-    val remoteDns = DataStore.remoteDns.split("\n")
-        .mapNotNull { dns -> dns.trim().takeIf { it.isNotBlank() && !it.startsWith("#") } }
+    val overrideDns = if (
+        GroupManager.isDefaultAutoSelectConfig(proxy) ||
+        GroupManager.isDedicatedConfig(proxy) ||
+        GroupManager.isAutoSelectAggregate(proxy)
+    ) {
+        DataStore.getAutoDnsServers(proxy.groupId)
+    } else {
+        emptyList()
+    }
+    val remoteDns = if (overrideDns.isNotEmpty()) {
+        overrideDns
+    } else {
+        DataStore.remoteDns.split("\n")
+            .mapNotNull { dns -> dns.trim().takeIf { it.isNotBlank() && !it.startsWith("#") } }
+    }
     val directDNS = DataStore.directDns.split("\n")
         .mapNotNull { dns -> dns.trim().takeIf { it.isNotBlank() && !it.startsWith("#") } }
     val enableDnsRouting = DataStore.enableDnsRouting

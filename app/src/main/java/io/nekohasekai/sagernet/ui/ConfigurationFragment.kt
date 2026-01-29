@@ -31,6 +31,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_LINK
 import io.nekohasekai.sagernet.GroupOrder
 import io.nekohasekai.sagernet.GroupType
 import io.nekohasekai.sagernet.Key
@@ -81,6 +82,7 @@ import io.nekohasekai.sagernet.ui.profile.TrojanSettingsActivity
 import io.nekohasekai.sagernet.ui.profile.TuicSettingsActivity
 import io.nekohasekai.sagernet.ui.profile.VMessSettingsActivity
 import io.nekohasekai.sagernet.ui.profile.WireGuardSettingsActivity
+import io.nekohasekai.sagernet.utils.DnsAutoSelector
 import io.nekohasekai.sagernet.widget.QRCodeDialog
 import io.nekohasekai.sagernet.widget.UndoSnackbarManager
 import kotlinx.coroutines.sync.Mutex
@@ -330,6 +332,42 @@ class ConfigurationFragment @JvmOverloads constructor(
         when (item.itemId) {
             R.id.action_singbox_gui -> {
                 (requireActivity() as MainActivity).displayFragmentWithId(R.id.nav_singbox_dashboard)
+                return true
+            }
+
+            R.id.action_auto_dns -> {
+                runOnLifecycleDispatcher {
+                    val groupAuto = SagerDatabase.groupDao.allGroups().firstOrNull { group ->
+                        group.type == GroupType.SUBSCRIPTION &&
+                            group.subscription?.link?.trim()
+                                ?.equals(DEFAULT_SUBSCRIPTION_LINK, true) == true
+                    }
+                    val groupDedicated = SagerDatabase.groupDao.allGroups().firstOrNull { group ->
+                        group.type == GroupType.SUBSCRIPTION &&
+                            group.subscription?.link?.trim()
+                                ?.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true) == true
+                    }
+                    if (groupAuto == null && groupDedicated == null) {
+                        onMainDispatcher {
+                            snackbar(getString(R.string.service_failed) + " DNS").show()
+                        }
+                        return@runOnLifecycleDispatcher
+                    }
+                    val best = DnsAutoSelector.selectBest()
+                    if (best == null) {
+                        onMainDispatcher {
+                            snackbar(getString(R.string.service_failed) + " DNS").show()
+                        }
+                        return@runOnLifecycleDispatcher
+                    }
+                    val servers = listOfNotNull(best.primary, best.secondary)
+                    groupAuto?.let { DataStore.setAutoDnsServers(it.id, servers) }
+                    groupDedicated?.let { DataStore.setAutoDnsServers(it.id, servers) }
+                    onMainDispatcher {
+                        snackbar("${best.name}: ${servers.joinToString(" / ")}").show()
+                    }
+                    SagerNet.reloadService()
+                }
                 return true
             }
 

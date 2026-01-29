@@ -294,6 +294,17 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         }
     }
 
+    fun getAutoDnsServers(groupId: Long): List<String> {
+        val raw = configurationStore.getString("autoDns.$groupId", "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return raw.split(",").mapNotNull { it.trim().takeIf { s -> s.isNotBlank() } }
+    }
+
+    fun setAutoDnsServers(groupId: Long, servers: List<String>) {
+        val raw = servers.joinToString(",")
+        configurationStore.putString("autoDns.$groupId", raw)
+    }
+
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {
     }
 }
