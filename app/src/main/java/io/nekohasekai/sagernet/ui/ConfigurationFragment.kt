@@ -266,7 +266,13 @@ class ConfigurationFragment @JvmOverloads constructor(
                 GroupManager.isDefaultAutoSelectConfig(proxy) -> R.id.quick_auto
                 else -> R.id.quick_auto
             }
-            val methodText = getString(R.string.quick_connection_method) + ": " + proxy.displayType()
+            val methodLabel = when {
+                GroupManager.isYoutubeInstagramConfig(proxy) -> getString(R.string.quick_youtube_instagram)
+                GroupManager.isDedicatedConfig(proxy) -> getString(R.string.quick_dedicated_config)
+                GroupManager.isDefaultAutoSelectConfig(proxy) -> getString(R.string.menu_auto_select)
+                else -> proxy.displayName()
+            }
+            val methodText = getString(R.string.quick_connection_method) + " • " + methodLabel
             onMainDispatcher {
                 if (quickBar.checkedButtonId != checkedId) {
                     quickBar.check(checkedId)
@@ -1377,8 +1383,14 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
 
                 profileName.text = proxyEntity.displayName()
-                profileType.text = proxyEntity.displayType()
-                profileType.setTextColor(requireContext().getProtocolColor(proxyEntity.type))
+                if (proxyEntity.type == ProxyEntity.TYPE_CONFIG) {
+                    profileType.text = ""
+                    profileType.visibility = View.GONE
+                } else {
+                    profileType.text = proxyEntity.displayType()
+                    profileType.setTextColor(requireContext().getProtocolColor(proxyEntity.type))
+                    profileType.visibility = View.VISIBLE
+                }
 
                 var rx = proxyEntity.rx
                 var tx = proxyEntity.tx
