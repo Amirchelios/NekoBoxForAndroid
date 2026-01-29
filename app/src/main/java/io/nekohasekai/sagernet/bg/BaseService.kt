@@ -378,6 +378,19 @@ class BaseService {
 
                     if (GroupManager.isAutoSelectAggregate(profile)) {
                         runOnDefaultDispatcher {
+                            val preferredId = DataStore.getSmartPreferredProxy(profile.groupId)
+                            if (preferredId > 0L) {
+                                data.proxy?.config?.profileTagMap?.get(preferredId)?.let { tag ->
+                                    data.proxy?.box?.selectOutbound(tag)
+                                }
+                            }
+                            val fastId = SmartSelector.selectBestFast(profile.groupId)
+                            if (fastId != null) {
+                                data.proxy?.config?.profileTagMap?.get(fastId)?.let { tag ->
+                                    data.proxy?.box?.selectOutbound(tag)
+                                }
+                            }
+                            SmartSelector.applyCachedOrder(profile.groupId)
                             val best = SmartSelector.selectBest(profile.groupId)
                             if (best != null) {
                                 SagerNet.reloadService()

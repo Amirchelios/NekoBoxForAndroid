@@ -17,6 +17,9 @@ object SmartSelector {
 
     private const val TIMEOUT_MS = 4000
     private const val MAX_ATTEMPTS = 2
+    private const val FAST_TIMEOUT_MS = 1200
+    private const val FAST_MAX_ATTEMPTS = 1
+    private const val FAST_LIMIT = 30
     private val testUrls = listOf(
         "https://www.youtube.com/generate_204",
         "https://www.youtube.com/",
@@ -84,26 +87,69 @@ object SmartSelector {
         }
         SagerDatabase.proxyDao.updateProxy(results.map { it.first })
 
-        if (group.order == GroupOrder.ORIGIN) {
-            val sortedIds = sortedResults.map { it.first.id }
-            val remaining = profiles.filterNot { sortedIds.contains(it.id) }.map { it.id }
-            val orderedIds = sortedIds + remaining
-            val update = profiles.associateBy { it.id }.toMutableMap()
-            var order = 1L
-            orderedIds.forEach { id ->
-                update[id]?.let {
-                    it.userOrder = order++
-                }
+        val sortedIds = sortedResults.map { it.first.id }
+        val remaining = profiles.filterNot { sortedIds.contains(it.id) }.map { it.id }
+        val orderedIds = sortedIds + remaining
+        val update = profiles.associateBy { it.id }.toMutableMap()
+        var order = 1L
+        orderedIds.forEach { id ->
+            update[id]?.let {
+                it.userOrder = order++
             }
-            SagerDatabase.proxyDao.updateProxy(update.values.toList())
         }
+        SagerDatabase.proxyDao.updateProxy(update.values.toList())
+        return best.first.id
+    }
+
+    suspend fun selectBestFast(groupId: Long): Long? {
+        val profiles = SagerDatabase.proxyDao.getByGroup(groupId)
+            .filterNot { it.type == TYPE_CONFIG }
+        if (profiles.isEmpty()) return null
+
+        val cachedOrder = DataStore.getSmartPreferredOrder(groupId)
+        val profileMap = profiles.associateBy { it.id }
+        val ordered = if (cachedOrder.isNotEmpty()) {
+            cachedOrder.mapNotNull { profileMap[it] } + profiles.filterNot { cachedOrder.contains(it.id) }
+        } else {
+            profiles
+        }
+        val candidates = ordered.take(FAST_LIMIT)
+
+        val concurrency = DataStore.connectionTestConcurrent.coerceAtLeast(1)
+        val semaphore = Semaphore(concurrency)
+        val results = coroutineScope {
+            candidates.map { profile ->
+                async {
+                    semaphore.withPermit {
+                        val score = testProfile(profile, FAST_TIMEOUT_MS, FAST_MAX_ATTEMPTS)
+                        if (score != null) profile to score else null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+
+        if (results.isEmpty()) return null
+
+        val sorted = results.sortedBy { it.second }
+        val best = sorted.firstOrNull() ?: return null
+        DataStore.setSmartPreferredProxy(groupId, best.first.id)
+        DataStore.setSmartPreferredOrder(groupId, sorted.map { it.first.id })
+        DataStore.markSmartPreferredOrderDirty(groupId)
         return best.first.id
     }
 
     private suspend fun testProfile(profile: ProxyEntity): Int? {
+        return testProfile(profile, TIMEOUT_MS, MAX_ATTEMPTS)
+    }
+
+    private suspend fun testProfile(
+        profile: ProxyEntity,
+        timeoutMs: Int,
+        attempts: Int,
+    ): Int? {
         var best: Int? = null
-        repeat(MAX_ATTEMPTS) {
-            val score = testOnce(profile)
+        repeat(attempts) {
+            val score = testOnce(profile, timeoutMs)
             if (score != null) {
                 if (best == null || score < best!!) {
                     best = score
@@ -113,11 +159,11 @@ object SmartSelector {
         return best
     }
 
-    private suspend fun testOnce(profile: ProxyEntity): Int? {
+    private suspend fun testOnce(profile: ProxyEntity, timeoutMs: Int): Int? {
         return try {
             var total = 0
             for (url in testUrls) {
-                val elapsed = TestInstance(profile, url, TIMEOUT_MS).doTest()
+                val elapsed = TestInstance(profile, url, timeoutMs).doTest()
                 if (elapsed <= 0) return null
                 total += elapsed
             }
