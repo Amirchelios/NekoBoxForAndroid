@@ -443,6 +443,7 @@ class MainActivity : ThemedActivity(),
         binding.fabProgress.layoutParams = progressParams
     }
 
+
     private fun enforceClientModeVpn(restartIfRunning: Boolean) {
         if (!DataStore.clientMode) return
         if (DataStore.serviceMode == Key.MODE_VPN) return

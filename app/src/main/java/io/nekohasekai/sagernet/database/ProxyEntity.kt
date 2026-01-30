@@ -267,14 +267,25 @@ data class ProxyEntity(
 
         return with(requireBean()) {
             StringBuilder().apply {
-                val config = buildConfig(this@ProxyEntity, forExport = true)
-                append(config.config)
+                val built = buildConfig(this@ProxyEntity, forExport = true)
+                val configText = if (this is ConfigBean && type == 0 && this.config.isBlank()) {
+                    val fallback = SagerDatabase.proxyDao.getByGroup(groupId)
+                        .asSequence()
+                        .filter { it.type == TYPE_CONFIG }
+                        .mapNotNull { it.requireBean() as? ConfigBean }
+                        .filter { it.type == 0 && it.config.isNotBlank() }
+                        .firstOrNull()
+                    fallback?.config ?: built.config
+                } else {
+                    built.config
+                }
+                append(configText)
 
-                if (!config.externalIndex.all { it.chain.isEmpty() }) {
+                if (!built.externalIndex.all { it.chain.isEmpty() }) {
                     name = "profiles.txt"
                 }
 
-                for ((chain) in config.externalIndex) {
+                for ((chain) in built.externalIndex) {
                     chain.entries.forEachIndexed { index, (port, profile) ->
                         when (val bean = profile.requireBean()) {
                             is TrojanGoBean -> {

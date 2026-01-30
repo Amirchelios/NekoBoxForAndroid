@@ -1163,14 +1163,24 @@ class ConfigurationFragment @JvmOverloads constructor(
                             .filter { it.type == GroupType.BASIC }
                             .map { it.id }
                             .toHashSet()
-                        all.filter { it.groupId in basicGroupIds }
+                        val base = all.filter { it.groupId in basicGroupIds }
+                        val specials = all.filter {
+                            GroupManager.isDefaultAutoSelectConfig(it) ||
+                                GroupManager.isDedicatedConfig(it) ||
+                                GroupManager.isYoutubeInstagramConfig(it)
+                        }
+                        (base + specials).distinctBy { it.id }
                     } else {
                         all
                     }
-                    filteredByGroup.filterNot {
-                        GroupManager.isDefaultAutoSelectConfig(it) ||
-                            GroupManager.isDedicatedConfig(it) ||
-                            GroupManager.isYoutubeInstagramConfig(it)
+                    if (DataStore.clientMode) {
+                        filteredByGroup
+                    } else {
+                        filteredByGroup.filterNot {
+                            GroupManager.isDefaultAutoSelectConfig(it) ||
+                                GroupManager.isDedicatedConfig(it) ||
+                                GroupManager.isYoutubeInstagramConfig(it)
+                        }
                     }
                 } else {
                     SagerDatabase.proxyDao.getByGroup(proxyGroup.id)

@@ -756,10 +756,6 @@ object RawUpdater : GroupUpdater() {
                     outbound.remove("timeout")
                     outbound.remove("timeoout")
                 }
-                if (outbound.optString("type") == "shadowsocks") {
-                    outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
-                    continue
-                }
                 if (isInvalidRealityOutbound(outbound)) {
                     outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
                     continue
@@ -778,6 +774,11 @@ object RawUpdater : GroupUpdater() {
                             if (!invalidTags.contains(tag)) {
                                 filtered.put(tag)
                             }
+                        }
+                        if (filtered.length() == 0 && type == "urltest") {
+                            // urltest with no candidates causes sing-box parser failure; degrade to direct selector
+                            outbound.put("type", "selector")
+                            filtered.put("direct")
                         }
                         outbound.put("outbounds", filtered)
                     }
@@ -869,7 +870,7 @@ object RawUpdater : GroupUpdater() {
                 val outbound = list.optJSONObject(i) ?: continue
                 val type = outbound.optString("type")
                 if (type == "selector" || type == "urltest" || type == "direct" ||
-                    type == "block" || type == "dns"
+                    type == "block" || type == "dns" || type == "shadowsocks"
                 ) {
                     continue
                 }

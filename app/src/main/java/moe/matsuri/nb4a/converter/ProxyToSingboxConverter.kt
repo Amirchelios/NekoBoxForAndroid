@@ -16,7 +16,8 @@ object ProxyToSingboxConverter {
         "vless://",
         "trojan://",
         "hysteria2://",
-        "hy2://"
+        "hy2://",
+        "ss://"
     )
 
     fun convertToSingBoxJson(input: String): String? {
@@ -33,6 +34,7 @@ object ProxyToSingboxConverter {
                 config.startsWith("vless://") -> convertVless(config)
                 config.startsWith("trojan://") -> convertTrojan(config)
                 config.startsWith("hysteria2://") || config.startsWith("hy2://") -> convertHysteria2(config)
+                config.startsWith("ss://") -> convertShadowsocks(config)
                 else -> null
             }
             if (outbound != null) {

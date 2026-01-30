@@ -137,6 +137,7 @@ object GroupManager {
             }
             ensureDefaultAutoSelectConfig(existing)
             ensureDefaultYoutubeInstagramConfig(existing)
+            cleanupDuplicateSpecialConfigs(existing)
             return existing
         }
         val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
@@ -149,6 +150,7 @@ object GroupManager {
             if (it != null) {
                 ensureDefaultAutoSelectConfig(it)
                 ensureDefaultYoutubeInstagramConfig(it)
+                cleanupDuplicateSpecialConfigs(it)
             }
         }
     }
@@ -172,6 +174,7 @@ object GroupManager {
                 iterator { groupUpdated(existing) }
             }
             ensureDedicatedAutoSelectConfig(existing)
+            cleanupDuplicateSpecialConfigs(existing)
             return existing
         }
         val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
@@ -183,6 +186,7 @@ object GroupManager {
         return createGroup(group).also {
             if (it != null) {
                 ensureDedicatedAutoSelectConfig(it)
+                cleanupDuplicateSpecialConfigs(it)
             }
         }
     }
@@ -243,6 +247,36 @@ object GroupManager {
         return isRemovalBlocked(group, proxy)
     }
 
+}
+
+private suspend fun cleanupDuplicateSpecialConfigs(group: ProxyGroup) {
+    val proxies = SagerDatabase.proxyDao.getByGroup(group.id)
+    if (proxies.size < 2) return
+    val autoName = SagerNet.application.getString(R.string.menu_auto_select)
+    val targets = setOf(autoName, GroupManager.YOUTUBE_INSTAGRAM_CONFIG_NAME, GroupManager.DEDICATED_CONFIG_NAME)
+    val candidates = proxies.filter { proxy ->
+        proxy.type == ProxyEntity.TYPE_CONFIG &&
+            (proxy.requireBean() as? ConfigBean)?.let { it.type == 0 && it.name in targets } == true
+    }
+    if (candidates.isEmpty()) return
+    val byName = candidates.groupBy { (it.requireBean() as ConfigBean).name }
+    var changed = false
+    for ((_, list) in byName) {
+        if (list.size <= 1) continue
+        val keep = list
+            .sortedWith(compareByDescending<ProxyEntity> {
+                (it.requireBean() as? ConfigBean)?.config?.isNotBlank() == true
+            }.thenBy { it.id })
+            .first()
+        list.filter { it.id != keep.id }.forEach { extra ->
+            SagerDatabase.proxyDao.deleteById(extra.id)
+            changed = true
+        }
+    }
+    if (changed) {
+        GroupManager.rearrange(group.id)
+        GroupManager.iterator { groupUpdated(group.id) }
+    }
 }
 
 private suspend fun ensureDefaultYoutubeInstagramConfig(group: ProxyGroup) {
