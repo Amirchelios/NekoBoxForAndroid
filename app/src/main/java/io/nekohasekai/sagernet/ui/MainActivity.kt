@@ -133,6 +133,9 @@ class MainActivity : ThemedActivity(),
             } else if (DataStore.serviceState.canStop) {
                 SagerNet.stopService()
             } else {
+                if (DataStore.clientMode && DataStore.serviceMode != Key.MODE_VPN) {
+                    DataStore.serviceMode = Key.MODE_VPN
+                }
                 connect.launch(null)
             }
         }
@@ -403,6 +406,7 @@ class MainActivity : ThemedActivity(),
             navigation.menu.findItem(R.id.nav_client_mode)?.isChecked = DataStore.clientMode
         }
         if (DataStore.clientMode) {
+            enforceClientModeVpn(restartIfRunning = true)
             if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
                 DataStore.internalProxyActive = false
                 DataStore.internalProxyProfileId = 0L
@@ -437,6 +441,28 @@ class MainActivity : ThemedActivity(),
         }
         binding.fab.layoutParams = params
         binding.fabProgress.layoutParams = progressParams
+    }
+
+    private fun enforceClientModeVpn(restartIfRunning: Boolean) {
+        if (!DataStore.clientMode) return
+        if (DataStore.serviceMode == Key.MODE_VPN) return
+        DataStore.serviceMode = Key.MODE_VPN
+        if (!restartIfRunning || !DataStore.serviceState.canStop) return
+        SagerNet.stopService()
+        pendingVpnStartJob?.cancel()
+        pendingVpnStartJob = lifecycleScope.launchWhenStarted {
+            val timeoutMs = 5_000L
+            val start = System.currentTimeMillis()
+            while (System.currentTimeMillis() - start < timeoutMs) {
+                if (DataStore.serviceState == BaseService.State.Stopped ||
+                    DataStore.serviceState == BaseService.State.Idle
+                ) {
+                    break
+                }
+                delay(100L)
+            }
+            connect.launch(null)
+        }
     }
 
     fun displayFragmentWithId(@IdRes id: Int): Boolean {

@@ -880,7 +880,8 @@ class ConfigurationFragment @JvmOverloads constructor(
             GroupManager.addListener(adapter!!)
             configurationListView.adapter = adapter
             configurationListView.setItemViewCacheSize(20)
-            if ((parentFragment as? ConfigurationFragment)?.showAllProfiles == true) {
+            val parent = parentFragment as? ConfigurationFragment
+            if (parent?.showAllProfiles == true && !DataStore.clientMode) {
                 configurationListView.isGone = true
             }
 
@@ -1157,7 +1158,16 @@ class ConfigurationFragment @JvmOverloads constructor(
             fun reloadProfiles() {
                 var newProfiles = if (proxyGroup.id == ALL_GROUP_ID) {
                     val all = SagerDatabase.proxyDao.getAll()
-                    all.filterNot {
+                    val filteredByGroup = if (DataStore.clientMode) {
+                        val basicGroupIds = SagerDatabase.groupDao.allGroups()
+                            .filter { it.type == GroupType.BASIC }
+                            .map { it.id }
+                            .toHashSet()
+                        all.filter { it.groupId in basicGroupIds }
+                    } else {
+                        all
+                    }
+                    filteredByGroup.filterNot {
                         GroupManager.isDefaultAutoSelectConfig(it) ||
                             GroupManager.isDedicatedConfig(it) ||
                             GroupManager.isYoutubeInstagramConfig(it)
@@ -1283,6 +1293,9 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 if (!(DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY)) {
                                     ProfileManager.postUpdate(lastSelected)
                                     if (DataStore.serviceState.canStop && reloadAccess.tryLock()) {
+                                        if (DataStore.clientMode && DataStore.serviceMode != Key.MODE_VPN) {
+                                            DataStore.serviceMode = Key.MODE_VPN
+                                        }
                                         SagerNet.reloadService()
                                         reloadAccess.unlock()
                                     }
