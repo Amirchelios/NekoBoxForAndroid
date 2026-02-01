@@ -20,6 +20,7 @@
     <string name="browser_address_hint">Search or enter address</string>
     <string name="browser_proxy_unsupported">WebView proxy requires Android 10+; using system network.</string>
     <string name="menu_refresh">Refresh</string>
+    <string name="menu_export_log">Export download log</string>
     <string name="menu_group">Group</string>
     <string name="menu_about">About</string>
     <string name="theme">Theme</string>
@@ -31,6 +32,11 @@
     <string name="menu_dashboard">sing-box Dashboard</string>
     <string name="menu_auto_dns">Auto DNS</string>
     <string name="menu_auto_select">AutoSelect</string>
+    <string name="open_dedicated_link_prompt">Update failed. Open dedicated link to download?</string>
+    <string name="dedicated_link_import_success">Dedicated config imported.</string>
+    <string name="dedicated_link_import_failed">Failed to import dedicated config.</string>
+    <string name="dedicated_link_downloading">Downloading link.txt…</string>
+    <string name="dedicated_unreachable">Dedicated config is unreachable.</string>
     <!-- externel -->
     <string name="action_copy">Copy</string>
     <string name="action_open">Open</string>

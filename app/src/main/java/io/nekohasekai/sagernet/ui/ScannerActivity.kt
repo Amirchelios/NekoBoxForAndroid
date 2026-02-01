@@ -33,6 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger
 class ScannerActivity : ThemedActivity(),
     CameraScan.OnScanResultCallback {
 
+    companion object {
+        const val EXTRA_TARGET_GROUP_ID = "targetGroupId"
+    }
+
     lateinit var binding: LayoutScannerBinding
     lateinit var cameraScan: CameraScan
 
@@ -121,7 +125,9 @@ class ScannerActivity : ThemedActivity(),
                 val text = result?.text ?: throw Exception("QR code not found")
                 val results = RawUpdater.parseRaw(text)
                 if (!results.isNullOrEmpty()) {
-                    val currentGroupId = DataStore.selectedGroupForImport()
+                    val currentGroupId = intent?.getLongExtra(EXTRA_TARGET_GROUP_ID, 0L)
+                        ?.takeIf { it > 0L }
+                        ?: DataStore.selectedGroupForImport()
                     if (DataStore.selectedGroup != currentGroupId) {
                         DataStore.selectedGroup = currentGroupId
                     }

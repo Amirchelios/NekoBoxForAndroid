@@ -8,4 +8,7 @@
         android:icon="@drawable/ic_baseline_refresh_24"
         android:title="@string/menu_refresh"
         android:showAsAction="always" />
+    <item
+        android:id="@+id/action_export_log"
+        android:title="@string/menu_export_log" />
 </menu>

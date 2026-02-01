@@ -18,6 +18,7 @@
     <string name="set_browser_url">تنظیم آدرس</string>
     <string name="browser_proxy_unsupported">پراکسی وب‌ویو نیاز به اندروید ۱۰ دارد؛ از شبکه سیستم استفاده می‌شود.</string>
     <string name="menu_refresh">تازه‌سازی</string>
+    <string name="menu_export_log">خروجی گزارش دانلود</string>
     <string name="menu_group">گروه‌ها</string>
     <string name="menu_about">درباره برنامه</string>
     <string name="theme">ظاهر</string>
@@ -28,6 +29,11 @@
     <string name="menu_traffic">ترافیک</string>
     <string name="menu_dashboard">sing-box تنظیمات</string>
     <string name="menu_auto_select">انتخاب خودکار</string>
+    <string name="open_dedicated_link_prompt">بروزرسانی ناموفق بود. لینک اختصاصی را برای دانلود باز می‌کنید؟</string>
+    <string name="dedicated_link_import_success">کانفیگ اختصاصی وارد شد.</string>
+    <string name="dedicated_link_import_failed">ورود کانفیگ اختصاصی ناموفق بود.</string>
+    <string name="dedicated_link_downloading">در حال دانلود link.txt…</string>
+    <string name="dedicated_unreachable">کانفیگ اختصاصی در دسترس نیست.</string>
     <!-- externel -->
     <string name="action_copy">کپی</string>
     <string name="action_open">باز کردن</string>

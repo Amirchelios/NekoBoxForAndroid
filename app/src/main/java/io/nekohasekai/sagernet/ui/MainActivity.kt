@@ -444,6 +444,7 @@ class MainActivity : ThemedActivity(),
     }
 
 
+
     private fun enforceClientModeVpn(restartIfRunning: Boolean) {
         if (!DataStore.clientMode) return
         if (DataStore.serviceMode == Key.MODE_VPN) return
