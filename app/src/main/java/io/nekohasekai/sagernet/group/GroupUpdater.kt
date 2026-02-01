@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.*
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.Proxy
 import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -45,6 +46,10 @@ abstract class GroupUpdater {
         var max: Int
     ) {
         var progress by AtomicInteger()
+    }
+
+    interface Listener {
+        fun onProgressChanged()
     }
 
     protected suspend fun forceResolve(
@@ -134,6 +139,9 @@ abstract class GroupUpdater {
 
         val updating = Collections.synchronizedSet<Long>(mutableSetOf())
         val progress = Collections.synchronizedMap<Long, Progress>(mutableMapOf())
+        val listeners = Collections.synchronizedSet<Listener>(mutableSetOf())
+        private val lastUpdateSuccessAt = Collections.synchronizedMap<Long, Long>(mutableMapOf())
+        private val lastUpdateFailureAt = Collections.synchronizedMap<Long, Long>(mutableMapOf())
         private const val DEFAULT_DEDICATED_LINK_URL =
             "https://drive.usercontent.google.com/u/0/uc?id=1JHaY3RHNHR2sYd_zu9CvNH6IdFv2ggec&export=download"
 
@@ -147,10 +155,13 @@ abstract class GroupUpdater {
             return coroutineScope {
                 if (!updating.add(proxyGroup.id)) cancel()
                 GroupManager.postReload(proxyGroup.id)
+                listeners.forEach { it.onProgressChanged() }
 
                 val subscription = proxyGroup.subscription!!
+                val link = subscription.link?.trim().orEmpty()
                 val connected = DataStore.serviceState.connected
                 val userInterface = GroupManager.userInterface
+                val isDedicatedGroup = link.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true)
 
                 if (byUser && (subscription.link?.startsWith("http://") == true || subscription.updateWhenConnectedOnly) && !connected) {
                     if (userInterface == null || !userInterface.confirm(app.getString(R.string.update_subscription_warning))) {
@@ -161,6 +172,15 @@ abstract class GroupUpdater {
                 }
 
                 try {
+                    if (link.equals(DEFAULT_SUBSCRIPTION_LINK, true) && !DataStore.clientMode) {
+                        val dedicated = findDedicatedCandidate()
+                        val ok = dedicated != null && ensureDedicatedReachable(dedicated)
+                        if (!ok) {
+                            userInterface?.onUpdateFailure(proxyGroup, app.getString(R.string.dedicated_unreachable))
+                            finishUpdate(proxyGroup)
+                            return@coroutineScope false
+                        }
+                    }
                     if (!connected) {
                         val dedicated = findDedicatedCandidate()
                         if (dedicated != null) {
@@ -169,7 +189,11 @@ abstract class GroupUpdater {
                                 userInterface?.onUpdateFailure(proxyGroup, app.getString(R.string.dedicated_unreachable))
                             }
                             val state = captureInternalProxyState()
-                            val connectedInternal = if (reachable) tryConnectWith(dedicated) else false
+                            val connectedInternal = if (reachable && !isDedicatedGroup) {
+                                tryConnectWith(dedicated)
+                            } else {
+                                false
+                            }
                             if (connectedInternal) {
                                 return@coroutineScope runCatching {
                                     RawUpdater.doUpdate(proxyGroup, subscription, userInterface, byUser)
@@ -204,8 +228,31 @@ abstract class GroupUpdater {
                             return@coroutineScope true
                         }
 
-                        // Still failing: open internal browser for dedicated link download.
-                        promptOpenDedicatedLink(userInterface)
+                        // Still failing: try auto fetch dedicated config without browser.
+                        if (autoFetchDedicatedConfig(5000L)) {
+                            val candidate = findDedicatedCandidate()
+                            if (candidate != null && ensureDedicatedReachable(candidate)) {
+                                val state = captureInternalProxyState()
+                                val connectedInternal = if (!isDedicatedGroup) {
+                                    tryConnectWith(candidate)
+                                } else {
+                                    false
+                                }
+                                if (connectedInternal) {
+                                    return@coroutineScope runCatching {
+                                        RawUpdater.doUpdate(proxyGroup, subscription, userInterface, byUser)
+                                        true
+                                    }.getOrElse { e ->
+                                        Logs.w(e)
+                                        userInterface?.onUpdateFailure(proxyGroup, e.readableMessage)
+                                        finishUpdate(proxyGroup)
+                                        false
+                                    }
+                                } else {
+                                    restoreInternalProxyState(state)
+                                }
+                            }
+                        }
                         finishUpdate(proxyGroup)
                         return@coroutineScope false
                     }
@@ -215,7 +262,7 @@ abstract class GroupUpdater {
                 } catch (e: Throwable) {
                     Logs.w(e)
                     userInterface?.onUpdateFailure(proxyGroup, e.readableMessage)
-                    promptOpenDedicatedLink(userInterface)
+                    autoFetchDedicatedConfig(5000L)
                     finishUpdate(proxyGroup)
                     false
                 }
@@ -257,15 +304,9 @@ abstract class GroupUpdater {
         }
 
         suspend fun autoFetchDedicatedConfig(timeoutMs: Long = 5000L): Boolean {
-            val urls = listOf(
-                GroupManager.DEDICATED_SUBSCRIPTION_GITHUB_LINK,
-                GroupManager.DEDICATED_SUBSCRIPTION_LINK
-            )
-            for (url in urls) {
-                val content = fetchDedicatedRaw(url, timeoutMs) ?: continue
-                if (importDedicatedFromRaw(content)) return true
-            }
-            return false
+            val content = fetchDedicatedRaw(GroupManager.DEDICATED_SUBSCRIPTION_LINK, timeoutMs)
+                ?: return false
+            return importDedicatedFromRaw(content)
         }
 
         suspend fun activateDedicatedInternalProxy(): Boolean {
@@ -288,6 +329,7 @@ abstract class GroupUpdater {
         private fun fetchDedicatedRaw(url: String, timeoutMs: Long): String? {
             return runCatching {
                 val client = OkHttpClient.Builder()
+                    .proxy(Proxy.NO_PROXY)
                     .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                     .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                     .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
@@ -306,8 +348,7 @@ abstract class GroupUpdater {
 
         private suspend fun importDedicatedFromRaw(raw: String): Boolean {
             val group = GroupManager.ensureDedicatedSubscriptionGroup() ?: return false
-            val existing = SagerDatabase.proxyDao.getAll()
-                .filter { it.groupId == group.id && GroupManager.isDedicatedConfig(it) }
+            val existing = SagerDatabase.proxyDao.getByGroup(group.id)
             for (profile in existing) {
                 ProfileManager.deleteProfile(group.id, profile.id)
             }
@@ -421,22 +462,31 @@ abstract class GroupUpdater {
             }
         }
 
-        private suspend fun promptOpenDedicatedLink(userInterface: GroupManager.Interface?) {
-            val adapter = userInterface as? GroupInterfaceAdapter ?: return
-            val group = GroupManager.ensureDedicatedSubscriptionGroup() ?: return
-            runOnMainDispatcher {
-                val intent = android.content.Intent(adapter.context, io.nekohasekai.sagernet.ui.InternalBrowserActivity::class.java)
-                intent.putExtra(io.nekohasekai.sagernet.ui.InternalBrowserActivity.EXTRA_TARGET_GROUP_ID, group.id)
-                intent.putExtra(io.nekohasekai.sagernet.ui.InternalBrowserActivity.EXTRA_INITIAL_URL, DEFAULT_DEDICATED_LINK_URL)
-                intent.putExtra(io.nekohasekai.sagernet.ui.InternalBrowserActivity.EXTRA_DISABLE_PROXY, true)
-                adapter.context.startActivity(intent)
-            }
-        }
+        private suspend fun promptOpenDedicatedLink(userInterface: GroupManager.Interface?) = Unit
 
         suspend fun finishUpdate(proxyGroup: ProxyGroup) {
             updating.remove(proxyGroup.id)
             progress.remove(proxyGroup.id)
             GroupManager.postUpdate(proxyGroup)
+            listeners.forEach { it.onProgressChanged() }
+        }
+
+        fun markUpdateSuccess(groupId: Long) {
+            lastUpdateSuccessAt[groupId] = System.currentTimeMillis()
+        }
+
+        fun markUpdateFailure(groupId: Long) {
+            lastUpdateFailureAt[groupId] = System.currentTimeMillis()
+        }
+
+        fun wasJustUpdatedSuccess(groupId: Long, windowMs: Long = 3000L): Boolean {
+            val ts = lastUpdateSuccessAt[groupId] ?: return false
+            return System.currentTimeMillis() - ts <= windowMs
+        }
+
+        fun wasJustUpdatedFailure(groupId: Long, windowMs: Long = 3000L): Boolean {
+            val ts = lastUpdateFailureAt[groupId] ?: return false
+            return System.currentTimeMillis() - ts <= windowMs
         }
 
     }

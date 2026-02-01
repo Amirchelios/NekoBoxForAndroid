@@ -165,19 +165,46 @@ object GroupManager {
     }
 
     suspend fun ensureDedicatedSubscriptionGroup(): ProxyGroup? {
-        val existing = SagerDatabase.groupDao.allGroups().firstOrNull { group ->
-            group.type == GroupType.SUBSCRIPTION &&
-                group.subscription?.link?.trim()?.equals(DEDICATED_SUBSCRIPTION_LINK, true) == true
+        val groups = SagerDatabase.groupDao.allGroups().filter { group ->
+            if (group.type != GroupType.SUBSCRIPTION) return@filter false
+            val link = group.subscription?.link?.trim().orEmpty()
+            link.equals(DEDICATED_SUBSCRIPTION_LINK, true) ||
+                link.equals(DEDICATED_SUBSCRIPTION_GITHUB_LINK, true) ||
+                group.name == DEDICATED_SUBSCRIPTION_GROUP_NAME
         }
-        if (existing != null) {
-            if (existing.name != DEDICATED_SUBSCRIPTION_GROUP_NAME) {
-                existing.name = DEDICATED_SUBSCRIPTION_GROUP_NAME
-                SagerDatabase.groupDao.updateGroup(existing)
-                iterator { groupUpdated(existing) }
+        if (groups.isNotEmpty()) {
+            val primary = groups.firstOrNull { group ->
+                group.subscription?.link?.trim()?.equals(DEDICATED_SUBSCRIPTION_LINK, true) == true
+            } ?: groups.first()
+            var changed = false
+            if (primary.name != DEDICATED_SUBSCRIPTION_GROUP_NAME) {
+                primary.name = DEDICATED_SUBSCRIPTION_GROUP_NAME
+                changed = true
             }
-            ensureDedicatedAutoSelectConfig(existing)
-            cleanupDuplicateSpecialConfigs(existing)
-            return existing
+            val currentLink = primary.subscription?.link?.trim().orEmpty()
+            if (!currentLink.equals(DEDICATED_SUBSCRIPTION_LINK, true)) {
+                primary.subscription?.link = DEDICATED_SUBSCRIPTION_LINK
+                changed = true
+            }
+            if (changed) {
+                SagerDatabase.groupDao.updateGroup(primary)
+                iterator { groupUpdated(primary) }
+            }
+            val duplicates = groups.filter { it.id != primary.id }
+            if (duplicates.isNotEmpty()) {
+                for (dup in duplicates) {
+                    val proxies = SagerDatabase.proxyDao.getByGroup(dup.id)
+                    if (proxies.isNotEmpty()) {
+                        proxies.forEach { it.groupId = primary.id }
+                        SagerDatabase.proxyDao.updateProxy(proxies)
+                    }
+                }
+                SagerDatabase.groupDao.deleteGroup(duplicates)
+                duplicates.forEach { iterator { groupRemoved(it.id) } }
+            }
+            ensureDedicatedAutoSelectConfig(primary)
+            cleanupDuplicateSpecialConfigs(primary)
+            return primary
         }
         val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
             name = DEDICATED_SUBSCRIPTION_GROUP_NAME

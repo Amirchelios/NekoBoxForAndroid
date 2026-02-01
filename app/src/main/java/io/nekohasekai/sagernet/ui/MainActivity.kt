@@ -19,6 +19,7 @@ import androidx.activity.addCallback
 import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceDataStore
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -68,6 +69,11 @@ class MainActivity : ThemedActivity(),
     lateinit var navigation: NavigationView
     private var glowAnimator: ObjectAnimator? = null
     private var stateAnimator: ObjectAnimator? = null
+    private val updateProgressListener = object : GroupUpdater.Listener {
+        override fun onProgressChanged() {
+            runOnUiThread { updateFabUpdateProgress() }
+        }
+    }
     private var internalProxyRestartJob: Job? = null
     private var pendingVpnStartJob: Job? = null
 
@@ -148,12 +154,13 @@ class MainActivity : ThemedActivity(),
         connection.connect(this, this)
         DataStore.configurationStore.registerChangeListener(this)
         GroupManager.userInterface = GroupInterfaceAdapter(this)
+        GroupUpdater.listeners.add(updateProgressListener)
         runOnDefaultDispatcher {
             GroupManager.ensureDefaultSubscriptionGroup()
             GroupManager.ensureDedicatedSubscriptionGroup()
         }
         ensureDefaultAutoSelectOnFirstRun()
-        ensureInternalProxyOnAppStart()
+        runStartupDedicatedGate()
 
         if (intent?.action == Intent.ACTION_VIEW) {
             onNewIntent(intent)
@@ -515,6 +522,22 @@ class MainActivity : ThemedActivity(),
         if (state == BaseService.State.Stopped && !DataStore.clientMode) {
             scheduleInternalProxyRestart()
         }
+        updateFabUpdateProgress()
+    }
+
+    private fun updateFabUpdateProgress() {
+        val active = GroupUpdater.updating.isNotEmpty()
+        binding.fabProgress.isVisible = active
+        if (!active) return
+        val totalMax = GroupUpdater.progress.values.sumOf { it.max }
+        val totalProgress = GroupUpdater.progress.values.sumOf { it.progress }
+        if (totalMax <= 0) {
+            binding.fabProgress.isIndeterminate = true
+            return
+        }
+        binding.fabProgress.isIndeterminate = false
+        binding.fabProgress.max = totalMax
+        binding.fabProgress.progress = totalProgress.coerceAtMost(totalMax)
     }
 
     private fun scheduleInternalProxyRestart() {
@@ -527,7 +550,7 @@ class MainActivity : ThemedActivity(),
             if (isFinishing || isDestroyed) return@launchWhenStarted
             if (DataStore.serviceState != BaseService.State.Stopped) return@launchWhenStarted
             if (DataStore.internalProxyActive) return@launchWhenStarted
-            ensureInternalProxyOnAppStart()
+            runStartupDedicatedGate()
         }
     }
 
@@ -641,37 +664,51 @@ class MainActivity : ThemedActivity(),
         }
     }
 
-    private fun ensureInternalProxyOnAppStart() {
+    private fun runStartupDedicatedGate() {
+        if (DataStore.clientMode) return
+        binding.startupLoading.isVisible = true
+        binding.startupLoadingText.setText(R.string.startup_dedicated_checking)
         runOnDefaultDispatcher {
-            if (DataStore.clientMode) return@runOnDefaultDispatcher
-            if (DataStore.internalProxyActive || DataStore.serviceState.connected) return@runOnDefaultDispatcher
             val all = SagerDatabase.proxyDao.getAll()
             var dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) }
-            var reachable = false
-            if (dedicated != null) {
-                reachable = GroupUpdater.testDedicatedReachable(dedicated)
+            var reachable = if (dedicated != null) {
+                GroupUpdater.testDedicatedReachable(dedicated)
+            } else {
+                false
             }
             if (!reachable) {
-                val fetched = GroupUpdater.autoFetchDedicatedConfig(5000L)
-                if (fetched) {
-                    val refreshed = SagerDatabase.proxyDao.getAll()
-                    dedicated = refreshed.firstOrNull { GroupManager.isDedicatedConfig(it) }
-                    if (dedicated != null) {
-                        reachable = GroupUpdater.testDedicatedReachable(dedicated)
-                    }
+                GroupUpdater.autoFetchDedicatedConfig(5000L)
+                val refreshed = SagerDatabase.proxyDao.getAll()
+                dedicated = refreshed.firstOrNull { GroupManager.isDedicatedConfig(it) }
+                reachable = if (dedicated != null) {
+                    GroupUpdater.testDedicatedReachable(dedicated)
+                } else {
+                    false
                 }
             }
-            if (!reachable || dedicated == null) return@runOnDefaultDispatcher
-
-            if (DataStore.internalProxyUserSelected == 0L) {
-                DataStore.internalProxyUserSelected = DataStore.selectedProxy
+            if (reachable && dedicated != null) {
+                if (DataStore.internalProxyUserSelected == 0L) {
+                    DataStore.internalProxyUserSelected = DataStore.selectedProxy
+                }
+                DataStore.internalProxyProfileId = dedicated.id
+                DataStore.internalProxyActive = true
+                DataStore.selectedProxy = dedicated.id
+                DataStore.currentProfile = dedicated.id
+                DataStore.serviceMode = Key.MODE_PROXY
+                SagerNet.startService()
+                onMainDispatcher {
+                    binding.startupLoading.isVisible = false
+                }
+            } else {
+                onMainDispatcher {
+                    binding.startupLoading.isVisible = false
+                    val snack = snackbar(getString(R.string.startup_dedicated_failed))
+                    snack.view.setBackgroundColor(
+                        ContextCompat.getColor(this@MainActivity, R.color.material_red_500)
+                    )
+                    snack.show()
+                }
             }
-            DataStore.internalProxyProfileId = dedicated.id
-            DataStore.internalProxyActive = true
-            DataStore.selectedProxy = dedicated.id
-            DataStore.currentProfile = dedicated.id
-            DataStore.serviceMode = Key.MODE_PROXY
-            SagerNet.startService()
         }
     }
 
@@ -772,6 +809,7 @@ class MainActivity : ThemedActivity(),
     override fun onDestroy() {
         super.onDestroy()
         GroupManager.userInterface = null
+        GroupUpdater.listeners.remove(updateProgressListener)
         DataStore.configurationStore.unregisterChangeListener(this)
         connection.disconnect(this)
     }

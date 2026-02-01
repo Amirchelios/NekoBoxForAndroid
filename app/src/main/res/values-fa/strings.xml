@@ -49,6 +49,14 @@
     <string name="group_edit_subscription">ویرایش اشتراک</string>
     <string name="group_status_empty">خالی</string>
     <string name="group_status_empty_subscription">هنوز به‌روزرسانی نشده است</string>
+    <string name="update_success">به‌روزرسانی با موفقیت انجام شد</string>
+    <string name="update_failed">به‌روزرسانی ناموفق بود</string>
+    <string name="update_summary_title">نتیجه بروزرسانی</string>
+    <string name="update_status_success">موفق</string>
+    <string name="update_status_failed">ناموفق</string>
+    <string name="update_status_line">%1$s: %2$s</string>
+    <string name="startup_dedicated_checking">در حال بررسی کانفیگ اختصاصی...</string>
+    <string name="startup_dedicated_failed">در حال حاضر برنامه با مشکلات خاص روبرو است. از شکیبایی شما متشکریم.</string>
     <string name="group_status_proxies">%d پراکسی‌ها</string>
     <string name="group_status_proxies_subscription">%d پراکسی‌ها | به‌روزرسانی شدند در %s</string>
     <string name="group_no_difference">%s: بدون تفاوت</string>

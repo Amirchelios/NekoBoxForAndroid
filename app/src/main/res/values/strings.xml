@@ -52,6 +52,14 @@
     <string name="group_edit_subscription">Edit subscription</string>
     <string name="group_status_empty">Empty group</string>
     <string name="group_status_empty_subscription">Not updated yet</string>
+    <string name="update_success">Update completed successfully</string>
+    <string name="update_failed">Update failed</string>
+    <string name="update_summary_title">Update results</string>
+    <string name="update_status_success">Success</string>
+    <string name="update_status_failed">Failed</string>
+    <string name="update_status_line">%1$s: %2$s</string>
+    <string name="startup_dedicated_checking">Checking dedicated config...</string>
+    <string name="startup_dedicated_failed">Currently the app is experiencing issues. Thank you for your patience.</string>
     <string name="group_status_proxies">%d Proxies</string>
     <string name="group_status_proxies_subscription">%d Proxies | Updated on %s</string>
     <string name="group_no_difference">%s: No difference</string>

@@ -31,6 +31,8 @@ class WebviewFragment : ToolbarFragment(R.layout.layout_webview), Toolbar.OnMenu
         toolbar.setOnMenuItemClickListener(this)
 
         val binding = LayoutWebviewBinding.bind(view)
+        binding.addressBar.visibility = View.GONE
+        binding.addressReveal.visibility = View.GONE
 
         // webview
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)

@@ -336,7 +336,7 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
         val editButton = binding.edit
         val optionsButton = binding.options
         val updateButton = binding.groupUpdate
-        val subscriptionUpdateProgress = binding.subscriptionUpdateProgress
+        val subscriptionUpdateProgress = binding.groupUpdateProgress
 
         override fun onMenuItemClick(item: MenuItem): Boolean {
 
@@ -421,7 +421,7 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 popup.show()
             }
 
-            if (proxyGroup.id in GroupUpdater.updating) {
+            if (proxyGroup.id in GroupUpdater.updating || GroupUpdater.updating.isNotEmpty()) {
                 (groupName.parent as LinearLayout).apply {
                     setPadding(paddingLeft, dp2px(11), paddingRight, paddingBottom)
                 }
@@ -438,7 +438,7 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                     }
                 }
 
-                updateButton.isInvisible = true
+                updateButton.isEnabled = false
                 editButton.isGone = true
             } else {
                 (groupName.parent as LinearLayout).apply {
@@ -447,6 +447,7 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
 
                 subscriptionUpdateProgress.isVisible = false
                 updateButton.isInvisible = proxyGroup.type != GroupType.SUBSCRIPTION
+                updateButton.isEnabled = proxyGroup.type == GroupType.SUBSCRIPTION
                 editButton.isGone = proxyGroup.ungrouped
             }
 
@@ -528,23 +529,20 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                                 groupStatus.text = getString(R.string.group_status_proxies, size)
                             }
                         }
-
                         GroupType.SUBSCRIPTION -> {
-                            groupStatus.text = if (size == 0L) {
-                                getString(R.string.group_status_empty_subscription)
+                            if (size == 0L) {
+                                groupStatus.setText(R.string.group_status_empty_subscription)
                             } else {
                                 val date = Date(group.subscription!!.lastUpdated * 1000L)
-                                getString(
+                                groupStatus.text = getString(
                                     R.string.group_status_proxies_subscription,
                                     size,
-                                    "${date.month + 1} - ${date.date}"
+                                    Util.timeStamp2Text(date.time)
                                 )
                             }
-
                         }
                     }
                 }
-
             }
 
         }

@@ -116,6 +116,34 @@
 
         </io.nekohasekai.sagernet.widget.StatsBar>
 
+        <LinearLayout
+            android:id="@+id/startup_loading"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:background="@drawable/bg_main_gradient"
+            android:visibility="gone"
+            android:padding="32dp"
+            app:layout_anchor="@id/fragment_holder"
+            app:layout_anchorGravity="center">
+
+            <ProgressBar
+                android:id="@+id/startup_loading_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:indeterminate="true" />
+
+            <TextView
+                android:id="@+id/startup_loading_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:textColor="@color/glass_text"
+                android:textSize="14sp"
+                android:text="@string/startup_dedicated_checking" />
+        </LinearLayout>
+
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <com.google.android.material.navigation.NavigationView

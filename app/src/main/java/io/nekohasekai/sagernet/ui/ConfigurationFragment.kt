@@ -258,6 +258,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     private enum class SpecialProfile { YOUTUBE, AUTO, DEDICATED }
 
+
     private fun userSelectedId(): Long {
         return if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY &&
             DataStore.internalProxyUserSelected > 0L
@@ -354,6 +355,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         super.onDestroy()
     }
+
 
     override fun onKeyDown(ketCode: Int, event: KeyEvent): Boolean {
         val fragment = getCurrentGroupFragment()
