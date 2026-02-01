@@ -166,6 +166,15 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var appendHttpProxy by configurationStore.boolean(Key.APPEND_HTTP_PROXY)
     var connectionTestURL by configurationStore.string(Key.CONNECTION_TEST_URL) { CONNECTION_TEST_URL }
     var connectionTestConcurrent by configurationStore.int("connectionTestConcurrent") { 50 }
+    var parallelStrategy by configurationStore.string(Key.PARALLEL_STRATEGY) { "race" }
+    var parallelConcurrency by configurationStore.int(Key.PARALLEL_CONCURRENCY) { 15 }
+    var parallelDelayMs by configurationStore.int(Key.PARALLEL_DELAY) { 300 }
+    var parallelTimeoutMs by configurationStore.int(Key.PARALLEL_TIMEOUT) { 5000 }
+    var parallelUrl by configurationStore.string(Key.PARALLEL_URL) { CONNECTION_TEST_URL }
+    var parallelIntervalSec by configurationStore.int(Key.PARALLEL_INTERVAL) { 180 }
+    var parallelIdleTimeoutMin by configurationStore.int(Key.PARALLEL_IDLE_TIMEOUT) { 30 }
+    var parallelTolerance by configurationStore.int(Key.PARALLEL_TOLERANCE) { 50 }
+    var autoSelectPrimary by configurationStore.string(Key.AUTO_SELECT_PRIMARY) { "parallel" }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
 
     var tunImplementation by configurationStore.stringToInt(Key.TUN_IMPLEMENTATION) { TunImplementation.GVISOR }

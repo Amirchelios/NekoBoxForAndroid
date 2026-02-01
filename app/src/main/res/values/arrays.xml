@@ -353,6 +353,24 @@
         <item>@string/disable</item>
         <item>@string/auto</item>
     </string-array>
+    <string-array name="parallel_strategy_entries">
+        <item>Race (fastest)</item>
+        <item>Least RTT</item>
+        <item>Round robin</item>
+    </string-array>
+    <string-array name="parallel_strategy_values">
+        <item>race</item>
+        <item>least_rtt</item>
+        <item>round_robin</item>
+    </string-array>
+    <string-array name="auto_select_primary_entries">
+        <item>Parallel (race)</item>
+        <item>URLTest</item>
+    </string-array>
+    <string-array name="auto_select_primary_values">
+        <item>parallel</item>
+        <item>urltest</item>
+    </string-array>
     <string-array name="ipv6_mode">
         <item>@string/disable</item>
         <item>@string/enable</item>

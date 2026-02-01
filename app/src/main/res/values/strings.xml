@@ -346,6 +346,16 @@
     <string name="always_show_address">Always Show Address</string>
     <string name="always_show_address_sum">Always display the server address on the configuration
         card</string>
+    <string name="parallel_settings_title">Auto Select Parallel</string>
+    <string name="auto_select_primary">Auto Select primary</string>
+    <string name="parallel_strategy">Parallel strategy</string>
+    <string name="parallel_concurrency">Parallel concurrency</string>
+    <string name="parallel_delay_ms">Parallel delay (ms)</string>
+    <string name="parallel_timeout_ms">Parallel timeout (ms)</string>
+    <string name="parallel_url">Parallel test URL</string>
+    <string name="parallel_interval_sec">Parallel test interval (sec)</string>
+    <string name="parallel_idle_timeout_min">Parallel idle timeout (min)</string>
+    <string name="parallel_tolerance">Parallel tolerance (ms)</string>
     <string name="clear_traffic_statistics">Clear traffic statistics</string>
     <string name="connection_test">Connection test</string>
     <string name="connection_test_clear_results">Clear test results</string>

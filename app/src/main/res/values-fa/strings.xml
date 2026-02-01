@@ -29,6 +29,16 @@
     <string name="menu_traffic">ترافیک</string>
     <string name="menu_dashboard">sing-box تنظیمات</string>
     <string name="menu_auto_select">انتخاب خودکار</string>
+    <string name="parallel_settings_title">انتخاب خودکار موازی</string>
+    <string name="auto_select_primary">اولویت انتخاب خودکار</string>
+    <string name="parallel_strategy">استراتژی موازی</string>
+    <string name="parallel_concurrency">تعداد همزمان موازی</string>
+    <string name="parallel_delay_ms">تاخیر موازی (میلی‌ثانیه)</string>
+    <string name="parallel_timeout_ms">مهلت موازی (میلی‌ثانیه)</string>
+    <string name="parallel_url">آدرس تست موازی</string>
+    <string name="parallel_interval_sec">بازه تست موازی (ثانیه)</string>
+    <string name="parallel_idle_timeout_min">مهلت بیکاری موازی (دقیقه)</string>
+    <string name="parallel_tolerance">تلورانس موازی (میلی‌ثانیه)</string>
     <string name="open_dedicated_link_prompt">بروزرسانی ناموفق بود. لینک اختصاصی را برای دانلود باز می‌کنید؟</string>
     <string name="dedicated_link_import_success">کانفیگ اختصاصی وارد شد.</string>
     <string name="dedicated_link_import_failed">ورود کانفیگ اختصاصی ناموفق بود.</string>

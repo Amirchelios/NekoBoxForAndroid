@@ -96,6 +96,58 @@
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/parallel_settings_title">
+        <moe.matsuri.nb4a.ui.SimpleMenuPreference
+            app:defaultValue="parallel"
+            app:entries="@array/auto_select_primary_entries"
+            app:entryValues="@array/auto_select_primary_values"
+            app:key="autoSelectPrimary"
+            app:title="@string/auto_select_primary"
+            app:useSimpleSummaryProvider="true" />
+        <moe.matsuri.nb4a.ui.SimpleMenuPreference
+            app:defaultValue="race"
+            app:entries="@array/parallel_strategy_entries"
+            app:entryValues="@array/parallel_strategy_values"
+            app:key="parallelStrategy"
+            app:title="@string/parallel_strategy"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="15"
+            app:key="parallelConcurrency"
+            app:title="@string/parallel_concurrency"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="300"
+            app:key="parallelDelayMs"
+            app:title="@string/parallel_delay_ms"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="5000"
+            app:key="parallelTimeoutMs"
+            app:title="@string/parallel_timeout_ms"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="http://cp.cloudflare.com/"
+            app:key="parallelUrl"
+            app:title="@string/parallel_url"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="180"
+            app:key="parallelIntervalSec"
+            app:title="@string/parallel_interval_sec"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="30"
+            app:key="parallelIdleTimeoutMin"
+            app:title="@string/parallel_idle_timeout_min"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="50"
+            app:key="parallelTolerance"
+            app:title="@string/parallel_tolerance"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/cag_route">
         <SwitchPreference
             app:icon="@drawable/ic_navigation_apps"

@@ -47,6 +47,15 @@ object Key {
     const val APPEND_HTTP_PROXY = "appendHttpProxy"
 
     const val CONNECTION_TEST_URL = "connectionTestURL"
+    const val PARALLEL_STRATEGY = "parallelStrategy"
+    const val PARALLEL_CONCURRENCY = "parallelConcurrency"
+    const val PARALLEL_DELAY = "parallelDelayMs"
+    const val PARALLEL_TIMEOUT = "parallelTimeoutMs"
+    const val PARALLEL_URL = "parallelUrl"
+    const val PARALLEL_INTERVAL = "parallelIntervalSec"
+    const val PARALLEL_IDLE_TIMEOUT = "parallelIdleTimeoutMin"
+    const val PARALLEL_TOLERANCE = "parallelTolerance"
+    const val AUTO_SELECT_PRIMARY = "autoSelectPrimary"
 
     const val NETWORK_CHANGE_RESET_CONNECTIONS = "networkChangeResetConnections"
     const val WAKE_RESET_CONNECTIONS = "wakeResetConnections"

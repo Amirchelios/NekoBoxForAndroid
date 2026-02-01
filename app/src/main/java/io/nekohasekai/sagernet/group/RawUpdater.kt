@@ -766,7 +766,7 @@ object RawUpdater : GroupUpdater() {
                 for (i in 0 until newOutbounds.length()) {
                     val outbound = newOutbounds.optJSONObject(i) ?: continue
                     val type = outbound.optString("type")
-                    if (type == "selector" || type == "urltest") {
+                    if (type == "selector" || type == "urltest" || type == "parallel") {
                         val list = outbound.optJSONArray("outbounds") ?: continue
                         val filtered = JSONArray()
                         for (j in 0 until list.length()) {
@@ -869,7 +869,7 @@ object RawUpdater : GroupUpdater() {
             for (i in 0 until list.length()) {
                 val outbound = list.optJSONObject(i) ?: continue
                 val type = outbound.optString("type")
-                if (type == "selector" || type == "urltest" || type == "direct" ||
+                if (type == "selector" || type == "urltest" || type == "parallel" || type == "direct" ||
                     type == "block" || type == "dns" || type == "shadowsocks"
                 ) {
                     continue
@@ -899,7 +899,14 @@ object RawUpdater : GroupUpdater() {
             put("type", "selector")
             put("tag", "proxy")
             val list = JSONArray()
-            list.put("auto")
+            val preferParallel = DataStore.autoSelectPrimary != "urltest"
+            if (preferParallel) {
+                list.put("auto_parallel")
+                list.put("auto")
+            } else {
+                list.put("auto")
+                list.put("auto_parallel")
+            }
             validTags.forEach { list.put(it) }
             list.put("direct")
             put("outbounds", list)
@@ -907,6 +914,47 @@ object RawUpdater : GroupUpdater() {
         merged.put(JSONObject().apply {
             put("type", "direct")
             put("tag", "direct")
+        })
+        merged.put(JSONObject().apply {
+            put("type", "parallel")
+            put("tag", "auto_parallel")
+            val list = JSONArray()
+            validTags.forEach { list.put(it) }
+            put("outbounds", list)
+            val strategy = DataStore.parallelStrategy
+            if (!strategy.isNullOrBlank()) {
+                put("strategy", strategy)
+            }
+            val concurrency = DataStore.parallelConcurrency
+            if (concurrency > 0) {
+                put("concurrency", concurrency)
+            }
+            val delayMs = DataStore.parallelDelayMs
+            if (delayMs > 0) {
+                put("delay", "${delayMs}ms")
+            }
+            val timeoutMs = DataStore.parallelTimeoutMs
+            if (timeoutMs > 0) {
+                put("timeout", "${timeoutMs}ms")
+            }
+            if (strategy == "least_rtt") {
+                val url = DataStore.parallelUrl
+                if (!url.isNullOrBlank()) {
+                    put("url", url)
+                }
+                val intervalSec = DataStore.parallelIntervalSec
+                if (intervalSec > 0) {
+                    put("interval", "${intervalSec}s")
+                }
+                val idleTimeoutMin = DataStore.parallelIdleTimeoutMin
+                if (idleTimeoutMin > 0) {
+                    put("idle_timeout", "${idleTimeoutMin}m")
+                }
+                val tolerance = DataStore.parallelTolerance
+                if (tolerance > 0) {
+                    put("tolerance", tolerance)
+                }
+            }
         })
         merged.put(JSONObject().apply {
             put("type", "urltest")
@@ -981,7 +1029,7 @@ object RawUpdater : GroupUpdater() {
                         .mapNotNull {
                             val ty = it.getStr("type")
                             if (ty == null || ty == "" ||
-                                ty == "dns" || ty == "block" || ty == "direct" || ty == "selector" || ty == "urltest"
+                                ty == "dns" || ty == "block" || ty == "direct" || ty == "selector" || ty == "urltest" || ty == "parallel"
                             ) {
                                 null
                             } else {
