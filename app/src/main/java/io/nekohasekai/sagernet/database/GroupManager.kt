@@ -14,6 +14,8 @@ object GroupManager {
 
     const val YOUTUBE_INSTAGRAM_CONFIG_NAME = "باز کننده یوتویب و اینستاگرام"
     const val DEDICATED_SUBSCRIPTION_GROUP_NAME = "کانفیگ اختصاصی"
+    const val DEDICATED_SUBSCRIPTION_GITHUB_LINK =
+        "https://raw.githubusercontent.com/Amirchelios/NG_manager/refs/heads/main/ml.txt"
     const val DEDICATED_SUBSCRIPTION_LINK =
         "https://drive.usercontent.google.com/u/0/uc?id=1JHaY3RHNHR2sYd_zu9CvNH6IdFv2ggec&export=download"
     const val DEDICATED_CONFIG_NAME = "کانفیگ اختصاصی"

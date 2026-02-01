@@ -31,6 +31,7 @@ import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.group.RawUpdater
+import io.nekohasekai.sagernet.group.GroupUpdater
 import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.SubscriptionFoundException
 import io.nekohasekai.sagernet.ktx.USER_AGENT
@@ -609,6 +610,7 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
                     name = GroupManager.DEDICATED_CONFIG_NAME
                 }
                 ProfileManager.createProfile(groupId, bean)
+                GroupUpdater.activateDedicatedInternalProxy()
                 runOnMainDispatcher {
                     Toast.makeText(this@InternalBrowserActivity, R.string.dedicated_link_import_success, Toast.LENGTH_LONG).show()
                 }
@@ -636,6 +638,7 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
         for (profile in results) {
             ProfileManager.createProfile(groupId, profile)
         }
+        GroupUpdater.activateDedicatedInternalProxy()
         runOnMainDispatcher {
             Toast.makeText(this@InternalBrowserActivity, R.string.dedicated_link_import_success, Toast.LENGTH_LONG).show()
         }

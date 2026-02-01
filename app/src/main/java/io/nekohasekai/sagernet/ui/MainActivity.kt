@@ -646,19 +646,30 @@ class MainActivity : ThemedActivity(),
             if (DataStore.clientMode) return@runOnDefaultDispatcher
             if (DataStore.internalProxyActive || DataStore.serviceState.connected) return@runOnDefaultDispatcher
             val all = SagerDatabase.proxyDao.getAll()
-            val dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) }
-            val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
-            val target = dedicated ?: auto ?: return@runOnDefaultDispatcher
+            var dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) }
+            var reachable = false
+            if (dedicated != null) {
+                reachable = GroupUpdater.testDedicatedReachable(dedicated)
+            }
+            if (!reachable) {
+                val fetched = GroupUpdater.autoFetchDedicatedConfig(5000L)
+                if (fetched) {
+                    val refreshed = SagerDatabase.proxyDao.getAll()
+                    dedicated = refreshed.firstOrNull { GroupManager.isDedicatedConfig(it) }
+                    if (dedicated != null) {
+                        reachable = GroupUpdater.testDedicatedReachable(dedicated)
+                    }
+                }
+            }
+            if (!reachable || dedicated == null) return@runOnDefaultDispatcher
 
-            if (auto != null) {
-                DataStore.internalProxyUserSelected = auto.id
-            } else if (DataStore.internalProxyUserSelected == 0L) {
+            if (DataStore.internalProxyUserSelected == 0L) {
                 DataStore.internalProxyUserSelected = DataStore.selectedProxy
             }
-            DataStore.internalProxyProfileId = target.id
+            DataStore.internalProxyProfileId = dedicated.id
             DataStore.internalProxyActive = true
-            DataStore.selectedProxy = target.id
-            DataStore.currentProfile = target.id
+            DataStore.selectedProxy = dedicated.id
+            DataStore.currentProfile = dedicated.id
             DataStore.serviceMode = Key.MODE_PROXY
             SagerNet.startService()
         }

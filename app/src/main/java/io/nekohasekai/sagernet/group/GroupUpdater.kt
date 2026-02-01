@@ -6,6 +6,7 @@ import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.bg.proto.TestInstance
+import moe.matsuri.nb4a.converter.ProxyToSingboxConverter
 import moe.matsuri.nb4a.proxy.config.ConfigBean
 import io.nekohasekai.sagernet.database.ProxyGroup
 import io.nekohasekai.sagernet.database.SagerDatabase
@@ -20,11 +21,14 @@ import io.nekohasekai.sagernet.fmt.v2ray.StandardV2RayBean
 import io.nekohasekai.sagernet.fmt.v2ray.isTLS
 import io.nekohasekai.sagernet.ktx.*
 import io.nekohasekai.sagernet.utils.DnsAutoSelector
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.*
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.*
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 @Suppress("EXPERIMENTAL_API_USAGE")
@@ -246,6 +250,99 @@ abstract class GroupUpdater {
                 Logs.w(e)
                 false
             }
+        }
+
+        suspend fun testDedicatedReachable(profile: ProxyEntity): Boolean {
+            return ensureDedicatedReachable(profile)
+        }
+
+        suspend fun autoFetchDedicatedConfig(timeoutMs: Long = 5000L): Boolean {
+            val urls = listOf(
+                GroupManager.DEDICATED_SUBSCRIPTION_GITHUB_LINK,
+                GroupManager.DEDICATED_SUBSCRIPTION_LINK
+            )
+            for (url in urls) {
+                val content = fetchDedicatedRaw(url, timeoutMs) ?: continue
+                if (importDedicatedFromRaw(content)) return true
+            }
+            return false
+        }
+
+        suspend fun activateDedicatedInternalProxy(): Boolean {
+            val all = SagerDatabase.proxyDao.getAll()
+            val dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) } ?: return false
+            if (DataStore.internalProxyUserSelected == 0L) {
+                DataStore.internalProxyUserSelected = DataStore.selectedProxy
+            }
+            DataStore.internalProxyProfileId = dedicated.id
+            DataStore.internalProxyActive = true
+            DataStore.selectedProxy = dedicated.id
+            DataStore.currentProfile = dedicated.id
+            DataStore.serviceMode = Key.MODE_PROXY
+            if (!DataStore.serviceState.started) {
+                SagerNet.startService()
+            }
+            return true
+        }
+
+        private fun fetchDedicatedRaw(url: String, timeoutMs: Long): String? {
+            return runCatching {
+                val client = OkHttpClient.Builder()
+                    .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .build()
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", DataStore.subscriptionUserAgent.ifBlank { USER_AGENT })
+                    .header("Accept", "text/plain,*/*;q=0.9")
+                    .build()
+                client.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) return@runCatching null
+                    resp.body?.string().orEmpty()
+                }
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+        }
+
+        private suspend fun importDedicatedFromRaw(raw: String): Boolean {
+            val group = GroupManager.ensureDedicatedSubscriptionGroup() ?: return false
+            val existing = SagerDatabase.proxyDao.getAll()
+                .filter { it.groupId == group.id && GroupManager.isDedicatedConfig(it) }
+            for (profile in existing) {
+                ProfileManager.deleteProfile(group.id, profile.id)
+            }
+
+            val payload = raw.trim()
+            var results = RawUpdater.parseRaw(payload)
+            if (results.isNullOrEmpty()) {
+                val extracted = Regex("(vmess|vless|trojan|ss|hysteria2|hy2|hysteria|tuic|anytls)://[^\\s\"'>]+")
+                    .findAll(payload)
+                    .map { it.value.trim() }
+                    .filter { it.isNotBlank() }
+                    .joinToString("\n")
+                if (extracted.isNotBlank()) {
+                    results = RawUpdater.parseRaw(extracted)
+                }
+            }
+            if (results.isNullOrEmpty()) {
+                val singboxJson = ProxyToSingboxConverter.convertToSingBoxJson(payload).orEmpty()
+                if (singboxJson.isBlank()) return false
+                val bean = ConfigBean().applyDefaultValues().apply {
+                    type = 0
+                    config = singboxJson
+                    name = GroupManager.DEDICATED_CONFIG_NAME
+                }
+                ProfileManager.createProfile(group.id, bean)
+                activateDedicatedInternalProxy()
+                return true
+            }
+            for (profile in results) {
+                ProfileManager.createProfile(group.id, profile)
+            }
+            if (results.isNotEmpty()) {
+                activateDedicatedInternalProxy()
+            }
+            return results.isNotEmpty()
         }
 
         private data class InternalProxyState(
