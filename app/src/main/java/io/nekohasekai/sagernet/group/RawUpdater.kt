@@ -741,6 +741,7 @@ object RawUpdater : GroupUpdater() {
         return runCatching {
             val root = JSONObject(config)
             fixVmessSecurity(root)
+            removeParallelOutbounds(root)
             val outbounds = root.optJSONArray("outbounds") ?: return@runCatching config
             val invalidTags = HashSet<String>()
             val newOutbounds = JSONArray()
@@ -794,6 +795,7 @@ object RawUpdater : GroupUpdater() {
         return runCatching {
             val root = JSONObject(config)
             fixVmessSecurity(root)
+            removeParallelOutbounds(root)
             root.toString()
         }.getOrDefault(config)
     }
@@ -822,6 +824,45 @@ object RawUpdater : GroupUpdater() {
                 }
             }
         }
+    }
+
+    private fun removeParallelOutbounds(root: JSONObject) {
+        val outbounds = root.optJSONArray("outbounds") ?: return
+        val removedTags = HashSet<String>()
+        val newOutbounds = JSONArray()
+        for (i in 0 until outbounds.length()) {
+            val outbound = outbounds.optJSONObject(i) ?: continue
+            val type = outbound.optString("type")
+            val tag = outbound.optString("tag")
+            if (type == "parallel" || tag == "auto_parallel") {
+                if (tag.isNotBlank()) removedTags.add(tag)
+                continue
+            }
+            newOutbounds.put(outbound)
+        }
+        if (removedTags.isNotEmpty()) {
+            for (i in 0 until newOutbounds.length()) {
+                val outbound = newOutbounds.optJSONObject(i) ?: continue
+                val type = outbound.optString("type")
+                if (type == "selector" || type == "urltest") {
+                    val list = outbound.optJSONArray("outbounds") ?: continue
+                    val filtered = JSONArray()
+                    for (j in 0 until list.length()) {
+                        val tag = list.optString(j)
+                        if (tag != "auto_parallel" && !removedTags.contains(tag)) {
+                            filtered.put(tag)
+                        }
+                    }
+                    if (filtered.length() == 0 && type == "urltest") {
+                        // urltest with no candidates causes sing-box parser failure; degrade to direct selector
+                        outbound.put("type", "selector")
+                        filtered.put("direct")
+                    }
+                    outbound.put("outbounds", filtered)
+                }
+            }
+        }
+        root.put("outbounds", newOutbounds)
     }
 
     private fun isInvalidRealityOutbound(outbound: JSONObject): Boolean {
@@ -899,14 +940,7 @@ object RawUpdater : GroupUpdater() {
             put("type", "selector")
             put("tag", "proxy")
             val list = JSONArray()
-            val preferParallel = DataStore.autoSelectPrimary != "urltest"
-            if (preferParallel) {
-                list.put("auto_parallel")
-                list.put("auto")
-            } else {
-                list.put("auto")
-                list.put("auto_parallel")
-            }
+            list.put("auto")
             validTags.forEach { list.put(it) }
             list.put("direct")
             put("outbounds", list)
@@ -914,47 +948,6 @@ object RawUpdater : GroupUpdater() {
         merged.put(JSONObject().apply {
             put("type", "direct")
             put("tag", "direct")
-        })
-        merged.put(JSONObject().apply {
-            put("type", "parallel")
-            put("tag", "auto_parallel")
-            val list = JSONArray()
-            validTags.forEach { list.put(it) }
-            put("outbounds", list)
-            val strategy = DataStore.parallelStrategy
-            if (!strategy.isNullOrBlank()) {
-                put("strategy", strategy)
-            }
-            val concurrency = DataStore.parallelConcurrency
-            if (concurrency > 0) {
-                put("concurrency", concurrency)
-            }
-            val delayMs = DataStore.parallelDelayMs
-            if (delayMs > 0) {
-                put("delay", "${delayMs}ms")
-            }
-            val timeoutMs = DataStore.parallelTimeoutMs
-            if (timeoutMs > 0) {
-                put("timeout", "${timeoutMs}ms")
-            }
-            if (strategy == "least_rtt") {
-                val url = DataStore.parallelUrl
-                if (!url.isNullOrBlank()) {
-                    put("url", url)
-                }
-                val intervalSec = DataStore.parallelIntervalSec
-                if (intervalSec > 0) {
-                    put("interval", "${intervalSec}s")
-                }
-                val idleTimeoutMin = DataStore.parallelIdleTimeoutMin
-                if (idleTimeoutMin > 0) {
-                    put("idle_timeout", "${idleTimeoutMin}m")
-                }
-                val tolerance = DataStore.parallelTolerance
-                if (tolerance > 0) {
-                    put("tolerance", tolerance)
-                }
-            }
         })
         merged.put(JSONObject().apply {
             put("type", "urltest")
