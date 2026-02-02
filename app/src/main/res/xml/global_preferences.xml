@@ -260,6 +260,7 @@
 
     <PreferenceCategory app:title="@string/cag_misc">
         <SwitchPreference
+            app:defaultValue="true"
             app:icon="@drawable/baseline_construction_24"
             app:key="enableClashAPI"
             app:summary="@string/enable_clash_api_summary"

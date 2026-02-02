@@ -164,6 +164,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         if (!select) {
             toolbar.inflateMenu(R.menu.add_profile_menu)
+            updateAddProfileMenu()
             toolbar.setOnMenuItemClickListener(this)
         } else {
             toolbar.setTitle(titleRes)
@@ -254,6 +255,17 @@ class ConfigurationFragment @JvmOverloads constructor(
                 R.id.quick_dedicated -> selectSpecialProfile(SpecialProfile.DEDICATED)
             }
         }
+    }
+
+    fun updateAddProfileMenuForClientMode() {
+        updateAddProfileMenu()
+    }
+
+    private fun updateAddProfileMenu() {
+        if (select) return
+        val addItem = toolbar.menu.findItem(R.id.action_add) ?: return
+        addItem.isVisible = DataStore.clientMode
+        addItem.isEnabled = DataStore.clientMode
     }
 
     private enum class SpecialProfile { YOUTUBE, AUTO, DEDICATED }
@@ -430,6 +442,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     override fun onResume() {
         super.onResume()
+        updateAddProfileMenu()
         if (showAllProfiles) {
             runOnDefaultDispatcher {
                 GroupManager.ensureDefaultSubscriptionGroup()

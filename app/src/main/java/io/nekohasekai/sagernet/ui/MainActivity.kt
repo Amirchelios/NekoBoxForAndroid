@@ -412,6 +412,8 @@ class MainActivity : ThemedActivity(),
         if (::navigation.isInitialized) {
             navigation.menu.findItem(R.id.nav_client_mode)?.isChecked = DataStore.clientMode
         }
+        (supportFragmentManager.findFragmentById(R.id.fragment_holder) as? ConfigurationFragment)
+            ?.updateAddProfileMenuForClientMode()
         if (DataStore.clientMode) {
             enforceClientModeVpn(restartIfRunning = true)
             if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
