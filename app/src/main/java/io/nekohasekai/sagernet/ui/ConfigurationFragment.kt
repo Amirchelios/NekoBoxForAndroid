@@ -266,6 +266,9 @@ class ConfigurationFragment @JvmOverloads constructor(
         val addItem = toolbar.menu.findItem(R.id.action_add) ?: return
         addItem.isVisible = DataStore.clientMode
         addItem.isEnabled = DataStore.clientMode
+        val autoDnsItem = toolbar.menu.findItem(R.id.action_auto_dns) ?: return
+        autoDnsItem.isVisible = DataStore.clientMode
+        autoDnsItem.isEnabled = DataStore.clientMode
     }
 
     private enum class SpecialProfile { YOUTUBE, AUTO, DEDICATED }
