@@ -172,13 +172,23 @@ object ProxyToSingboxConverter {
                 tls["utls"] = mapOf("enabled" to true, "fingerprint" to "chrome")
             }
 
+            val allowedSecurity = setOf(
+                "auto",
+                "none",
+                "zero",
+                "aes-128-gcm",
+                "chacha20-poly1305",
+                "aes-128-ctr"
+            )
+            val security = json.optString("scy", "auto").lowercase(Locale.US).trim()
+
             mapOf(
                 "type" to "vmess",
                 "tag" to generateTag("vmess"),
                 "server" to server,
                 "server_port" to port,
                 "uuid" to uuid,
-                "security" to json.optString("scy", "auto"),
+                "security" to (if (security in allowedSecurity) security else "auto"),
                 "alter_id" to (json.optString("aid", "0").toIntOrNull() ?: 0),
                 "transport" to transport,
                 "tls" to tls
@@ -317,7 +327,8 @@ object ProxyToSingboxConverter {
             if (parts.size < 2) return null
             val method = parts[0]
             val password = parts.subList(1, parts.size).joinToString(":")
-            if (method.isBlank() || password.isBlank()) return null
+            val methodRegex = Regex("^[a-z0-9_\\-]+$", RegexOption.IGNORE_CASE)
+            if (method.isBlank() || password.isBlank() || !methodRegex.matches(method)) return null
 
             mapOf(
                 "type" to "shadowsocks",
