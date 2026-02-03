@@ -741,51 +741,7 @@ object RawUpdater : GroupUpdater() {
         return runCatching {
             val root = JSONObject(config)
             fixVmessSecurity(root)
-            removeParallelOutbounds(root)
-            val outbounds = root.optJSONArray("outbounds") ?: return@runCatching config
-            val invalidTags = HashSet<String>()
-            val newOutbounds = JSONArray()
-            for (i in 0 until outbounds.length()) {
-                val outbound = outbounds.optJSONObject(i) ?: continue
-                if (outbound.optString("type") == "vmess") {
-                    val sec = outbound.opt("security")
-                    if (sec == JSONObject.NULL || (sec is String && sec.isBlank())) {
-                        outbound.put("security", "auto")
-                    }
-                }
-                if (outbound.optString("type") == "urltest") {
-                    outbound.remove("timeout")
-                    outbound.remove("timeoout")
-                }
-                if (isInvalidRealityOutbound(outbound)) {
-                    outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
-                    continue
-                }
-                newOutbounds.put(outbound)
-            }
-            if (invalidTags.isNotEmpty()) {
-                for (i in 0 until newOutbounds.length()) {
-                    val outbound = newOutbounds.optJSONObject(i) ?: continue
-                    val type = outbound.optString("type")
-                    if (type == "selector" || type == "urltest" || type == "parallel") {
-                        val list = outbound.optJSONArray("outbounds") ?: continue
-                        val filtered = JSONArray()
-                        for (j in 0 until list.length()) {
-                            val tag = list.optString(j)
-                            if (!invalidTags.contains(tag)) {
-                                filtered.put(tag)
-                            }
-                        }
-                        if (filtered.length() == 0 && type == "urltest") {
-                            // urltest with no candidates causes sing-box parser failure; degrade to direct selector
-                            outbound.put("type", "selector")
-                            filtered.put("direct")
-                        }
-                        outbound.put("outbounds", filtered)
-                    }
-                }
-            }
-            root.put("outbounds", newOutbounds)
+            sanitizeOutbounds(root)
             root.toString()
         }.getOrDefault(config)
     }
@@ -796,6 +752,7 @@ object RawUpdater : GroupUpdater() {
             val root = JSONObject(config)
             fixVmessSecurity(root)
             removeParallelOutbounds(root)
+            sanitizeOutbounds(root)
             root.toString()
         }.getOrDefault(config)
     }
@@ -824,6 +781,64 @@ object RawUpdater : GroupUpdater() {
                 }
             }
         }
+    }
+
+    private fun sanitizeOutbounds(root: JSONObject) {
+        val outbounds = root.optJSONArray("outbounds") ?: return
+        val invalidTags = HashSet<String>()
+        val newOutbounds = JSONArray()
+        for (i in 0 until outbounds.length()) {
+            val outbound = outbounds.optJSONObject(i) ?: continue
+            val type = outbound.optString("type")
+            if (!isValidOutboundType(type)) {
+                outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
+                continue
+            }
+            if (type == "vmess") {
+                val sec = outbound.opt("security")
+                if (sec == JSONObject.NULL || (sec is String && sec.isBlank())) {
+                    outbound.put("security", "auto")
+                }
+            }
+            if (type == "urltest") {
+                outbound.remove("timeout")
+                outbound.remove("timeoout")
+            }
+            if (isInvalidRealityOutbound(outbound)) {
+                outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
+                continue
+            }
+            newOutbounds.put(outbound)
+        }
+        if (invalidTags.isNotEmpty()) {
+            for (i in 0 until newOutbounds.length()) {
+                val outbound = newOutbounds.optJSONObject(i) ?: continue
+                val type = outbound.optString("type")
+                if (type == "selector" || type == "urltest" || type == "parallel") {
+                    val list = outbound.optJSONArray("outbounds") ?: continue
+                    val filtered = JSONArray()
+                    for (j in 0 until list.length()) {
+                        val tag = list.optString(j)
+                        if (!invalidTags.contains(tag)) {
+                            filtered.put(tag)
+                        }
+                    }
+                    if (filtered.length() == 0 && type == "urltest") {
+                        // urltest with no candidates causes sing-box parser failure; degrade to direct selector
+                        outbound.put("type", "selector")
+                        filtered.put("direct")
+                    }
+                    outbound.put("outbounds", filtered)
+                }
+            }
+        }
+        root.put("outbounds", newOutbounds)
+    }
+
+    private fun isValidOutboundType(type: String?): Boolean {
+        val normalized = type?.trim().orEmpty()
+        if (normalized.isBlank()) return false
+        return Regex("^[a-z0-9_\\-]+$").matches(normalized)
     }
 
     private fun removeParallelOutbounds(root: JSONObject) {
@@ -1023,6 +1038,7 @@ object RawUpdater : GroupUpdater() {
                             val ty = it.getStr("type")
                             if (ty == null || ty == "" ||
                                 ty == "dns" || ty == "block" || ty == "direct" || ty == "selector" || ty == "urltest" || ty == "parallel"
+                                || !isValidOutboundType(ty)
                             ) {
                                 null
                             } else {

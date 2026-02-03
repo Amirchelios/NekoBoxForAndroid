@@ -73,8 +73,21 @@ object ProxyToSingboxConverter {
             val json = JSONObject(trimmed)
             val hasOutbounds = json.optJSONArray("outbounds") != null
             val hasInbounds = json.optJSONArray("inbounds") != null
-            if (hasOutbounds || hasInbounds) json.toString() else null
+            if (!hasOutbounds && !hasInbounds) return@runCatching null
+            if (hasOutbounds && !hasValidOutboundTypes(json)) return@runCatching null
+            json.toString()
         }.getOrNull()
+    }
+
+    private fun hasValidOutboundTypes(json: JSONObject): Boolean {
+        val outbounds = json.optJSONArray("outbounds") ?: return true
+        val typeRegex = Regex("^[a-z0-9_\\-]+$")
+        for (i in 0 until outbounds.length()) {
+            val outbound = outbounds.opt(i) as? JSONObject ?: return false
+            val type = outbound.optString("type").trim()
+            if (type.isBlank() || !typeRegex.matches(type)) return false
+        }
+        return true
     }
 
     private fun buildOutbounds(
