@@ -132,6 +132,7 @@ object RawUpdater : GroupUpdater() {
         }
 
         val proxiesMap = LinkedHashMap<String, AbstractBean>()
+        val proxyNameCounters = HashMap<String, Int>()
         // normalize any embedded sing-box configs to avoid invalid vmess security fields
         proxies.forEach {
             if (it is ConfigBean && it.type == 0 && it.config.isNotBlank()) {
@@ -139,16 +140,11 @@ object RawUpdater : GroupUpdater() {
             }
         }
         for (proxy in proxies) {
-            var index = 0
-            var name = proxy.displayName()
-            while (proxiesMap.containsKey(name)) {
-                println("Exists name: $name")
-                index++
-                name = name.replace(" (${index - 1})", "")
-                name = "$name ($index)"
-                proxy.name = name
-            }
-            proxiesMap[proxy.displayName()] = proxy
+            val name = proxy.displayName()
+            val count = (proxyNameCounters[name] ?: 0) + 1
+            proxyNameCounters[name] = count
+            val key = if (count == 1) name else "$name#$count"
+            proxiesMap[key] = proxy
         }
         proxies = proxiesMap.values.toList()
 
@@ -182,16 +178,40 @@ object RawUpdater : GroupUpdater() {
 
         Logs.d("New profiles: ${proxies.size}")
 
-        val nameMap = proxies.associateBy { bean ->
-            bean.displayName()
+        fun buildIndexedNameMap(list: List<AbstractBean>): Map<String, AbstractBean> {
+            val map = LinkedHashMap<String, AbstractBean>()
+            val counters = HashMap<String, Int>()
+            for (bean in list) {
+                val name = bean.displayName()
+                val count = (counters[name] ?: 0) + 1
+                counters[name] = count
+                val key = if (count == 1) name else "$name#$count"
+                map[key] = bean
+            }
+            return map
         }
+
+        fun buildIndexedEntityMap(list: List<ProxyEntity>): Map<String, ProxyEntity> {
+            val map = LinkedHashMap<String, ProxyEntity>()
+            val counters = HashMap<String, Int>()
+            for (entity in list) {
+                val name = entity.displayName()
+                val count = (counters[name] ?: 0) + 1
+                counters[name] = count
+                val key = if (count == 1) name else "$name#$count"
+                map[key] = entity
+            }
+            return map
+        }
+
+        val nameMap = buildIndexedNameMap(proxies)
 
         Logs.d("Unique profiles: ${nameMap.size}")
 
         val toDelete = ArrayList<ProxyEntity>()
-        val toReplace = exists.mapNotNull { entity ->
-            val name = entity.displayName()
-            if (nameMap.contains(name)) name to entity else let {
+        val existMap = buildIndexedEntityMap(exists)
+        val toReplace = existMap.mapNotNull { (key, entity) ->
+            if (nameMap.containsKey(key)) key to entity else let {
                 toDelete.add(entity)
                 null
             }

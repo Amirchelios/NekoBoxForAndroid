@@ -27,14 +27,17 @@ object ProxyToSingboxConverter {
 
         val outbounds = mutableListOf<Map<String, Any?>>()
         val validTags = mutableListOf<String>()
+        val usedTags = LinkedHashSet<String>()
+        val flagCounters = HashMap<String, Int>()
 
         configs.forEach { config ->
             val outbound = when {
-                config.startsWith("vmess://") -> convertVmess(config)
-                config.startsWith("vless://") -> convertVless(config)
-                config.startsWith("trojan://") -> convertTrojan(config)
-                config.startsWith("hysteria2://") || config.startsWith("hy2://") -> convertHysteria2(config)
-                config.startsWith("ss://") -> convertShadowsocks(config)
+                config.startsWith("vmess://") -> convertVmess(config, usedTags, flagCounters)
+                config.startsWith("vless://") -> convertVless(config, usedTags, flagCounters)
+                config.startsWith("trojan://") -> convertTrojan(config, usedTags, flagCounters)
+                config.startsWith("hysteria2://") || config.startsWith("hy2://") ->
+                    convertHysteria2(config, usedTags, flagCounters)
+                config.startsWith("ss://") -> convertShadowsocks(config, usedTags, flagCounters)
                 else -> null
             }
             if (outbound != null) {
@@ -145,7 +148,11 @@ object ProxyToSingboxConverter {
         return configs
     }
 
-    private fun convertVmess(input: String): Map<String, Any?>? {
+    private fun convertVmess(
+        input: String,
+        usedTags: MutableSet<String>,
+        flagCounters: MutableMap<String, Int>
+    ): Map<String, Any?>? {
         return try {
             val payload = input.removePrefix("vmess://")
             val decoded = String(Util.b64Decode(payload))
@@ -154,6 +161,8 @@ object ProxyToSingboxConverter {
             val port = json.optString("port").toIntOrNull() ?: return null
             val uuid = json.optString("id")
             if (server.isBlank() || uuid.isBlank()) return null
+            val displayName = json.optString("ps").trim()
+            val tag = buildTag(displayName, "vmess", usedTags, flagCounters)
 
             val transport = mutableMapOf<String, Any?>()
             if (json.optString("net") == "ws") {
@@ -184,7 +193,7 @@ object ProxyToSingboxConverter {
 
             mapOf(
                 "type" to "vmess",
-                "tag" to generateTag("vmess"),
+                "tag" to tag,
                 "server" to server,
                 "server_port" to port,
                 "uuid" to uuid,
@@ -198,13 +207,21 @@ object ProxyToSingboxConverter {
         }
     }
 
-    private fun convertVless(input: String): Map<String, Any?>? {
+    private fun convertVless(
+        input: String,
+        usedTags: MutableSet<String>,
+        flagCounters: MutableMap<String, Int>
+    ): Map<String, Any?>? {
         return try {
             val uri = URI(input)
             val server = uri.host ?: return null
             val port = if (uri.port > 0) uri.port else 443
             val uuid = uri.userInfo ?: return null
             val params = parseQuery(uri.rawQuery)
+            val displayName = uri.rawFragment?.let {
+                URLDecoder.decode(it, StandardCharsets.UTF_8.name())
+            }?.trim().orEmpty()
+            val tag = buildTag(displayName, "vless", usedTags, flagCounters)
 
             val transport = mutableMapOf<String, Any?>()
             if (params["type"] == "ws") {
@@ -234,7 +251,7 @@ object ProxyToSingboxConverter {
 
             mapOf(
                 "type" to "vless",
-                "tag" to generateTag("vless"),
+                "tag" to tag,
                 "server" to server,
                 "server_port" to port,
                 "uuid" to uuid,
@@ -247,13 +264,21 @@ object ProxyToSingboxConverter {
         }
     }
 
-    private fun convertTrojan(input: String): Map<String, Any?>? {
+    private fun convertTrojan(
+        input: String,
+        usedTags: MutableSet<String>,
+        flagCounters: MutableMap<String, Int>
+    ): Map<String, Any?>? {
         return try {
             val uri = URI(input)
             val server = uri.host ?: return null
             val port = if (uri.port > 0) uri.port else 443
             val password = uri.userInfo ?: return null
             val params = parseQuery(uri.rawQuery)
+            val displayName = uri.rawFragment?.let {
+                URLDecoder.decode(it, StandardCharsets.UTF_8.name())
+            }?.trim().orEmpty()
+            val tag = buildTag(displayName, "trojan", usedTags, flagCounters)
 
             val transport = mutableMapOf<String, Any?>()
             if (params["type"] == "ws") {
@@ -273,7 +298,7 @@ object ProxyToSingboxConverter {
 
             mapOf(
                 "type" to "trojan",
-                "tag" to generateTag("trojan"),
+                "tag" to tag,
                 "server" to server,
                 "server_port" to port,
                 "password" to password,
@@ -285,17 +310,25 @@ object ProxyToSingboxConverter {
         }
     }
 
-    private fun convertHysteria2(input: String): Map<String, Any?>? {
+    private fun convertHysteria2(
+        input: String,
+        usedTags: MutableSet<String>,
+        flagCounters: MutableMap<String, Int>
+    ): Map<String, Any?>? {
         return try {
             val uri = URI(input)
             val server = uri.host ?: return null
             val port = uri.port.takeIf { it > 0 } ?: return null
             val params = parseQuery(uri.rawQuery)
             val password = uri.userInfo ?: params["password"].orEmpty()
+            val displayName = uri.rawFragment?.let {
+                URLDecoder.decode(it, StandardCharsets.UTF_8.name())
+            }?.trim().orEmpty()
+            val tag = buildTag(displayName, "hysteria2", usedTags, flagCounters)
 
             mapOf(
                 "type" to "hysteria2",
-                "tag" to generateTag("hysteria2"),
+                "tag" to tag,
                 "server" to server,
                 "server_port" to port,
                 "password" to password,
@@ -310,7 +343,11 @@ object ProxyToSingboxConverter {
         }
     }
 
-    private fun convertShadowsocks(input: String): Map<String, Any?>? {
+    private fun convertShadowsocks(
+        input: String,
+        usedTags: MutableSet<String>,
+        flagCounters: MutableMap<String, Int>
+    ): Map<String, Any?>? {
         return try {
             val uri = URI(input)
             val server = uri.host ?: return null
@@ -329,10 +366,14 @@ object ProxyToSingboxConverter {
             val password = parts.subList(1, parts.size).joinToString(":")
             val methodRegex = Regex("^[a-z0-9_\\-]+$", RegexOption.IGNORE_CASE)
             if (method.isBlank() || password.isBlank() || !methodRegex.matches(method)) return null
+            val displayName = uri.rawFragment?.let {
+                URLDecoder.decode(it, StandardCharsets.UTF_8.name())
+            }?.trim().orEmpty()
+            val tag = buildTag(displayName, "ss", usedTags, flagCounters)
 
             mapOf(
                 "type" to "shadowsocks",
-                "tag" to generateTag("ss"),
+                "tag" to tag,
                 "server" to server,
                 "server_port" to port,
                 "method" to method,
@@ -343,9 +384,79 @@ object ProxyToSingboxConverter {
         }
     }
 
+    private fun buildTag(
+        preferred: String,
+        prefix: String,
+        usedTags: MutableSet<String>,
+        flagCounters: MutableMap<String, Int>
+    ): String {
+        val rawName = if (preferred.isBlank()) "" else preferred
+        val (flag, remainder) = extractFlagAndRemainder(rawName)
+        val base = if (flag.isNotBlank()) {
+            val next = (flagCounters[flag] ?: 0) + 1
+            flagCounters[flag] = next
+            val label = if (remainder.isBlank()) "" else " $remainder"
+            sanitizeTag("$flag $next$label")
+        } else {
+            generateTag(prefix)
+        }
+        var candidate = base
+        var counter = 2
+        while (!usedTags.add(candidate)) {
+            candidate = "$base ($counter)"
+            counter++
+        }
+        return candidate
+    }
+
+    private fun sanitizeTag(raw: String): String {
+        val trimmed = raw.trim().replace("\n", " ").replace("\r", " ")
+        return if (trimmed.isBlank()) "proxy" else trimmed
+    }
+
     private fun generateTag(prefix: String): String {
         val random = java.util.UUID.randomUUID().toString().take(8)
         return "${prefix.lowercase(Locale.US)}-$random"
+    }
+
+    private fun extractFlagAndRemainder(input: String): Pair<String, String> {
+        var i = 0
+        var flagStart = -1
+        var flagEnd = -1
+        while (i < input.length) {
+            val cp1 = Character.codePointAt(input, i)
+            val c1Len = Character.charCount(cp1)
+            if (isRegionalIndicator(cp1)) {
+                val nextIndex = i + c1Len
+                if (nextIndex < input.length) {
+                    val cp2 = Character.codePointAt(input, nextIndex)
+                    if (isRegionalIndicator(cp2)) {
+                        flagStart = i
+                        flagEnd = nextIndex + Character.charCount(cp2)
+                        break
+                    }
+                }
+            }
+            i += c1Len
+        }
+        if (flagStart < 0) return "" to input.trim()
+        val flag = input.substring(flagStart, flagEnd)
+        val remainder = buildString {
+            var idx = 0
+            while (idx < input.length) {
+                val cp = Character.codePointAt(input, idx)
+                val len = Character.charCount(cp)
+                if (!isRegionalIndicator(cp)) {
+                    append(input, idx, idx + len)
+                }
+                idx += len
+            }
+        }.replace(flag, "").trim()
+        return flag to remainder
+    }
+
+    private fun isRegionalIndicator(codePoint: Int): Boolean {
+        return codePoint in 0x1F1E6..0x1F1FF
     }
 
     private fun isBase64(str: String): Boolean {
