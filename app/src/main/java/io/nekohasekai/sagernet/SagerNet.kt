@@ -73,6 +73,7 @@ class SagerNet : Application(),
             JavaUtil.handleWebviewDir(this)
 
             runOnDefaultDispatcher {
+                ensureBundledRuleAssets()
                 PackageCache.register()
                 cleanWebview()
             }
@@ -120,6 +121,28 @@ class SagerNet : Application(),
         Libcore.forceGc()
     }
 
+    private fun ensureBundledRuleAssets() {
+        copyBundledRuleAsset("geoip.db")
+        copyBundledRuleAsset("geosite.db")
+    }
+
+    private fun copyBundledRuleAsset(fileName: String) {
+        val outFile = File(externalAssets, fileName)
+        if (outFile.isFile && outFile.length() > 0) return
+        runCatching {
+            assets.open(fileName).use { input ->
+                outFile.parentFile?.mkdirs()
+                outFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            val versionFile = File(outFile.parentFile, "${outFile.nameWithoutExtension}.version.txt")
+            versionFile.writeText("Bundled")
+        }.onFailure {
+            Logs.w(it)
+        }
+    }
+
     @SuppressLint("InlinedApi")
     companion object {
 
@@ -141,6 +164,7 @@ class SagerNet : Application(),
                 )
             }
         }
+
         val activity by lazy { application.getSystemService<ActivityManager>()!! }
         val clipboard by lazy { application.getSystemService<ClipboardManager>()!! }
         val connectivity by lazy { application.getSystemService<ConnectivityManager>()!! }
