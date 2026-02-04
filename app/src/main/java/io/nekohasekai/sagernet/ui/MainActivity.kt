@@ -148,6 +148,9 @@ class MainActivity : ThemedActivity(),
         binding.stats.setOnClickListener(null)
 
         setContentView(binding.root)
+        if (!BuildConfig.DEBUG && DataStore.clientMode) {
+            DataStore.clientMode = false
+        }
         applyClientModeUi()
         animateEntrance()
         changeState(BaseService.State.Idle)
@@ -192,7 +195,10 @@ class MainActivity : ThemedActivity(),
     fun refreshNavMenu(clashApi: Boolean) {
         if (::navigation.isInitialized) {
             navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isVisible = clashApi
-            navigation.menu.findItem(R.id.nav_client_mode)?.isChecked = DataStore.clientMode
+            navigation.menu.findItem(R.id.nav_client_mode)?.apply {
+                isVisible = BuildConfig.DEBUG
+                isChecked = DataStore.clientMode
+            }
         }
     }
 
@@ -364,6 +370,10 @@ class MainActivity : ThemedActivity(),
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.nav_client_mode -> {
+                if (!BuildConfig.DEBUG) {
+                    binding.drawerLayout.closeDrawers()
+                    return true
+                }
                 DataStore.clientMode = !DataStore.clientMode
                 item.isChecked = DataStore.clientMode
                 applyClientModeUi()
