@@ -56,6 +56,7 @@ object Key {
     const val PARALLEL_IDLE_TIMEOUT = "parallelIdleTimeoutMin"
     const val PARALLEL_TOLERANCE = "parallelTolerance"
     const val AUTO_SELECT_PRIMARY = "autoSelectPrimary"
+    const val FIRST_RUN_DONE = "firstRunDone"
 
     const val NETWORK_CHANGE_RESET_CONNECTIONS = "networkChangeResetConnections"
     const val WAKE_RESET_CONNECTIONS = "wakeResetConnections"

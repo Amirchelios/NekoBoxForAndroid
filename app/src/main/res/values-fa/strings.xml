@@ -62,6 +62,7 @@
     <string name="update_success">به‌روزرسانی با موفقیت انجام شد</string>
     <string name="update_failed">به‌روزرسانی ناموفق بود</string>
     <string name="update_summary_title">نتیجه بروزرسانی</string>
+    <string name="first_run_update_success">بروزرسانی اولیه با موفقیت انجام شد</string>
     <string name="update_status_success">موفق</string>
     <string name="update_status_failed">ناموفق</string>
     <string name="update_status_line">%1$s: %2$s</string>

@@ -270,6 +270,10 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var subscriptionUserAgent by profileCacheStore.string(Key.SUBSCRIPTION_USER_AGENT)
     var subscriptionAutoUpdate by profileCacheStore.boolean(Key.SUBSCRIPTION_AUTO_UPDATE)
     var subscriptionAutoUpdateDelay by profileCacheStore.stringToInt(Key.SUBSCRIPTION_AUTO_UPDATE_DELAY) { 360 }
+    var firstRunDone by configurationStore.boolean(Key.FIRST_RUN_DONE) { false }
+
+    @Volatile
+    var firstRunSilentUpdateActive = false
 
     var rulesFirstCreate by profileCacheStore.boolean("rulesFirstCreate")
 

@@ -55,6 +55,7 @@
     <string name="update_success">Update completed successfully</string>
     <string name="update_failed">Update failed</string>
     <string name="update_summary_title">Update results</string>
+    <string name="first_run_update_success">Initial update completed successfully</string>
     <string name="update_status_success">Success</string>
     <string name="update_status_failed">Failed</string>
     <string name="update_status_line">%1$s: %2$s</string>

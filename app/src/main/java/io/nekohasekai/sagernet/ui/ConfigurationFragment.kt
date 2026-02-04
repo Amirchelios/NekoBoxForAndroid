@@ -1203,6 +1203,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                 } else {
                     SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
                 }
+                newProfiles = newProfiles.filterNot { profile ->
+                    profile.type == ProxyEntity.TYPE_CONFIG &&
+                        profile.configBean?.type == 0 &&
+                        profile.configBean?.config?.isBlank() == true
+                }
                 if (proxyGroup.id != ALL_GROUP_ID) {
                     when (proxyGroup.order) {
                         GroupOrder.BY_NAME -> {

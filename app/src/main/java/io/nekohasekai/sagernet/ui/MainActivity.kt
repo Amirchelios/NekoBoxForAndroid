@@ -159,8 +159,9 @@ class MainActivity : ThemedActivity(),
         GroupManager.userInterface = GroupInterfaceAdapter(this)
         GroupUpdater.listeners.add(updateProgressListener)
         runOnDefaultDispatcher {
-            GroupManager.ensureDefaultSubscriptionGroup()
-            GroupManager.ensureDedicatedSubscriptionGroup()
+            val defaultGroup = GroupManager.ensureDefaultSubscriptionGroup()
+            val dedicatedGroup = GroupManager.ensureDedicatedSubscriptionGroup()
+            runFirstRunUpdate(defaultGroup, dedicatedGroup)
         }
         ensureDefaultAutoSelectOnFirstRun()
         runStartupDedicatedGate()
@@ -740,6 +741,46 @@ class MainActivity : ThemedActivity(),
                 }
             }
         }
+    }
+
+    private suspend fun runFirstRunUpdate(
+        defaultGroup: ProxyGroup?,
+        dedicatedGroup: ProxyGroup?
+    ) {
+        if (DataStore.firstRunDone) return
+        if (defaultGroup == null || dedicatedGroup == null) return
+        val needsDefault = isGroupEmptyForFirstRun(defaultGroup)
+        val needsDedicated = isGroupEmptyForFirstRun(dedicatedGroup)
+        if (!needsDefault || !needsDedicated) return
+
+        DataStore.firstRunSilentUpdateActive = true
+        try {
+            val okDefault = GroupUpdater.executeUpdate(defaultGroup, false)
+            val okDedicated = GroupUpdater.executeUpdate(dedicatedGroup, false)
+            if (okDefault && okDedicated) {
+                DataStore.firstRunDone = true
+                onMainDispatcher {
+                    snackbar(getString(R.string.first_run_update_success)).show()
+                }
+            }
+        } finally {
+            DataStore.firstRunSilentUpdateActive = false
+        }
+    }
+
+    private fun isGroupEmptyForFirstRun(group: ProxyGroup): Boolean {
+        val subscription = group.subscription ?: return false
+        if (subscription.lastUpdated > 0) return false
+        val proxies = SagerDatabase.proxyDao.getByGroup(group.id)
+        val hasRealProxy = proxies.any { proxy ->
+            when {
+                GroupManager.isAutoSelectAggregate(proxy) -> false
+                GroupManager.isYoutubeInstagramConfig(proxy) -> false
+                GroupManager.isDedicatedConfig(proxy) -> false
+                else -> true
+            }
+        }
+        return !hasRealProxy
     }
 
     override fun snackbarInternal(text: CharSequence): Snackbar {

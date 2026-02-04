@@ -4,6 +4,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.core.content.ContextCompat
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.R
+import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProxyGroup
 import io.nekohasekai.sagernet.ktx.onMainDispatcher
@@ -99,6 +100,9 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
         byUser: Boolean
     ) {
         GroupUpdater.markUpdateSuccess(group.id)
+        if (DataStore.firstRunSilentUpdateActive) {
+            return
+        }
         recordSummary(group, true)
         if (!summaryScheduled) {
             summaryScheduled = true
@@ -113,6 +117,9 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
 
     override suspend fun onUpdateFailure(group: ProxyGroup, message: String) {
         GroupUpdater.markUpdateFailure(group.id)
+        if (DataStore.firstRunSilentUpdateActive) {
+            return
+        }
         recordSummary(group, false, message)
         if (!summaryScheduled) {
             summaryScheduled = true
