@@ -35,6 +35,7 @@ import androidx.core.net.toUri
 
 @Suppress("EXPERIMENTAL_API_USAGE")
 object RawUpdater : GroupUpdater() {
+    private const val SMART_HEAD_COMPARE_COUNT = 3
 
     @SuppressLint("Recycle")
     override suspend fun doUpdate(
@@ -149,6 +150,16 @@ object RawUpdater : GroupUpdater() {
         proxies = proxiesMap.values.toList()
 
         if (subscription.forceResolve) forceResolve(proxies, proxyGroup.id)
+
+        if (shouldSkipSmartHeadUpdate(proxyGroup.id, proxies)) {
+            subscription.lastUpdated = (System.currentTimeMillis() / 1000).toInt()
+            SagerDatabase.groupDao.updateGroup(proxyGroup)
+            finishUpdate(proxyGroup)
+            userInterface?.onUpdateSuccess(
+                proxyGroup, 0, emptyList(), emptyMap(), emptyList(), emptyList(), byUser
+            )
+            return
+        }
 
         val exists = SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
         val duplicate = ArrayList<String>()
@@ -302,6 +313,21 @@ object RawUpdater : GroupUpdater() {
         userInterface?.onUpdateSuccess(
             proxyGroup, changed, added, updated, deleted, duplicate, byUser
         )
+    }
+
+    private fun shouldSkipSmartHeadUpdate(groupId: Long, newProxies: List<AbstractBean>): Boolean {
+        if (newProxies.isEmpty()) return false
+        val existing = SagerDatabase.proxyDao.getByGroup(groupId)
+            .sortedWith(compareBy<ProxyEntity> { it.userOrder }.thenBy { it.id })
+            .mapNotNull { runCatching { it.requireBean() }.getOrNull() }
+        if (existing.isEmpty()) return false
+        val count = SMART_HEAD_COMPARE_COUNT.coerceAtMost(
+            minOf(newProxies.size, existing.size)
+        )
+        if (count <= 0) return false
+        val newHead = newProxies.take(count).map { it.toString() }
+        val oldHead = existing.take(count).map { it.toString() }
+        return newHead == oldHead
     }
 
     @Suppress("UNCHECKED_CAST")
