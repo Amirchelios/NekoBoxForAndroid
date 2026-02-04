@@ -161,8 +161,8 @@ abstract class GroupUpdater {
                 val link = subscription.link?.trim().orEmpty()
                 val connected = DataStore.serviceState.connected
                 val userInterface = GroupManager.userInterface
-                val isDedicatedGroup = link.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true)
                 val skipInternalProxy = link.equals(DEFAULT_SUBSCRIPTION_LINK, true)
+                val allowInternalProxyForUpdate = false
 
                 if (byUser && (subscription.link?.startsWith("http://") == true || subscription.updateWhenConnectedOnly) && !connected) {
                     if (userInterface == null || !userInterface.confirm(app.getString(R.string.update_subscription_warning))) {
@@ -174,12 +174,17 @@ abstract class GroupUpdater {
 
                 try {
                     if (!connected) {
-                        if (!skipInternalProxy) {
+                        if (allowInternalProxyForUpdate && !skipInternalProxy) {
+                            val isDedicatedGroup =
+                                link.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true)
                             val dedicated = findDedicatedCandidate()
                             if (dedicated != null) {
                                 val reachable = ensureDedicatedReachable(dedicated)
                                 if (!reachable) {
-                                    userInterface?.onUpdateFailure(proxyGroup, app.getString(R.string.dedicated_unreachable))
+                                    userInterface?.onUpdateFailure(
+                                        proxyGroup,
+                                        app.getString(R.string.dedicated_unreachable)
+                                    )
                                 }
                                 val state = captureInternalProxyState()
                                 val connectedInternal = if (reachable && !isDedicatedGroup) {
@@ -223,7 +228,11 @@ abstract class GroupUpdater {
                         }
 
                         // Still failing: try auto fetch dedicated config without browser.
-                        if (!skipInternalProxy && autoFetchDedicatedConfig(5000L)) {
+                        if (allowInternalProxyForUpdate && !skipInternalProxy &&
+                            autoFetchDedicatedConfig(5000L)
+                        ) {
+                            val isDedicatedGroup =
+                                link.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true)
                             val candidate = findDedicatedCandidate()
                             if (candidate != null && ensureDedicatedReachable(candidate)) {
                                 val state = captureInternalProxyState()
@@ -256,7 +265,9 @@ abstract class GroupUpdater {
                 } catch (e: Throwable) {
                     Logs.w(e)
                     userInterface?.onUpdateFailure(proxyGroup, e.readableMessage)
-                    autoFetchDedicatedConfig(5000L)
+                    if (allowInternalProxyForUpdate) {
+                        autoFetchDedicatedConfig(5000L)
+                    }
                     finishUpdate(proxyGroup)
                     false
                 }

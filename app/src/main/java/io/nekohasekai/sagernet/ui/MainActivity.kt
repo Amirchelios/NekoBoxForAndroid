@@ -677,6 +677,8 @@ class MainActivity : ThemedActivity(),
     }
 
     private fun runStartupDedicatedGate() {
+        // Disabled: do not auto-enable internal proxy on startup.
+        return
         if (DataStore.clientMode) return
         binding.startupLoading.isVisible = true
         binding.startupLoadingText.setText(R.string.startup_dedicated_checking)
