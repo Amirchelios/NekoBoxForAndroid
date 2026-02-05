@@ -164,6 +164,21 @@ object GroupManager {
                 link.equals(DEDICATED_SUBSCRIPTION_LINK, ignoreCase = true))
     }
 
+    fun isDefaultSubscriptionGroup(group: ProxyGroup): Boolean {
+        if (group.type != GroupType.SUBSCRIPTION) return false
+        val link = group.subscription?.link?.trim().orEmpty()
+        return link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true)
+    }
+
+    fun isDedicatedSubscriptionGroup(group: ProxyGroup): Boolean {
+        if (group.type != GroupType.SUBSCRIPTION) return false
+        val link = group.subscription?.link?.trim().orEmpty()
+        return link.equals(DEDICATED_SUBSCRIPTION_LINK, true) ||
+            link.equals(DEDICATED_SUBSCRIPTION_GITHUB_LINK, true) ||
+            group.name == DEDICATED_SUBSCRIPTION_GROUP_NAME
+    }
+
+
     suspend fun ensureDedicatedSubscriptionGroup(): ProxyGroup? {
         val groups = SagerDatabase.groupDao.allGroups().filter { group ->
             if (group.type != GroupType.SUBSCRIPTION) return@filter false

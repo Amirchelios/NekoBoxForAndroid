@@ -151,16 +151,6 @@ object RawUpdater : GroupUpdater() {
 
         if (subscription.forceResolve) forceResolve(proxies, proxyGroup.id)
 
-        if (shouldSkipSmartHeadUpdate(proxyGroup.id, proxies)) {
-            subscription.lastUpdated = (System.currentTimeMillis() / 1000).toInt()
-            SagerDatabase.groupDao.updateGroup(proxyGroup)
-            finishUpdate(proxyGroup)
-            userInterface?.onUpdateSuccess(
-                proxyGroup, 0, emptyList(), emptyMap(), emptyList(), emptyList(), byUser
-            )
-            return
-        }
-
         val exists = SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
         val duplicate = ArrayList<String>()
         if (subscription.deduplication) {
@@ -218,6 +208,22 @@ object RawUpdater : GroupUpdater() {
         val nameMap = buildIndexedNameMap(proxies)
 
         Logs.d("Unique profiles: ${nameMap.size}")
+
+        if (shouldSkipSmartHeadUpdate(
+                proxyGroup,
+                nameMap.values.toList(),
+                aggregateName,
+                exists
+            )
+        ) {
+            subscription.lastUpdated = (System.currentTimeMillis() / 1000).toInt()
+            SagerDatabase.groupDao.updateGroup(proxyGroup)
+            finishUpdate(proxyGroup)
+            userInterface?.onUpdateSuccess(
+                proxyGroup, 0, emptyList(), emptyMap(), emptyList(), emptyList(), byUser
+            )
+            return
+        }
 
         val toDelete = ArrayList<ProxyEntity>()
         val existMap = buildIndexedEntityMap(exists)
@@ -315,19 +321,61 @@ object RawUpdater : GroupUpdater() {
         )
     }
 
-    private fun shouldSkipSmartHeadUpdate(groupId: Long, newProxies: List<AbstractBean>): Boolean {
-        if (newProxies.isEmpty()) return false
-        val existing = SagerDatabase.proxyDao.getByGroup(groupId)
-            .sortedWith(compareBy<ProxyEntity> { it.userOrder }.thenBy { it.id })
-            .mapNotNull { runCatching { it.requireBean() }.getOrNull() }
-        if (existing.isEmpty()) return false
+    private fun shouldSkipSmartHeadUpdate(
+        proxyGroup: ProxyGroup,
+        newProxies: List<AbstractBean>,
+        aggregateName: String,
+        existing: List<ProxyEntity>
+    ): Boolean {
+        if (!isSmartHeadCompareEnabled(proxyGroup)) return false
+        if (GroupUpdater.isForceUpdate(proxyGroup.id)) return false
+        val newFiltered = filterProxiesForCompare(newProxies, aggregateName)
+        if (newFiltered.isEmpty()) return false
+        val oldFiltered = filterExistingForCompare(existing, aggregateName)
+        if (oldFiltered.isEmpty()) return false
         val count = SMART_HEAD_COMPARE_COUNT.coerceAtMost(
-            minOf(newProxies.size, existing.size)
+            minOf(newFiltered.size, oldFiltered.size)
         )
         if (count <= 0) return false
-        val newHead = newProxies.take(count).map { it.toString() }
-        val oldHead = existing.take(count).map { it.toString() }
+        val newHead = newFiltered.take(count).map { it.toString() }
+        val oldHead = oldFiltered.take(count).map { it.toString() }
         return newHead == oldHead
+    }
+
+    private fun isSmartHeadCompareEnabled(group: ProxyGroup): Boolean {
+        return GroupManager.isDefaultSubscriptionGroup(group) ||
+            GroupManager.isDedicatedSubscriptionGroup(group)
+    }
+
+    private fun filterProxiesForCompare(
+        proxies: List<AbstractBean>,
+        aggregateName: String
+    ): List<AbstractBean> {
+        return proxies.filterNot { bean ->
+            if (bean !is ConfigBean || bean.type != 0) return@filterNot false
+            bean.name == aggregateName || bean.name == "sing-box config (all)"
+        }
+    }
+
+    private fun filterExistingForCompare(
+        proxies: List<ProxyEntity>,
+        aggregateName: String
+    ): List<AbstractBean> {
+        return proxies
+            .sortedWith(compareBy<ProxyEntity> { it.userOrder }.thenBy { it.id })
+            .mapNotNull { proxy ->
+                when {
+                    GroupManager.isYoutubeInstagramConfig(proxy) -> null
+                    GroupManager.isDedicatedConfig(proxy) -> null
+                    GroupManager.isDefaultAutoSelectConfig(proxy) -> null
+                    GroupManager.isAutoSelectAggregate(proxy) -> null
+                    else -> runCatching { proxy.requireBean() }.getOrNull()
+                }
+            }
+            .filterNot { bean ->
+                if (bean !is ConfigBean || bean.type != 0) return@filterNot false
+                bean.name == aggregateName || bean.name == "sing-box config (all)"
+            }
     }
 
     @Suppress("UNCHECKED_CAST")

@@ -140,6 +140,7 @@ abstract class GroupUpdater {
         val updating = Collections.synchronizedSet<Long>(mutableSetOf())
         val progress = Collections.synchronizedMap<Long, Progress>(mutableMapOf())
         val listeners = Collections.synchronizedSet<Listener>(mutableSetOf())
+        private val forceUpdateGroups = Collections.synchronizedSet<Long>(mutableSetOf())
         private val lastUpdateSuccessAt = Collections.synchronizedMap<Long, Long>(mutableMapOf())
         private val lastUpdateFailureAt = Collections.synchronizedMap<Long, Long>(mutableMapOf())
         private const val DEFAULT_DEDICATED_LINK_URL =
@@ -472,8 +473,17 @@ abstract class GroupUpdater {
         suspend fun finishUpdate(proxyGroup: ProxyGroup) {
             updating.remove(proxyGroup.id)
             progress.remove(proxyGroup.id)
+            forceUpdateGroups.remove(proxyGroup.id)
             GroupManager.postUpdate(proxyGroup)
             listeners.forEach { it.onProgressChanged() }
+        }
+
+        fun markForceUpdate(groupId: Long) {
+            forceUpdateGroups.add(groupId)
+        }
+
+        fun isForceUpdate(groupId: Long): Boolean {
+            return forceUpdateGroups.contains(groupId)
         }
 
         fun markUpdateSuccess(groupId: Long) {
