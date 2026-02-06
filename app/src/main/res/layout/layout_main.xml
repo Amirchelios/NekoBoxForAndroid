@@ -105,44 +105,115 @@
             app:layout_anchorGravity="center_horizontal|bottom">
 
             <com.google.android.material.card.MaterialCardView
-                android:layout_width="104dp"
-                android:layout_height="46dp"
-                android:layout_marginEnd="8dp"
+                android:layout_width="260dp"
+                android:layout_height="62dp"
                 app:cardBackgroundColor="@color/glass_surface"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="6dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="8dp"
                 app:strokeColor="@color/glass_stroke"
                 app:strokeWidth="1dp">
 
-                <TextView
-                    android:id="@+id/rx"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:gravity="center"
-                    android:singleLine="true"
-                    android:textColor="@color/glass_text"
-                    android:textSize="12sp"
-                    tools:text="↓  24 KB/s" />
-            </com.google.android.material.card.MaterialCardView>
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp">
 
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="104dp"
-                android:layout_height="46dp"
-                app:cardBackgroundColor="@color/glass_surface"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="6dp"
-                app:strokeColor="@color/glass_stroke"
-                app:strokeWidth="1dp">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/tx"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:singleLine="true"
-                    android:textColor="@color/glass_text"
-                    android:textSize="12sp"
-                    tools:text="↑  8 KB/s" />
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginEnd="6dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_baseline_download_24"
+                                android:tint="@color/brand_primary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/speed_download"
+                                android:textAllCaps="false"
+                                android:textColor="@color/glass_text"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/rx"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:singleLine="true"
+                            android:textColor="@color/glass_text"
+                            android:textLocale="en-US"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            tools:text="24 KB/s" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="34dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@color/glass_stroke" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginEnd="6dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_file_file_upload"
+                                android:tint="@color/connect_fab_background_connected" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/speed_upload"
+                                android:textAllCaps="false"
+                                android:textColor="@color/glass_text"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tx"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:singleLine="true"
+                            android:textColor="@color/glass_text"
+                            android:textLocale="en-US"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            tools:text="8 KB/s" />
+                    </LinearLayout>
+                </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
         </io.nekohasekai.sagernet.widget.StatsBar>

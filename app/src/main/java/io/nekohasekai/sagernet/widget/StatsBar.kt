@@ -33,7 +33,25 @@ class StatsBar @JvmOverloads constructor(
             txText = findViewById(R.id.tx)
             rxText = findViewById(R.id.rx)
         }
-        txText.text = "↑ ${Formatter.formatFileSize(context, txRate)}/s"
-        rxText.text = "↓ ${Formatter.formatFileSize(context, rxRate)}/s"
+        txText.text = formatSpeed(txRate)
+        rxText.text = formatSpeed(rxRate)
+    }
+
+    private fun formatSpeed(rate: Long): String {
+        return "${Formatter.formatFileSize(context, rate).toEnglishDigits()}/s"
+    }
+
+    private fun String.toEnglishDigits(): String {
+        val map = mapOf(
+            '۰' to '0', '۱' to '1', '۲' to '2', '۳' to '3', '۴' to '4',
+            '۵' to '5', '۶' to '6', '۷' to '7', '۸' to '8', '۹' to '9',
+            '٠' to '0', '١' to '1', '٢' to '2', '٣' to '3', '٤' to '4',
+            '٥' to '5', '٦' to '6', '٧' to '7', '٨' to '8', '٩' to '9'
+        )
+        val sb = StringBuilder(length)
+        for (ch in this) {
+            sb.append(map[ch] ?: ch)
+        }
+        return sb.toString()
     }
 }
