@@ -20,6 +20,16 @@
             android:layout_height="match_parent" />
 
         <View
+            android:id="@+id/connect_ambient"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            android:translationY="48dp"
+            android:background="@drawable/bg_connect_ambient"
+            app:layout_anchor="@id/fragment_holder"
+            app:layout_anchorGravity="center_horizontal|center_vertical" />
+
+        <View
             android:id="@+id/connect_glow"
             android:layout_width="220dp"
             android:layout_height="220dp"
@@ -31,13 +41,24 @@
 
         <View
             android:id="@+id/connect_ring"
-            android:layout_width="220dp"
-            android:layout_height="220dp"
+            android:layout_width="300dp"
+            android:layout_height="300dp"
             android:alpha="0"
             android:translationY="48dp"
             android:background="@drawable/bg_connect_ring"
             app:layout_anchor="@id/fragment_holder"
             app:layout_anchorGravity="center_horizontal|center_vertical" />
+
+        <View
+            android:id="@+id/connect_ring_soft"
+            android:layout_width="360dp"
+            android:layout_height="360dp"
+            android:alpha="0"
+            android:translationY="48dp"
+            android:background="@drawable/bg_connect_ring_soft"
+            app:layout_anchor="@id/fragment_holder"
+            app:layout_anchorGravity="center_horizontal|center_vertical" />
+
 
         <!-- We double trackThickness as half of it will be invisible -->
         <com.google.android.material.progressindicator.CircularProgressIndicator
