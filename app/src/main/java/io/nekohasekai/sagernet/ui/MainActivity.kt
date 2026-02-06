@@ -67,6 +67,8 @@ import org.json.JSONObject
 import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ThemedActivity(),
     SagerConnection.Callback,
@@ -84,6 +86,9 @@ class MainActivity : ThemedActivity(),
     private var ambientAnimator: ObjectAnimator? = null
     private var disconnectAnimating = false
     private var locationPollJob: Job? = null
+    private var locationFetchInFlight = false
+    private var lastLocationFlag: String? = null
+    private var lastLocationFetchAt: Long = 0L
     private val updateProgressListener = object : GroupUpdater.Listener {
         override fun onProgressChanged() {
             runOnUiThread { updateFabUpdateProgress() }
@@ -1219,9 +1224,19 @@ class MainActivity : ThemedActivity(),
         locationPollJob = lifecycleScope.launchWhenStarted {
             while (true) {
                 if (DataStore.serviceState == BaseService.State.Connected) {
-                    val flag = fetchIpLocationFlag() ?: "🌍"
+                    val now = System.currentTimeMillis()
+                    if (!locationFetchInFlight && now - lastLocationFetchAt >= 5000L) {
+                        locationFetchInFlight = true
+                        val flag = withContext(Dispatchers.IO) {
+                            fetchIpLocationFlag()
+                        } ?: "🌍"
+                        lastLocationFetchAt = now
+                        lastLocationFlag = flag
+                        locationFetchInFlight = false
+                    }
+                    val flagToShow = lastLocationFlag ?: "🌍"
                     onMainDispatcher {
-                        binding.locationFlag.text = flag
+                        binding.locationFlag.text = flagToShow
                         updateLocationCard()
                     }
                 } else {
@@ -1235,6 +1250,9 @@ class MainActivity : ThemedActivity(),
     private fun stopLocationPolling() {
         locationPollJob?.cancel()
         locationPollJob = null
+        locationFetchInFlight = false
+        lastLocationFlag = null
+        lastLocationFetchAt = 0L
         updateLocationCard(forceHide = true)
     }
 
