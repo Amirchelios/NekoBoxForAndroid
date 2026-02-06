@@ -11,10 +11,13 @@ import android.os.RemoteException
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
+import android.animation.AnimatorSet
+import android.animation.ArgbEvaluator
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MenuItem
 import android.view.View
+import android.view.animation.OvershootInterpolator
 import androidx.activity.addCallback
 import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
@@ -70,6 +73,9 @@ class MainActivity : ThemedActivity(),
     lateinit var navigation: NavigationView
     private var glowAnimator: ObjectAnimator? = null
     private var stateAnimator: ObjectAnimator? = null
+    private var connectAnimator: AnimatorSet? = null
+    private var ringAnimator: AnimatorSet? = null
+    private var fabColorAnimator: ValueAnimator? = null
     private val updateProgressListener = object : GroupUpdater.Listener {
         override fun onProgressChanged() {
             runOnUiThread { updateFabUpdateProgress() }
@@ -529,6 +535,7 @@ class MainActivity : ThemedActivity(),
         binding.fab.changeState(uiState, DataStore.serviceState, animate)
         binding.stats.changeState(uiState)
         updateGlow(uiState)
+        updateConnectAnimation(uiState)
         updateStateAnimation(uiState)
         updateStatsAnimation(uiState)
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
@@ -615,6 +622,127 @@ class MainActivity : ThemedActivity(),
         }
     }
 
+    private fun updateConnectAnimation(state: BaseService.State) {
+        connectAnimator?.cancel()
+        connectAnimator = null
+        ringAnimator?.cancel()
+        ringAnimator = null
+        fabColorAnimator?.cancel()
+        fabColorAnimator = null
+
+        if (state == BaseService.State.Connecting) {
+            val density = resources.displayMetrics.density
+            val fab = binding.fab
+            val glow = binding.connectGlow
+            val ring = binding.connectRing
+            val baseFabY = fab.translationY
+
+            glow.visibility = View.VISIBLE
+            glow.alpha = 0.2f
+            glow.scaleX = 1f
+            glow.scaleY = 1f
+
+            ring.visibility = View.VISIBLE
+            ring.alpha = 0f
+            ring.scaleX = 0.9f
+            ring.scaleY = 0.9f
+
+            val glowPulse = ObjectAnimator.ofPropertyValuesHolder(
+                glow,
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.25f, 0.12f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.12f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.12f)
+            ).apply {
+                duration = 900L
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+            }
+
+            val fabBreath = ObjectAnimator.ofPropertyValuesHolder(
+                fab,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.05f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.05f)
+            ).apply {
+                duration = 700L
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+            }
+
+            val fabFloat = ObjectAnimator.ofFloat(
+                fab,
+                View.TRANSLATION_Y,
+                baseFabY,
+                baseFabY - (6f * density),
+                baseFabY
+            ).apply {
+                duration = 1200L
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+            }
+
+            connectAnimator = AnimatorSet().apply {
+                playTogether(glowPulse, fabBreath, fabFloat)
+                start()
+            }
+
+            val ringExpand = ObjectAnimator.ofPropertyValuesHolder(
+                ring,
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.55f, 0.0f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.9f, 1.35f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.9f, 1.35f)
+            ).apply {
+                duration = 1400L
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.RESTART
+            }
+            ringAnimator = AnimatorSet().apply {
+                playTogether(ringExpand)
+                start()
+            }
+
+            animateFabColor(
+                ContextCompat.getColor(this, R.color.connect_fab_background),
+                ContextCompat.getColor(this, R.color.connect_fab_background_connecting)
+            )
+        } else {
+            val ring = binding.connectRing
+            ring.visibility = View.INVISIBLE
+            ring.alpha = 0f
+            ring.scaleX = 1f
+            ring.scaleY = 1f
+            binding.fab.scaleX = 1f
+            binding.fab.scaleY = 1f
+
+            when (state) {
+                BaseService.State.Connected -> animateFabColor(
+                    ContextCompat.getColor(this, R.color.connect_fab_background),
+                    ContextCompat.getColor(this, R.color.connect_fab_background_connected)
+                )
+                BaseService.State.Stopping -> animateFabColor(
+                    ContextCompat.getColor(this, R.color.connect_fab_background_connected),
+                    ContextCompat.getColor(this, R.color.connect_fab_background_stopping)
+                )
+                else -> animateFabColor(
+                    ContextCompat.getColor(this, R.color.connect_fab_background_connected),
+                    ContextCompat.getColor(this, R.color.connect_fab_background)
+                )
+            }
+        }
+    }
+
+    private fun animateFabColor(fromColor: Int, toColor: Int) {
+        fabColorAnimator?.cancel()
+        fabColorAnimator = ValueAnimator.ofObject(ArgbEvaluator(), fromColor, toColor).apply {
+            duration = 420L
+            addUpdateListener { animator ->
+                val color = animator.animatedValue as Int
+                binding.fab.backgroundTintList =
+                    android.content.res.ColorStateList.valueOf(color)
+            }
+            start()
+        }
+    }
+
     private fun updateStateAnimation(state: BaseService.State) {
         stateAnimator?.cancel()
         stateAnimator = null
@@ -632,6 +760,8 @@ class MainActivity : ThemedActivity(),
                 }
             }
             BaseService.State.Stopping -> {
+                val fab = binding.fab
+                fab.animate().cancel()
                 stateAnimator = ObjectAnimator.ofPropertyValuesHolder(
                     binding.fragmentHolder,
                     PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.9f, 1f)
@@ -640,6 +770,14 @@ class MainActivity : ThemedActivity(),
                     repeatCount = 0
                     start()
                 }
+                fab.animate()
+                    .scaleX(0.96f)
+                    .scaleY(0.96f)
+                    .setDuration(180L)
+                    .withEndAction {
+                        fab.animate().scaleX(1f).scaleY(1f).setDuration(220L).start()
+                    }
+                    .start()
             }
             else -> {
                 binding.fragmentHolder.scaleX = 1f
@@ -653,18 +791,20 @@ class MainActivity : ThemedActivity(),
         val stats = binding.stats
         stats.animate().cancel()
         if (state == BaseService.State.Connected) {
+            val density = resources.displayMetrics.density
             stats.visibility = View.VISIBLE
             stats.alpha = 0f
-            stats.scaleX = 0.9f
-            stats.scaleY = 0.9f
-            stats.translationY = 196f
+            stats.scaleX = 0.92f
+            stats.scaleY = 0.92f
+            stats.translationY = 220f * density
             stats.animate()
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .translationY(156f)
-                .setDuration(420L)
-                .setStartDelay(80L)
+                .translationY(156f * density)
+                .setDuration(520L)
+                .setInterpolator(OvershootInterpolator(0.9f))
+                .setStartDelay(60L)
                 .start()
         } else {
             stats.animate()

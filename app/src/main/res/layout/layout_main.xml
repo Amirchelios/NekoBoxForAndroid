@@ -29,6 +29,16 @@
             app:layout_anchor="@id/fragment_holder"
             app:layout_anchorGravity="center_horizontal|center_vertical" />
 
+        <View
+            android:id="@+id/connect_ring"
+            android:layout_width="220dp"
+            android:layout_height="220dp"
+            android:alpha="0"
+            android:translationY="48dp"
+            android:background="@drawable/bg_connect_ring"
+            app:layout_anchor="@id/fragment_holder"
+            app:layout_anchorGravity="center_horizontal|center_vertical" />
+
         <!-- We double trackThickness as half of it will be invisible -->
         <com.google.android.material.progressindicator.CircularProgressIndicator
             android:id="@+id/fabProgress"
