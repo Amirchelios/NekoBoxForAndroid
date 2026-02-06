@@ -62,6 +62,9 @@ import io.nekohasekai.sagernet.ktx.parseProxies
 import io.nekohasekai.sagernet.ktx.readableMessage
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import moe.matsuri.nb4a.utils.Util
+import libcore.Libcore
+import org.json.JSONObject
+import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 
@@ -80,6 +83,7 @@ class MainActivity : ThemedActivity(),
     private var ringSoftAnimator: AnimatorSet? = null
     private var ambientAnimator: ObjectAnimator? = null
     private var disconnectAnimating = false
+    private var locationPollJob: Job? = null
     private val updateProgressListener = object : GroupUpdater.Listener {
         override fun onProgressChanged() {
             runOnUiThread { updateFabUpdateProgress() }
@@ -421,6 +425,7 @@ class MainActivity : ThemedActivity(),
                 binding.fab.hide()
             }
         }
+        updateLocationCard()
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_holder, fragment)
             .commitAllowingStateLoss()
@@ -542,6 +547,11 @@ class MainActivity : ThemedActivity(),
         updateConnectAnimation(uiState)
         updateStateAnimation(uiState)
         updateStatsAnimation(uiState)
+        if (uiState == BaseService.State.Connected) {
+            startLocationPolling()
+        } else {
+            stopLocationPolling()
+        }
         if (msg != null) snackbar(getString(R.string.vpn_error, msg)).show()
         if (state == BaseService.State.Stopped && !DataStore.clientMode) {
             scheduleInternalProxyRestart()
@@ -1180,6 +1190,88 @@ class MainActivity : ThemedActivity(),
             ProfileManager.postUpdate(old, true)
             ProfileManager.postUpdate(id, true)
         }
+    }
+
+    private fun updateLocationCard(forceHide: Boolean = false) {
+        val card = binding.locationCard
+        if (forceHide) {
+            card.animate().cancel()
+            card.alpha = 0f
+            card.visibility = View.GONE
+            return
+        }
+        if (card.visibility != View.VISIBLE) {
+            card.visibility = View.VISIBLE
+            card.alpha = 0f
+            card.scaleX = 0.96f
+            card.scaleY = 0.96f
+            card.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(360L)
+                .start()
+        }
+    }
+
+    private fun startLocationPolling() {
+        locationPollJob?.cancel()
+        locationPollJob = lifecycleScope.launchWhenStarted {
+            while (true) {
+                if (DataStore.serviceState == BaseService.State.Connected) {
+                    val flag = fetchIpLocationFlag() ?: "🌍"
+                    onMainDispatcher {
+                        binding.locationFlag.text = flag
+                        updateLocationCard()
+                    }
+                } else {
+                    updateLocationCard(forceHide = true)
+                }
+                delay(5000L)
+            }
+        }
+    }
+
+    private fun stopLocationPolling() {
+        locationPollJob?.cancel()
+        locationPollJob = null
+        updateLocationCard(forceHide = true)
+    }
+
+    private fun fetchIpLocationFlag(): String? {
+        val urls = listOf(
+            "http://ip-api.com/json/?fields=status,countryCode",
+            "https://ipapi.co/json/",
+            "https://ipinfo.io/json"
+        )
+        for (url in urls) {
+            val json = httpGetJson(url) ?: continue
+            val code = when {
+                json.has("countryCode") -> json.optString("countryCode")
+                json.has("country_code") -> json.optString("country_code")
+                json.has("country") -> json.optString("country")
+                else -> ""
+            }.uppercase(Locale.US)
+            if (code.length == 2) {
+                return countryCodeToFlag(code)
+            }
+        }
+        return null
+    }
+
+    private fun httpGetJson(url: String): JSONObject? {
+        return runCatching {
+            val response = Libcore.newHttpClient().newRequest().apply { setURL(url) }.execute()
+            val body = Util.getStringBox(response.contentString)
+            JSONObject(body)
+        }.getOrNull()
+    }
+
+    private fun countryCodeToFlag(code: String): String {
+        val upper = code.uppercase(Locale.US)
+        val first = 0x1F1E6 + (upper[0] - 'A')
+        val second = 0x1F1E6 + (upper[1] - 'A')
+        return String(Character.toChars(first)) + String(Character.toChars(second))
     }
 
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {
