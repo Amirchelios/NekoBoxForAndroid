@@ -79,6 +79,7 @@ class MainActivity : ThemedActivity(),
     private var fabColorAnimator: ValueAnimator? = null
     private var ringSoftAnimator: AnimatorSet? = null
     private var ambientAnimator: ObjectAnimator? = null
+    private var disconnectAnimating = false
     private val updateProgressListener = object : GroupUpdater.Listener {
         override fun onProgressChanged() {
             runOnUiThread { updateFabUpdateProgress() }
@@ -829,21 +830,24 @@ class MainActivity : ThemedActivity(),
             val ring = binding.connectRing
             val ringSoft = binding.connectRingSoft
             val ambient = binding.connectAmbient
-            ring.visibility = View.INVISIBLE
-            ring.alpha = 0f
-            ring.scaleX = 1f
-            ring.scaleY = 1f
-            ringSoft.visibility = View.INVISIBLE
-            ringSoft.alpha = 0f
-            ringSoft.scaleX = 1f
-            ringSoft.scaleY = 1f
+            if (!disconnectAnimating) {
+                ring.visibility = View.INVISIBLE
+                ring.alpha = 0f
+                ring.scaleX = 1f
+                ring.scaleY = 1f
+                ringSoft.visibility = View.INVISIBLE
+                ringSoft.alpha = 0f
+                ringSoft.scaleX = 1f
+                ringSoft.scaleY = 1f
+            }
             binding.fab.scaleX = 1f
             binding.fab.scaleY = 1f
 
             when (state) {
                 BaseService.State.Stopping -> animateFabColor(
                     ContextCompat.getColor(this, R.color.connect_fab_background_connected),
-                    ContextCompat.getColor(this, R.color.connect_fab_background_stopping)
+                    ContextCompat.getColor(this, R.color.connect_fab_background_stopping),
+                    800L
                 )
                 else -> animateFabColor(
                     ContextCompat.getColor(this, R.color.connect_fab_background_connected),
@@ -856,17 +860,19 @@ class MainActivity : ThemedActivity(),
                     playDisconnectCollapse()
                 }
                 else -> {
-                    ambient.visibility = View.INVISIBLE
-                    ambient.alpha = 0f
+                    if (!disconnectAnimating) {
+                        ambient.visibility = View.INVISIBLE
+                        ambient.alpha = 0f
+                    }
                 }
             }
         }
     }
 
-    private fun animateFabColor(fromColor: Int, toColor: Int) {
+    private fun animateFabColor(fromColor: Int, toColor: Int, durationMs: Long = 420L) {
         fabColorAnimator?.cancel()
         fabColorAnimator = ValueAnimator.ofObject(ArgbEvaluator(), fromColor, toColor).apply {
-            duration = 420L
+            duration = durationMs
             addUpdateListener { animator ->
                 val color = animator.animatedValue as Int
                 binding.fab.backgroundTintList =
@@ -877,6 +883,8 @@ class MainActivity : ThemedActivity(),
     }
 
     private fun playDisconnectCollapse() {
+        if (disconnectAnimating) return
+        disconnectAnimating = true
         val ring = binding.connectRing
         val ringSoft = binding.connectRingSoft
         val ambient = binding.connectAmbient
@@ -891,26 +899,39 @@ class MainActivity : ThemedActivity(),
         ringSoft.scaleX = 1.12f
         ringSoft.scaleY = 1.12f
 
+        setRingStrokeColor(
+            ContextCompat.getColor(this, R.color.connect_ring_disconnect),
+            ContextCompat.getColor(this, R.color.connect_ring_disconnect)
+        )
+
         val ringOut = ObjectAnimator.ofPropertyValuesHolder(
             ring,
             PropertyValuesHolder.ofFloat(View.ALPHA, 0.26f, 0f),
             PropertyValuesHolder.ofFloat(View.SCALE_X, 1.08f, 0.88f),
             PropertyValuesHolder.ofFloat(View.SCALE_Y, 1.08f, 0.88f)
-        ).apply { duration = 680L }
+        ).apply { duration = 3000L }
 
         val ringSoftOut = ObjectAnimator.ofPropertyValuesHolder(
             ringSoft,
             PropertyValuesHolder.ofFloat(View.ALPHA, 0.16f, 0f),
             PropertyValuesHolder.ofFloat(View.SCALE_X, 1.12f, 0.9f),
             PropertyValuesHolder.ofFloat(View.SCALE_Y, 1.12f, 0.9f)
-        ).apply { duration = 760L }
+        ).apply { duration = 3000L }
 
         val ambientFade = ObjectAnimator.ofFloat(ambient, View.ALPHA, ambient.alpha, 0f).apply {
-            duration = 680L
+            duration = 3000L
         }
 
         AnimatorSet().apply {
             playTogether(ringOut, ringSoftOut, ambientFade)
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    ring.visibility = View.INVISIBLE
+                    ringSoft.visibility = View.INVISIBLE
+                    ambient.visibility = View.INVISIBLE
+                    disconnectAnimating = false
+                }
+            })
             start()
         }
     }
@@ -998,6 +1019,7 @@ class MainActivity : ThemedActivity(),
                 .start()
         }
     }
+
 
     private fun runStartupDedicatedGate() {
         // Disabled: do not auto-enable internal proxy on startup.
