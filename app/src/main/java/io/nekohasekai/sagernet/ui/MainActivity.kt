@@ -20,6 +20,7 @@ import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceDataStore
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -397,7 +398,7 @@ class MainActivity : ThemedActivity(),
 
 
     @SuppressLint("CommitTransaction")
-    fun displayFragment(fragment: ToolbarFragment) {
+    fun displayFragment(fragment: Fragment) {
         if (DataStore.clientMode) {
             binding.stats.visibility = View.GONE
             binding.fab.show()
