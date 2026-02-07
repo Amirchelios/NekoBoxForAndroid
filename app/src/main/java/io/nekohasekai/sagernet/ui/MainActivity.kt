@@ -166,6 +166,9 @@ class MainActivity : ThemedActivity(),
             }
         }
         binding.stats.setOnClickListener(null)
+        binding.locationCard.setOnClickListener {
+            displayFragmentWithId(R.id.nav_singbox_dashboard)
+        }
 
         setContentView(binding.root)
         if (!BuildConfig.DEBUG && DataStore.clientMode) {

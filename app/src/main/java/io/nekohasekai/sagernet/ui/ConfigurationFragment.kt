@@ -122,6 +122,7 @@ class ConfigurationFragment @JvmOverloads constructor(
     private lateinit var quickAuto: MaterialButton
     private lateinit var quickDedicated: MaterialButton
     private lateinit var quickMethod: TextView
+    private lateinit var quickUpdateButton: View
 
     val alwaysShowAddress by lazy { DataStore.alwaysShowAddress }
 
@@ -182,6 +183,7 @@ class ConfigurationFragment @JvmOverloads constructor(
         quickAuto = view.findViewById(R.id.quick_auto)
         quickDedicated = view.findViewById(R.id.quick_dedicated)
         quickMethod = view.findViewById(R.id.quick_method)
+        quickUpdateButton = view.findViewById(R.id.quick_update_button)
         adapter = GroupPagerAdapter()
         ProfileManager.addListener(adapter)
         GroupManager.addListener(adapter)
@@ -196,6 +198,25 @@ class ConfigurationFragment @JvmOverloads constructor(
         }
         if (DataStore.clientMode) {
             quickBarCard.isGone = true
+        }
+
+        quickUpdateButton.setOnClickListener {
+            if (showAllProfiles) {
+                runOnLifecycleDispatcher {
+                    val subscriptions = SagerDatabase.groupDao.subscriptions()
+                    subscriptions.forEach { GroupUpdater.startUpdate(it, true) }
+                }
+            } else {
+                val group = DataStore.currentGroup()
+                if (group.type != GroupType.SUBSCRIPTION) {
+                    snackbar(R.string.group_not_subscription).show()
+                    Logs.e("quick update: Group(${group.displayName()}) is not subscription")
+                } else {
+                    runOnLifecycleDispatcher {
+                        GroupUpdater.startUpdate(group, true)
+                    }
+                }
+            }
         }
 
         TabLayoutMediator(tabLayout, groupPager) { tab, position ->
