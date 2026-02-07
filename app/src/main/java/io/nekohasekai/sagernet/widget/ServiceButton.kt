@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import android.content.res.ColorStateList
 import androidx.vectordrawable.graphics.drawable.Animatable2Compat
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
+import androidx.appcompat.content.res.AppCompatResources
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.progressindicator.BaseProgressIndicator
 import io.nekohasekai.sagernet.R
@@ -46,25 +47,44 @@ class ServiceButton @JvmOverloads constructor(
         }
     }
 
+    private interface StateIcon {
+        val isAnimated: Boolean
+        fun start()
+        fun stop()
+    }
+
     private inner class AnimatedState(
         @DrawableRes resId: Int,
         private val onStart: BaseProgressIndicator<*>.() -> Unit = { hideProgress() }
-    ) {
+    ) : StateIcon {
         val icon: AnimatedVectorDrawableCompat =
             AnimatedVectorDrawableCompat.create(context, resId)!!.apply {
                 registerAnimationCallback(this@ServiceButton.callback)
             }
 
-        fun start() {
+        override val isAnimated: Boolean = true
+
+        override fun start() {
             setImageDrawable(icon)
             icon.start()
             progress.onStart()
         }
 
-        fun stop() = icon.stop()
+        override fun stop() = icon.stop()
     }
 
-    private val iconStopped by lazy { AnimatedState(R.drawable.ic_service_stopped) }
+    private inner class StaticState(@DrawableRes resId: Int) : StateIcon {
+        private val icon = AppCompatResources.getDrawable(context, resId)!!
+        override val isAnimated: Boolean = false
+
+        override fun start() {
+            setImageDrawable(icon)
+        }
+
+        override fun stop() = Unit
+    }
+
+    private val iconStopped by lazy { StaticState(R.drawable.ic_blubox_closed) }
     private val iconConnecting by lazy {
         AnimatedState(R.drawable.ic_service_connecting) {
             hideProgress()
@@ -75,12 +95,7 @@ class ServiceButton @JvmOverloads constructor(
             }
         }
     }
-    private val iconConnected by lazy {
-        AnimatedState(R.drawable.ic_service_connected) {
-            delayedAnimation?.cancel()
-            setProgressCompat(1, true)
-        }
-    }
+    private val iconConnected by lazy { StaticState(R.drawable.ic_blubox_open) }
     private val iconStopping by lazy { AnimatedState(R.drawable.ic_service_stopping) }
     private val animationQueue = ArrayDeque<AnimatedState>()
 
@@ -205,22 +220,31 @@ class ServiceButton @JvmOverloads constructor(
         rotation = 0f
     }
 
-    private fun changeState(icon: AnimatedState, animate: Boolean) {
-        fun counters(a: AnimatedState, b: AnimatedState): Boolean =
-            a == iconStopped && b == iconConnecting ||
-                    a == iconConnecting && b == iconStopped ||
-                    a == iconConnected && b == iconStopping ||
-                    a == iconStopping && b == iconConnected
-        if (animate) {
+    private fun changeState(icon: StateIcon, animate: Boolean) {
+        if (icon is AnimatedState && animate) {
+            fun counters(a: AnimatedState, b: AnimatedState): Boolean =
+                a == iconConnecting && b == iconStopping ||
+                    a == iconStopping && b == iconConnecting
             if (animationQueue.size < 2 || !counters(animationQueue.last, icon)) {
                 animationQueue.add(icon)
                 if (animationQueue.size == 1) icon.start()
             } else animationQueue.removeLast()
-        } else {
-            animationQueue.peekFirst()?.stop()
-            animationQueue.clear()
-            icon.start()    // force ensureAnimatorSet to be called so that stop() will work
+            return
+        }
+
+        animationQueue.peekFirst()?.stop()
+        animationQueue.clear()
+        icon.start()
+        if (icon is AnimatedState) {
             icon.stop()
+        }
+        if (icon === iconConnected) {
+            delayedAnimation?.cancel()
+            progress.setProgressCompat(1, true)
+        } else if (icon === iconConnecting) {
+            hideProgress()
+        } else {
+            hideProgress()
         }
     }
 }
