@@ -430,7 +430,12 @@ class MainActivity : ThemedActivity(),
                 binding.fab.hide()
             }
         }
-        updateLocationCard()
+        if (fragment is ConfigurationFragment && DataStore.serviceState == BaseService.State.Connected) {
+            binding.locationFlag.text = lastLocationFlag ?: "🌍"
+            updateLocationCard()
+        } else {
+            updateLocationCard(forceHide = true)
+        }
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_holder, fragment)
             .commitAllowingStateLoss()
@@ -1199,7 +1204,7 @@ class MainActivity : ThemedActivity(),
 
     private fun updateLocationCard(forceHide: Boolean = false) {
         val card = binding.locationCard
-        if (forceHide) {
+        if (forceHide || !isOnMainScreen()) {
             card.animate().cancel()
             card.alpha = 0f
             card.visibility = View.GONE
@@ -1224,6 +1229,11 @@ class MainActivity : ThemedActivity(),
         locationPollJob = lifecycleScope.launchWhenStarted {
             while (true) {
                 if (DataStore.serviceState == BaseService.State.Connected) {
+                    if (!isOnMainScreen()) {
+                        onMainDispatcher { updateLocationCard(forceHide = true) }
+                        delay(1000L)
+                        continue
+                    }
                     val now = System.currentTimeMillis()
                     if (!locationFetchInFlight && now - lastLocationFetchAt >= 5000L) {
                         locationFetchInFlight = true
@@ -1254,6 +1264,10 @@ class MainActivity : ThemedActivity(),
         lastLocationFlag = null
         lastLocationFetchAt = 0L
         updateLocationCard(forceHide = true)
+    }
+
+    private fun isOnMainScreen(): Boolean {
+        return supportFragmentManager.findFragmentById(R.id.fragment_holder) is ConfigurationFragment
     }
 
     private fun fetchIpLocationFlag(): String? {
