@@ -31,8 +31,8 @@
 
         <View
             android:id="@+id/connect_glow"
-            android:layout_width="260dp"
-            android:layout_height="260dp"
+            android:layout_width="390dp"
+            android:layout_height="390dp"
             android:alpha="0"
             android:translationY="48dp"
             android:background="@drawable/bg_connect_glow"
@@ -41,8 +41,8 @@
 
         <View
             android:id="@+id/connect_ring"
-            android:layout_width="360dp"
-            android:layout_height="360dp"
+            android:layout_width="540dp"
+            android:layout_height="540dp"
             android:alpha="0"
             android:translationY="48dp"
             android:background="@drawable/bg_connect_ring"
@@ -51,8 +51,8 @@
 
         <View
             android:id="@+id/connect_ring_soft"
-            android:layout_width="440dp"
-            android:layout_height="440dp"
+            android:layout_width="660dp"
+            android:layout_height="660dp"
             android:alpha="0"
             android:translationY="48dp"
             android:background="@drawable/bg_connect_ring_soft"
@@ -68,7 +68,7 @@
             android:max="1"
             android:visibility="invisible"
             app:indicatorColor="@color/connect_progress"
-            app:indicatorSize="180dp"
+            app:indicatorSize="270dp"
             app:layout_anchor="@+id/fab"
             app:layout_anchorGravity="center"
             app:layout_behavior="io.nekohasekai.sagernet.widget.FabProgressBehavior"
@@ -83,10 +83,10 @@
             android:translationY="48dp"
             android:nextFocusDown="@+id/stats"
             app:backgroundTint="@color/connect_fab_background"
-            app:fabCustomSize="140dp"
+            app:fabCustomSize="210dp"
             app:layout_anchor="@id/fragment_holder"
             app:layout_anchorGravity="center_horizontal|center_vertical"
-            app:maxImageSize="74dp"
+            app:maxImageSize="111dp"
             app:pressedTranslationZ="8dp"
             app:rippleColor="@color/connect_fab_ripple"
             app:srcCompat="@drawable/ic_service_idle" />

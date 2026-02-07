@@ -495,11 +495,11 @@ class MainActivity : ThemedActivity(),
             params.marginEnd = 0
             params.bottomMargin = 0
             binding.fab.translationY = 48 * density
-            binding.fab.customSize = (136 * density).toInt()
+            binding.fab.customSize = (204 * density).toInt()
             progressParams.anchorGravity = Gravity.CENTER
             progressParams.marginEnd = 0
             progressParams.bottomMargin = 0
-            binding.fabProgress.indicatorSize = (180 * density).toInt()
+            binding.fabProgress.indicatorSize = (270 * density).toInt()
             binding.connectGlow.visibility = View.VISIBLE
         }
         binding.fab.layoutParams = params
