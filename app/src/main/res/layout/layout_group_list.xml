@@ -108,7 +108,7 @@
                 android:background="@drawable/bg_quick_update_button"
                 android:insetLeft="0dp"
                 android:insetRight="0dp"
-                android:text="@string/subscription_update"
+                android:text="بروزرسانی"
                 android:textAllCaps="false"
                 android:textColor="@color/quick_update_text"
                 android:textSize="12sp"
