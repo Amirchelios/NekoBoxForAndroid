@@ -213,15 +213,15 @@
     <color name="app_on_surface_muted">#5A6B8C</color>
     <color name="app_on_background">#1A2238</color>
 
-    <color name="connect_fab_background">@color/brand_primary</color>
-    <color name="connect_fab_ripple">#5F8CFF</color>
+    <color name="connect_fab_background">#FFFFFF</color>
+    <color name="connect_fab_ripple">#BFD3FF</color>
     <color name="connect_progress">@color/brand_material_300</color>
-    <color name="connect_fab_connected">#2ECC71</color>
-    <color name="connect_fab_background_connecting">#3558C9</color>
-    <color name="connect_fab_background_connected">#2ECC71</color>
+    <color name="connect_fab_connected">#3D7BFF</color>
+    <color name="connect_fab_background_connecting">#6B8CFF</color>
+    <color name="connect_fab_background_connected">#3D7BFF</color>
     <color name="connect_fab_background_stopping">#C94B4B</color>
-    <color name="connect_ring">#7AC4FF</color>
-    <color name="connect_ring_connected">#69E29B</color>
+    <color name="connect_ring">#A8C7FF</color>
+    <color name="connect_ring_connected">#6BA6FF</color>
     <color name="connect_ring_disconnect">#FF6B6B</color>
 
     <color name="card_surface">@color/app_surface_alt</color>

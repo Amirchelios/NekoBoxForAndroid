@@ -744,11 +744,11 @@ class MainActivity : ThemedActivity(),
 
             val ringExpand = ObjectAnimator.ofPropertyValuesHolder(
                 ring,
-                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.26f, 0.0f),
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.9f, 1.12f),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.9f, 1.12f)
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.22f, 0.0f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.86f, 1.18f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.86f, 1.18f)
             ).apply {
-                duration = 2200L
+                duration = 2000L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.RESTART
             }
@@ -759,12 +759,12 @@ class MainActivity : ThemedActivity(),
 
             val ringSoftExpand = ObjectAnimator.ofPropertyValuesHolder(
                 ringSoft,
-                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.16f, 0.0f),
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.92f, 1.2f),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.92f, 1.2f)
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.14f, 0.0f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.9f, 1.26f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.9f, 1.26f)
             ).apply {
                 duration = 2600L
-                startDelay = 260L
+                startDelay = 320L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.RESTART
             }
@@ -816,11 +816,11 @@ class MainActivity : ThemedActivity(),
 
             val ringExpand = ObjectAnimator.ofPropertyValuesHolder(
                 ring,
-                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.22f, 0.0f),
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.95f, 1.12f),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.95f, 1.12f)
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.18f, 0.0f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.9f, 1.2f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.9f, 1.2f)
             ).apply {
-                duration = 2600L
+                duration = 2400L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.RESTART
             }
@@ -831,12 +831,12 @@ class MainActivity : ThemedActivity(),
 
             val ringSoftExpand = ObjectAnimator.ofPropertyValuesHolder(
                 ringSoft,
-                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.14f, 0.0f),
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.96f, 1.18f),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.96f, 1.18f)
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.0f, 0.12f, 0.0f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.92f, 1.26f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.92f, 1.26f)
             ).apply {
                 duration = 3200L
-                startDelay = 300L
+                startDelay = 360L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.RESTART
             }
