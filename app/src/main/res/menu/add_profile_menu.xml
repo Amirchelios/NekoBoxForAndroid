@@ -2,12 +2,6 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/action_singbox_gui"
-        android:icon="@drawable/baseline_public_24"
-        android:title="@string/menu_dashboard"
-        app:showAsAction="always" />
-
-    <item
         android:id="@+id/action_auto_dns"
         android:icon="@drawable/ic_baseline_domain_24"
         android:title="@string/menu_auto_dns"
@@ -85,11 +79,5 @@
             </item>
         </menu>
     </item>
-
-    <item
-        android:id="@+id/action_update_subscription"
-        android:icon="@drawable/ic_baseline_refresh_24"
-        android:title="@string/update_current_subscription"
-        app:showAsAction="always" />
 
 </menu>

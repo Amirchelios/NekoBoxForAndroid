@@ -231,11 +231,12 @@
     <color name="glass_stroke">#80A9C7FF</color>
     <color name="glass_text">#1E2A44</color>
 
-    <color name="quick_bar_stroke">#88A3FF</color>
+    <color name="quick_bar_stroke">#B8C9FF</color>
     <color name="quick_bar_active">@color/brand_primary</color>
-    <color name="quick_bar_inactive">#E3EBFF</color>
+    <color name="quick_bar_inactive">#E6EEFF</color>
     <color name="quick_bar_text_active">#FFFFFF</color>
     <color name="quick_bar_text_inactive">#2A3551</color>
+    <color name="quick_update_text">#FFFFFF</color>
     <color name="material_orange_500">#FF9800</color>
     <color name="material_orange_600">#FB8C00</color>
     <color name="material_orange_700">#F57C00</color>

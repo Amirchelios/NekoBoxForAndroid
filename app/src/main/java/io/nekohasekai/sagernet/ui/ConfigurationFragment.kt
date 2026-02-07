@@ -480,10 +480,6 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.action_singbox_gui -> {
-                (requireActivity() as MainActivity).displayFragmentWithId(R.id.nav_singbox_dashboard)
-                return true
-            }
 
             R.id.action_auto_dns -> {
                 runOnLifecycleDispatcher {
@@ -621,24 +617,6 @@ class ConfigurationFragment @JvmOverloads constructor(
                 startActivity(Intent(requireActivity(), ChainSettingsActivity::class.java))
             }
 
-            R.id.action_update_subscription -> {
-                if (showAllProfiles) {
-                    runOnLifecycleDispatcher {
-                        val subscriptions = SagerDatabase.groupDao.subscriptions()
-                        subscriptions.forEach { GroupUpdater.startUpdate(it, true) }
-                    }
-                } else {
-                    val group = DataStore.currentGroup()
-                    if (group.type != GroupType.SUBSCRIPTION) {
-                        snackbar(R.string.group_not_subscription).show()
-                        Logs.e("onMenuItemClick: Group(${group.displayName()}) is not subscription")
-                    } else {
-                        runOnLifecycleDispatcher {
-                            GroupUpdater.startUpdate(group, true)
-                        }
-                    }
-                }
-            }
 
             R.id.action_clear_traffic_statistics -> {
                 runOnDefaultDispatcher {

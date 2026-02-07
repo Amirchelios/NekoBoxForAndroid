@@ -17,14 +17,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:layout_marginEnd="12dp"
         android:layout_marginBottom="8dp"
         android:animateLayoutChanges="true"
         android:background="@drawable/bg_quick_bar"
         app:cardBackgroundColor="@android:color/transparent"
-        app:cardCornerRadius="20dp"
-        app:cardElevation="10dp"
+        app:cardCornerRadius="22dp"
+        app:cardElevation="12dp"
         app:strokeColor="@color/quick_bar_stroke"
         app:strokeWidth="1dp">
 
@@ -32,14 +32,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="6dp">
+            android:padding="10dp">
 
             <TextView
                 android:id="@+id/quick_method"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:paddingBottom="6dp"
+                android:paddingBottom="8dp"
                 android:text="@string/quick_connection_method"
                 android:textColor="@color/quick_bar_text_inactive"
                 android:textSize="12sp" />
@@ -49,7 +49,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layoutDirection="ltr"
-                android:padding="4dp"
+                android:padding="6dp"
                 app:checkedButton="@id/quick_auto"
                 app:selectionRequired="true"
                 app:singleSelection="true">
@@ -100,41 +100,23 @@
                 android:textColor="@color/quick_bar_button_text" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:layout_marginTop="6dp"
-                android:gravity="center"
-                android:orientation="horizontal">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/quick_update_button"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
-                    android:padding="0dp"
-                    app:backgroundTint="@android:color/transparent"
-                    app:cornerRadius="18dp"
-                    app:icon="@drawable/ic_baseline_refresh_24"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp"
-                    app:iconTint="@color/quick_bar_text_inactive"
-                    app:strokeColor="@color/quick_bar_stroke"
-                    app:strokeWidth="1dp"
-                    tools:ignore="TextContrastCheck" />
-
-                <TextView
-                    android:id="@+id/quick_update_label"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/subscription_update"
-                    android:textColor="@color/quick_bar_text_inactive"
-                    android:textSize="12sp" />
-            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/quick_update_button"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_quick_update_button"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:text="@string/subscription_update"
+                android:textAllCaps="false"
+                android:textColor="@color/quick_update_text"
+                android:textSize="12sp"
+                app:cornerRadius="18dp"
+                app:icon="@drawable/ic_baseline_update_24"
+                app:iconGravity="textStart"
+                app:iconPadding="6dp"
+                app:iconTint="@color/quick_update_text" />
         </LinearLayout>
 
     </com.google.android.material.card.MaterialCardView>

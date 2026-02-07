@@ -167,7 +167,8 @@ class MainActivity : ThemedActivity(),
         }
         binding.stats.setOnClickListener(null)
         binding.locationCard.setOnClickListener {
-            displayFragmentWithId(R.id.nav_singbox_dashboard)
+            displayFragment(WebviewFragment(), true)
+            navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isChecked = true
         }
 
         setContentView(binding.root)
@@ -421,6 +422,11 @@ class MainActivity : ThemedActivity(),
 
     @SuppressLint("CommitTransaction")
     fun displayFragment(fragment: Fragment) {
+        displayFragment(fragment, false)
+    }
+
+    @SuppressLint("CommitTransaction")
+    fun displayFragment(fragment: Fragment, animate: Boolean) {
         if (DataStore.clientMode) {
             binding.stats.visibility = View.GONE
             binding.fab.show()
@@ -439,8 +445,16 @@ class MainActivity : ThemedActivity(),
         } else {
             updateLocationCard(forceHide = true)
         }
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fragment_holder, fragment)
+        val tx = supportFragmentManager.beginTransaction()
+        if (animate) {
+            tx.setCustomAnimations(
+                android.R.anim.fade_in,
+                android.R.anim.fade_out,
+                android.R.anim.fade_in,
+                android.R.anim.fade_out
+            )
+        }
+        tx.replace(R.id.fragment_holder, fragment)
             .commitAllowingStateLoss()
         binding.drawerLayout.closeDrawers()
     }
