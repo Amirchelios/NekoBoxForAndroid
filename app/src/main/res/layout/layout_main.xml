@@ -24,40 +24,40 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:alpha="0"
-            android:translationY="48dp"
+            android:translationY="0dp"
             android:background="@drawable/bg_connect_ambient"
-            app:layout_anchor="@id/fragment_holder"
-            app:layout_anchorGravity="center_horizontal|center_vertical" />
+            app:layout_anchor="@id/fab"
+            app:layout_anchorGravity="center" />
 
         <View
             android:id="@+id/connect_glow"
             android:layout_width="390dp"
             android:layout_height="390dp"
             android:alpha="0"
-            android:translationY="48dp"
+            android:translationY="0dp"
             android:background="@drawable/bg_connect_glow"
-            app:layout_anchor="@id/fragment_holder"
-            app:layout_anchorGravity="center_horizontal|center_vertical" />
+            app:layout_anchor="@id/fab"
+            app:layout_anchorGravity="center" />
 
         <View
             android:id="@+id/connect_ring"
             android:layout_width="540dp"
             android:layout_height="540dp"
             android:alpha="0"
-            android:translationY="48dp"
+            android:translationY="0dp"
             android:background="@drawable/bg_connect_ring"
-            app:layout_anchor="@id/fragment_holder"
-            app:layout_anchorGravity="center_horizontal|center_vertical" />
+            app:layout_anchor="@id/fab"
+            app:layout_anchorGravity="center" />
 
         <View
             android:id="@+id/connect_ring_soft"
             android:layout_width="660dp"
             android:layout_height="660dp"
             android:alpha="0"
-            android:translationY="48dp"
+            android:translationY="0dp"
             android:background="@drawable/bg_connect_ring_soft"
-            app:layout_anchor="@id/fragment_holder"
-            app:layout_anchorGravity="center_horizontal|center_vertical" />
+            app:layout_anchor="@id/fab"
+            app:layout_anchorGravity="center" />
 
 
         <!-- We double trackThickness as half of it will be invisible -->
@@ -80,7 +80,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:elevation="10dp"
-            android:translationY="48dp"
+            android:translationY="0dp"
             android:nextFocusDown="@+id/stats"
             app:backgroundTint="@color/connect_fab_background"
             app:fabCustomSize="210dp"

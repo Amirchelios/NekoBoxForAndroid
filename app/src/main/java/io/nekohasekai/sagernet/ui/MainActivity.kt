@@ -172,6 +172,7 @@ class MainActivity : ThemedActivity(),
         }
 
         setContentView(binding.root)
+        setupConnectEffectAlignment()
         if (!BuildConfig.DEBUG && DataStore.clientMode) {
             DataStore.clientMode = false
         }
@@ -494,7 +495,7 @@ class MainActivity : ThemedActivity(),
             params.anchorGravity = Gravity.CENTER_HORIZONTAL or Gravity.CENTER_VERTICAL
             params.marginEnd = 0
             params.bottomMargin = 0
-            binding.fab.translationY = 48 * density
+            binding.fab.translationY = 0f
             binding.fab.customSize = (204 * density).toInt()
             progressParams.anchorGravity = Gravity.CENTER
             progressParams.marginEnd = 0
@@ -636,6 +637,33 @@ class MainActivity : ThemedActivity(),
         }
     }
 
+    private fun setupConnectEffectAlignment() {
+        binding.coordinator.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateConnectEffectOffsets()
+        }
+        updateConnectEffectOffsets()
+    }
+
+    private fun updateConnectEffectOffsets() {
+        val fab = binding.fab
+        if (fab.width == 0 || fab.height == 0) return
+        val fabCenterX = fab.left + fab.translationX + fab.width / 2f
+        val fabCenterY = fab.top + fab.translationY + fab.height / 2f
+        val targets = arrayOf(
+            binding.connectGlow,
+            binding.connectRing,
+            binding.connectRingSoft,
+            binding.fabProgress
+        )
+        for (view in targets) {
+            if (view.width == 0 || view.height == 0) continue
+            val viewCenterX = view.left + view.width / 2f
+            val viewCenterY = view.top + view.height / 2f
+            view.translationX = fabCenterX - viewCenterX
+            view.translationY = fabCenterY - viewCenterY
+        }
+    }
+
     private fun updateGlow(state: BaseService.State) {
         val glow = binding.connectGlow
         if (state == BaseService.State.Connected) {
@@ -735,6 +763,7 @@ class MainActivity : ThemedActivity(),
                 duration = 1200L
                 repeatMode = ValueAnimator.REVERSE
                 repeatCount = ValueAnimator.INFINITE
+                addUpdateListener { updateConnectEffectOffsets() }
             }
 
             connectAnimator = AnimatorSet().apply {
