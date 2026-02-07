@@ -329,6 +329,7 @@ object RawUpdater : GroupUpdater() {
     ): Boolean {
         if (!isSmartHeadCompareEnabled(proxyGroup)) return false
         if (GroupUpdater.isForceUpdate(proxyGroup.id)) return false
+        if (shouldSkipCountMismatchUpdate(proxyGroup, newProxies, aggregateName, existing)) return false
         val newFiltered = filterProxiesForCompare(newProxies, aggregateName)
         if (newFiltered.isEmpty()) return false
         val oldFiltered = filterExistingForCompare(existing, aggregateName)
@@ -340,6 +341,19 @@ object RawUpdater : GroupUpdater() {
         val newHead = newFiltered.take(count).map { it.toString() }
         val oldHead = oldFiltered.take(count).map { it.toString() }
         return newHead == oldHead
+    }
+
+    private fun shouldSkipCountMismatchUpdate(
+        proxyGroup: ProxyGroup,
+        newProxies: List<AbstractBean>,
+        aggregateName: String,
+        existing: List<ProxyEntity>
+    ): Boolean {
+        if (!isSmartHeadCompareEnabled(proxyGroup)) return true
+        if (GroupUpdater.isForceUpdate(proxyGroup.id)) return true
+        val newCount = filterProxiesForCompare(newProxies, aggregateName).size
+        val oldCount = filterExistingForCompare(existing, aggregateName).size
+        return newCount != oldCount
     }
 
     private fun isSmartHeadCompareEnabled(group: ProxyGroup): Boolean {

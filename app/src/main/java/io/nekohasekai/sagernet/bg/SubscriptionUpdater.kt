@@ -23,8 +23,8 @@ object SubscriptionUpdater {
 
     private const val WORK_NAME = "SubscriptionUpdater"
     private const val SMART_HEAD_WORK_NAME = "SubscriptionSmartHeadUpdater"
-    private const val SMART_HEAD_INTERVAL_MIN = 10L
-    private const val FORCE_UPDATE_INTERVAL_SEC = 5 * 60 * 60L
+    private const val SMART_HEAD_INTERVAL_MIN = 60L
+    private const val FORCE_UPDATE_INTERVAL_SEC = 6 * 60 * 60L
 
     suspend fun reconfigureUpdater() {
         RemoteWorkManager.getInstance(app).cancelUniqueWork(WORK_NAME)
@@ -140,9 +140,10 @@ object SubscriptionUpdater {
 
             if (subscriptions.isNotEmpty()) for (profile in subscriptions) {
                 val subscription = profile.subscription!!
-                if (!DataStore.serviceState.connected && subscription.updateWhenConnectedOnly) {
-                    Logs.d("smart-head: not connected, skip " + profile.displayName())
-                    continue
+                val elapsedSec =
+                    (System.currentTimeMillis() / 1000).toInt() - subscription.lastUpdated
+                if (elapsedSec >= FORCE_UPDATE_INTERVAL_SEC) {
+                    GroupUpdater.markForceUpdate(profile.id)
                 }
                 Logs.d("smart-head: checking " + profile.displayName())
                 GroupUpdater.executeUpdate(profile, false)
