@@ -2,27 +2,36 @@
 <resources>
     <color name="fab_color_progress">@color/material_light_white</color>
     <color name="preference_simple_menu_background">#303030</color>
-    <color name="brand_primary">#4B8BFF</color>
-    <color name="brand_primary_dark">#2C58B8</color>
-    <color name="brand_accent">#3CD0E6</color>
-    <color name="brand_material_100">#1D2A4A</color>
-    <color name="brand_material_300">#5A7ED6</color>
+    <color name="brand_primary">#4A78FF</color>
+    <color name="brand_primary_dark">#2A4FAF</color>
+    <color name="brand_accent">#2FC7B7</color>
+    <color name="brand_material_100">#1A2444</color>
+    <color name="brand_material_300">#5E7FD6</color>
+
+    <color name="app_bg_top">#0E1426</color>
+    <color name="app_bg_bottom">#121A33</color>
+    <color name="app_background">#0F162B</color>
+    <color name="app_surface">#151C34</color>
+    <color name="app_surface_alt">#1A2341</color>
+    <color name="app_on_surface">#E6ECFF</color>
+    <color name="app_on_surface_muted">#A9B7D6</color>
+    <color name="app_on_background">#E6ECFF</color>
 
     <color name="connect_fab_background">@color/brand_primary</color>
-    <color name="connect_fab_ripple">#76A9FF</color>
+    <color name="connect_fab_ripple">#7FA2FF</color>
     <color name="connect_progress">@color/brand_material_300</color>
     <color name="connect_fab_connected">#2ECC71</color>
 
-    <color name="card_surface">#1A2440</color>
-    <color name="card_stroke">#2A3A66</color>
+    <color name="card_surface">@color/app_surface_alt</color>
+    <color name="card_stroke">#2C3B6B</color>
 
-    <color name="glass_surface">#2BFFFFFF</color>
-    <color name="glass_stroke">#5A7CCBFF</color>
-    <color name="glass_text">#E7EEF8</color>
+    <color name="glass_surface">#33FFFFFF</color>
+    <color name="glass_stroke">#6A7FB8FF</color>
+    <color name="glass_text">#E6ECFF</color>
 
-    <color name="quick_bar_stroke">#3F5BA8</color>
-    <color name="quick_bar_active">#4B8BFF</color>
-    <color name="quick_bar_inactive">#1B2745</color>
+    <color name="quick_bar_stroke">#3F5DAF</color>
+    <color name="quick_bar_active">@color/brand_primary</color>
+    <color name="quick_bar_inactive">#1A2546</color>
     <color name="quick_bar_text_active">#FFFFFF</color>
-    <color name="quick_bar_text_inactive">#B6C4E6</color>
+    <color name="quick_bar_text_inactive">#B4C3E6</color>
 </resources>

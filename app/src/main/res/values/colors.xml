@@ -198,14 +198,23 @@
     <color name="material_orange_300">#FFB74D</color>
     <color name="material_orange_400">#FFA726</color>
     <color name="material_orange_50">#FFF3E0</color>
-    <color name="brand_primary">#2B6DFF</color>
-    <color name="brand_primary_dark">#1E4FBF</color>
-    <color name="brand_accent">#24B0C7</color>
-    <color name="brand_material_100">#CFE0FF</color>
-    <color name="brand_material_300">#8FB3FF</color>
+    <color name="brand_primary">#1F5BFF</color>
+    <color name="brand_primary_dark">#193EA8</color>
+    <color name="brand_accent">#16B5A7</color>
+    <color name="brand_material_100">#D8E3FF</color>
+    <color name="brand_material_300">#9BB8FF</color>
+
+    <color name="app_bg_top">#F3F6FF</color>
+    <color name="app_bg_bottom">#E8EEFF</color>
+    <color name="app_background">#F1F4FF</color>
+    <color name="app_surface">#FFFFFF</color>
+    <color name="app_surface_alt">#F6F8FF</color>
+    <color name="app_on_surface">#1A2238</color>
+    <color name="app_on_surface_muted">#5A6B8C</color>
+    <color name="app_on_background">#1A2238</color>
 
     <color name="connect_fab_background">@color/brand_primary</color>
-    <color name="connect_fab_ripple">#3E86FF</color>
+    <color name="connect_fab_ripple">#5F8CFF</color>
     <color name="connect_progress">@color/brand_material_300</color>
     <color name="connect_fab_connected">#2ECC71</color>
     <color name="connect_fab_background_connecting">#3558C9</color>
@@ -215,18 +224,18 @@
     <color name="connect_ring_connected">#69E29B</color>
     <color name="connect_ring_disconnect">#FF6B6B</color>
 
-    <color name="card_surface">#F6F8FF</color>
-    <color name="card_stroke">#D9E4FF</color>
+    <color name="card_surface">@color/app_surface_alt</color>
+    <color name="card_stroke">#D6E0FF</color>
 
-    <color name="glass_surface">#A8FFFFFF</color>
-    <color name="glass_stroke">#66BFD2FF</color>
-    <color name="glass_text">#233048</color>
+    <color name="glass_surface">#CCFFFFFF</color>
+    <color name="glass_stroke">#80A9C7FF</color>
+    <color name="glass_text">#1E2A44</color>
 
-    <color name="quick_bar_stroke">#6B8BFF</color>
-    <color name="quick_bar_active">#2B6DFF</color>
-    <color name="quick_bar_inactive">#E6EEFF</color>
+    <color name="quick_bar_stroke">#88A3FF</color>
+    <color name="quick_bar_active">@color/brand_primary</color>
+    <color name="quick_bar_inactive">#E3EBFF</color>
     <color name="quick_bar_text_active">#FFFFFF</color>
-    <color name="quick_bar_text_inactive">#2B3A57</color>
+    <color name="quick_bar_text_inactive">#2A3551</color>
     <color name="material_orange_500">#FF9800</color>
     <color name="material_orange_600">#FB8C00</color>
     <color name="material_orange_700">#F57C00</color>

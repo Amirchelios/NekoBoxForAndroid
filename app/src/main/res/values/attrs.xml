@@ -3,6 +3,14 @@
 <resources>
     <attr name="colorMaterial100" format="color" />
     <attr name="colorMaterial300" format="color" />
+    <attr name="colorBackground" format="color" />
+    <attr name="colorSurface" format="color" />
+    <attr name="colorOnBackground" format="color" />
+    <attr name="colorOnSurface" format="color" />
+    <attr name="colorSecondary" format="color" />
+    <attr name="colorSecondaryVariant" format="color" />
+    <attr name="colorOnPrimary" format="color" />
+    <attr name="colorOnSecondary" format="color" />
     <attr name="accentOrTextSecondary" format="color" />
     <attr name="accentOrTextPrimary" format="color" />
     <attr name="primaryOrTextSecondary" format="color" />

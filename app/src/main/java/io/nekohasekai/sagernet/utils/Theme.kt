@@ -31,7 +31,7 @@ object Theme {
     const val BLUE_GREY = 20
     const val BLACK = 21
 
-    private fun defaultTheme() = PINK_SSR
+    private fun defaultTheme() = PINK
 
     fun apply(context: Context) {
         context.setTheme(getTheme())
@@ -53,7 +53,7 @@ object Theme {
         return when (theme) {
             RED -> R.style.Theme_SagerNet_Red
             PINK -> R.style.Theme_SagerNet
-            PINK_SSR -> R.style.Theme_SagerNet_Pink_SSR
+            PINK_SSR -> R.style.Theme_SagerNet
             PURPLE -> R.style.Theme_SagerNet_Purple
             DEEP_PURPLE -> R.style.Theme_SagerNet_DeepPurple
             INDIGO -> R.style.Theme_SagerNet_Indigo
@@ -80,7 +80,7 @@ object Theme {
         return when (theme) {
             RED -> R.style.Theme_SagerNet_Dialog_Red
             PINK -> R.style.Theme_SagerNet_Dialog
-            PINK_SSR -> R.style.Theme_SagerNet_Dialog_Pink_SSR
+            PINK_SSR -> R.style.Theme_SagerNet_Dialog
             PURPLE -> R.style.Theme_SagerNet_Dialog_Purple
             DEEP_PURPLE -> R.style.Theme_SagerNet_Dialog_DeepPurple
             INDIGO -> R.style.Theme_SagerNet_Dialog_Indigo
