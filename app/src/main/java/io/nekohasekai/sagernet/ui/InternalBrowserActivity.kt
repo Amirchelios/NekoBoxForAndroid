@@ -28,10 +28,8 @@ import androidx.webkit.WebViewFeature
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.database.DataStore
-import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.group.RawUpdater
-import io.nekohasekai.sagernet.group.GroupUpdater
 import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.SubscriptionFoundException
 import io.nekohasekai.sagernet.ktx.USER_AGENT
@@ -592,11 +590,7 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
         if (results.isNullOrEmpty()) {
             val singboxJson = ProxyToSingboxConverter.convertToSingBoxJson(payload).orEmpty()
             if (singboxJson.isNotBlank()) {
-                val groupId = if (targetGroupId > 0L) {
-                    targetGroupId
-                } else {
-                    GroupManager.ensureDedicatedSubscriptionGroup()?.id ?: 0L
-                }
+                val groupId = targetGroupId
                 if (groupId == 0L) {
                     runOnMainDispatcher {
                         Toast.makeText(this@InternalBrowserActivity, R.string.dedicated_link_import_failed, Toast.LENGTH_LONG).show()
@@ -607,10 +601,9 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
                 val bean = ConfigBean().applyDefaultValues().apply {
                     type = 0
                     config = singboxJson
-                    name = GroupManager.DEDICATED_CONFIG_NAME
+                    name = "Imported sing-box"
                 }
                 ProfileManager.createProfile(groupId, bean)
-                GroupUpdater.activateDedicatedInternalProxy()
                 runOnMainDispatcher {
                     Toast.makeText(this@InternalBrowserActivity, R.string.dedicated_link_import_success, Toast.LENGTH_LONG).show()
                 }
@@ -624,11 +617,7 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
             return
         }
 
-        val groupId = if (targetGroupId > 0L) {
-            targetGroupId
-        } else {
-            GroupManager.ensureDedicatedSubscriptionGroup()?.id ?: 0L
-        }
+        val groupId = targetGroupId
         if (groupId == 0L) {
             runOnMainDispatcher {
                 Toast.makeText(this@InternalBrowserActivity, R.string.dedicated_link_import_failed, Toast.LENGTH_LONG).show()
@@ -638,7 +627,6 @@ class InternalBrowserActivity : ThemedActivity(), Toolbar.OnMenuItemClickListene
         for (profile in results) {
             ProfileManager.createProfile(groupId, profile)
         }
-        GroupUpdater.activateDedicatedInternalProxy()
         runOnMainDispatcher {
             Toast.makeText(this@InternalBrowserActivity, R.string.dedicated_link_import_success, Toast.LENGTH_LONG).show()
         }

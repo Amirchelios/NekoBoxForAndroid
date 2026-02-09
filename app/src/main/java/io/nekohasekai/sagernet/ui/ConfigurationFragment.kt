@@ -31,8 +31,6 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
-import com.google.android.material.button.MaterialButtonToggleGroup
-import com.google.android.material.button.MaterialButton
 import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_LINK
 import io.nekohasekai.sagernet.GroupOrder
 import io.nekohasekai.sagernet.GroupType
@@ -51,7 +49,6 @@ import io.nekohasekai.sagernet.database.preference.OnPreferenceDataStoreChangeLi
 import io.nekohasekai.sagernet.databinding.LayoutProfileListBinding
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.toUniversalLink
-import io.nekohasekai.sagernet.group.GroupUpdater
 import io.nekohasekai.sagernet.group.RawUpdater
 import io.nekohasekai.sagernet.ktx.FixedLinearLayoutManager
 import io.nekohasekai.sagernet.ktx.Logs
@@ -116,13 +113,6 @@ class ConfigurationFragment @JvmOverloads constructor(
     lateinit var adapter: GroupPagerAdapter
     lateinit var tabLayout: TabLayout
     lateinit var groupPager: ViewPager2
-    private lateinit var quickBarCard: View
-    private lateinit var quickBar: MaterialButtonToggleGroup
-    private lateinit var quickYoutube: MaterialButton
-    private lateinit var quickAuto: MaterialButton
-    private lateinit var quickDedicated: MaterialButton
-    private lateinit var quickMethod: TextView
-    private lateinit var quickUpdateButton: View
 
     val alwaysShowAddress by lazy { DataStore.alwaysShowAddress }
 
@@ -177,13 +167,6 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         groupPager = view.findViewById(R.id.group_pager)
         tabLayout = view.findViewById(R.id.group_tab)
-        quickBarCard = view.findViewById(R.id.quick_bar_card)
-        quickBar = view.findViewById(R.id.quick_bar)
-        quickYoutube = view.findViewById(R.id.quick_youtube)
-        quickAuto = view.findViewById(R.id.quick_auto)
-        quickDedicated = view.findViewById(R.id.quick_dedicated)
-        quickMethod = view.findViewById(R.id.quick_method)
-        quickUpdateButton = view.findViewById(R.id.quick_update_button)
         adapter = GroupPagerAdapter()
         ProfileManager.addListener(adapter)
         GroupManager.addListener(adapter)
@@ -194,29 +177,6 @@ class ConfigurationFragment @JvmOverloads constructor(
             tabLayout.isGone = true
             groupPager.isUserInputEnabled = false
             toolbar.elevation = 0F
-            quickBarCard.isVisible = true
-        }
-        if (DataStore.clientMode) {
-            quickBarCard.isGone = true
-        }
-
-        quickUpdateButton.setOnClickListener {
-            if (showAllProfiles) {
-                runOnLifecycleDispatcher {
-                    val subscriptions = SagerDatabase.groupDao.subscriptions()
-                    subscriptions.forEach { GroupUpdater.startUpdate(it, true) }
-                }
-            } else {
-                val group = DataStore.currentGroup()
-                if (group.type != GroupType.SUBSCRIPTION) {
-                    snackbar(R.string.group_not_subscription).show()
-                    Logs.e("quick update: Group(${group.displayName()}) is not subscription")
-                } else {
-                    runOnLifecycleDispatcher {
-                        GroupUpdater.startUpdate(group, true)
-                    }
-                }
-            }
         }
 
         TabLayoutMediator(tabLayout, groupPager) { tab, position ->
@@ -254,28 +214,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         DataStore.profileCacheStore.registerChangeListener(this)
 
-        setupQuickBar()
-        updateQuickBarSelection()
-    }
-
-    private fun setupQuickBar() {
-        if (!showAllProfiles || DataStore.clientMode) {
-            quickBarCard.isGone = true
-            return
-        }
-        quickBar.addOnButtonCheckedListener { group, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            val button = group.findViewById<MaterialButton>(checkedId)
-            button.animate().cancel()
-            button.scaleX = 0.96f
-            button.scaleY = 0.96f
-            button.animate().scaleX(1f).scaleY(1f).setDuration(200L).start()
-            when (checkedId) {
-                R.id.quick_youtube -> selectSpecialProfile(SpecialProfile.YOUTUBE)
-                R.id.quick_auto -> selectSpecialProfile(SpecialProfile.AUTO)
-                R.id.quick_dedicated -> selectSpecialProfile(SpecialProfile.DEDICATED)
-            }
-        }
+        adapter.reload()
     }
 
     fun updateAddProfileMenuForClientMode() {
@@ -292,9 +231,6 @@ class ConfigurationFragment @JvmOverloads constructor(
         autoDnsItem.isEnabled = DataStore.clientMode
     }
 
-    private enum class SpecialProfile { YOUTUBE, AUTO, DEDICATED }
-
-
     private fun userSelectedId(): Long {
         return if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY &&
             DataStore.internalProxyUserSelected > 0L
@@ -302,64 +238,6 @@ class ConfigurationFragment @JvmOverloads constructor(
             DataStore.internalProxyUserSelected
         } else {
             DataStore.selectedProxy
-        }
-    }
-
-    private fun updateQuickBarSelection() {
-        if (!showAllProfiles) return
-        runOnDefaultDispatcher {
-            val selectedId = userSelectedId()
-            val proxy = SagerDatabase.proxyDao.getById(selectedId) ?: return@runOnDefaultDispatcher
-            val checkedId = when {
-                GroupManager.isYoutubeInstagramConfig(proxy) -> R.id.quick_youtube
-                GroupManager.isDedicatedConfig(proxy) -> R.id.quick_dedicated
-                GroupManager.isDefaultAutoSelectConfig(proxy) -> R.id.quick_auto
-                else -> R.id.quick_auto
-            }
-            val methodLabel = when {
-                GroupManager.isYoutubeInstagramConfig(proxy) -> getString(R.string.quick_youtube_instagram)
-                GroupManager.isDedicatedConfig(proxy) -> getString(R.string.quick_dedicated_config)
-                GroupManager.isDefaultAutoSelectConfig(proxy) -> getString(R.string.menu_auto_select)
-                else -> proxy.displayName()
-            }
-            val methodText = getString(R.string.quick_connection_method) + " • " + methodLabel
-            onMainDispatcher {
-                if (quickBar.checkedButtonId != checkedId) {
-                    quickBar.check(checkedId)
-                }
-                quickMethod.text = methodText
-            }
-        }
-    }
-
-    private fun selectSpecialProfile(type: SpecialProfile) {
-        runOnDefaultDispatcher {
-            val all = SagerDatabase.proxyDao.getAll()
-            val target = when (type) {
-                SpecialProfile.YOUTUBE -> all.firstOrNull { GroupManager.isYoutubeInstagramConfig(it) }
-                SpecialProfile.AUTO -> all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
-                SpecialProfile.DEDICATED -> all.firstOrNull { GroupManager.isDedicatedConfig(it) }
-            } ?: return@runOnDefaultDispatcher
-            val lastSelected = userSelectedId()
-            if (lastSelected == target.id) return@runOnDefaultDispatcher
-            if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
-                DataStore.internalProxyUserSelected = target.id
-            } else {
-                DataStore.selectedProxy = target.id
-                DataStore.currentProfile = target.id
-                ProfileManager.postUpdate(lastSelected)
-                if (DataStore.serviceState.canStop) {
-                    SagerNet.reloadService()
-                }
-            }
-            onMainDispatcher {
-                val fragment = getCurrentGroupFragment()
-                fragment?.adapter?.notifyDataSetChanged()
-                fragment?.adapter?.configurationIdList?.indexOf(target.id)?.let { index ->
-                    if (index >= 0) fragment.configurationListView.scrollTo(index, true)
-                }
-                updateQuickBarSelection()
-            }
         }
     }
 
@@ -470,7 +348,6 @@ class ConfigurationFragment @JvmOverloads constructor(
         if (showAllProfiles) {
             runOnDefaultDispatcher {
                 GroupManager.ensureDefaultSubscriptionGroup()
-                GroupManager.ensureDedicatedSubscriptionGroup()
                 onMainDispatcher {
                     adapter.reload(true)
                 }
@@ -488,12 +365,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                             group.subscription?.link?.trim()
                                 ?.equals(DEFAULT_SUBSCRIPTION_LINK, true) == true
                     }
-                    val groupDedicated = SagerDatabase.groupDao.allGroups().firstOrNull { group ->
-                        group.type == GroupType.SUBSCRIPTION &&
-                            group.subscription?.link?.trim()
-                                ?.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true) == true
-                    }
-                    if (groupAuto == null && groupDedicated == null) {
+                    if (groupAuto == null) {
                         onMainDispatcher {
                             snackbar(getString(R.string.service_failed) + " DNS").show()
                         }
@@ -508,7 +380,6 @@ class ConfigurationFragment @JvmOverloads constructor(
                     }
                     val servers = listOfNotNull(best.primary, best.secondary)
                     groupAuto?.let { DataStore.setAutoDnsServers(it.id, servers) }
-                    groupDedicated?.let { DataStore.setAutoDnsServers(it.id, servers) }
                     onMainDispatcher {
                         snackbar("${best.name}: ${servers.joinToString(" / ")}").show()
                     }
@@ -1181,11 +1052,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                             .map { it.id }
                             .toHashSet()
                         val base = all.filter { it.groupId in basicGroupIds }
-                        val specials = all.filter {
-                            GroupManager.isDefaultAutoSelectConfig(it) ||
-                                GroupManager.isDedicatedConfig(it) ||
-                                GroupManager.isYoutubeInstagramConfig(it)
-                        }
+                        val specials = all.filter { GroupManager.isDefaultAutoSelectConfig(it) }
                         (base + specials).distinctBy { it.id }
                     } else {
                         all
@@ -1193,11 +1060,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                     if (DataStore.clientMode) {
                         filteredByGroup
                     } else {
-                        filteredByGroup.filterNot {
-                            GroupManager.isDefaultAutoSelectConfig(it) ||
-                                GroupManager.isDedicatedConfig(it) ||
-                                GroupManager.isYoutubeInstagramConfig(it)
-                        }
+                        filteredByGroup
                     }
                 } else {
                     SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
@@ -1205,7 +1068,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                 newProfiles = newProfiles.filterNot { profile ->
                     profile.type == ProxyEntity.TYPE_CONFIG &&
                         profile.configBean?.type == 0 &&
-                        profile.configBean?.config?.isBlank() == true
+                        profile.configBean?.config?.isBlank() == true &&
+                        !GroupManager.isDefaultAutoSelectConfig(profile)
                 }
                 if (proxyGroup.id != ALL_GROUP_ID) {
                     when (proxyGroup.order) {

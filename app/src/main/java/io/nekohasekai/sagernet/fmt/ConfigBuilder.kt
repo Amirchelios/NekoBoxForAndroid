@@ -178,7 +178,6 @@ fun buildConfig(
     val bind = if (!forTest && DataStore.allowAccess) "0.0.0.0" else LOCALHOST
     val overrideDns = if (
         GroupManager.isDefaultAutoSelectConfig(proxy) ||
-        GroupManager.isDedicatedConfig(proxy) ||
         GroupManager.isAutoSelectAggregate(proxy)
     ) {
         DataStore.getAutoDnsServers(proxy.groupId)

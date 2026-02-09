@@ -185,11 +185,9 @@ class MainActivity : ThemedActivity(),
         GroupUpdater.listeners.add(updateProgressListener)
         runOnDefaultDispatcher {
             val defaultGroup = GroupManager.ensureDefaultSubscriptionGroup()
-            val dedicatedGroup = GroupManager.ensureDedicatedSubscriptionGroup()
-            runFirstRunUpdate(defaultGroup, dedicatedGroup)
+            runFirstRunUpdate(defaultGroup)
         }
         ensureDefaultAutoSelectOnFirstRun()
-        runStartupDedicatedGate()
 
         if (intent?.action == Intent.ACTION_VIEW) {
             onNewIntent(intent)
@@ -612,7 +610,6 @@ class MainActivity : ThemedActivity(),
             if (isFinishing || isDestroyed) return@launchWhenStarted
             if (DataStore.serviceState != BaseService.State.Stopped) return@launchWhenStarted
             if (DataStore.internalProxyActive) return@launchWhenStarted
-            runStartupDedicatedGate()
         }
     }
 
@@ -1087,56 +1084,6 @@ class MainActivity : ThemedActivity(),
     }
 
 
-    private fun runStartupDedicatedGate() {
-        // Disabled: do not auto-enable internal proxy on startup.
-        return
-        if (DataStore.clientMode) return
-        binding.startupLoading.isVisible = true
-        binding.startupLoadingText.setText(R.string.startup_dedicated_checking)
-        runOnDefaultDispatcher {
-            val all = SagerDatabase.proxyDao.getAll()
-            var dedicated = all.firstOrNull { GroupManager.isDedicatedConfig(it) }
-            var reachable = if (dedicated != null) {
-                GroupUpdater.testDedicatedReachable(dedicated)
-            } else {
-                false
-            }
-            if (!reachable) {
-                GroupUpdater.autoFetchDedicatedConfig(5000L)
-                val refreshed = SagerDatabase.proxyDao.getAll()
-                dedicated = refreshed.firstOrNull { GroupManager.isDedicatedConfig(it) }
-                reachable = if (dedicated != null) {
-                    GroupUpdater.testDedicatedReachable(dedicated)
-                } else {
-                    false
-                }
-            }
-            if (reachable && dedicated != null) {
-                if (DataStore.internalProxyUserSelected == 0L) {
-                    DataStore.internalProxyUserSelected = DataStore.selectedProxy
-                }
-                DataStore.internalProxyProfileId = dedicated.id
-                DataStore.internalProxyActive = true
-                DataStore.selectedProxy = dedicated.id
-                DataStore.currentProfile = dedicated.id
-                DataStore.serviceMode = Key.MODE_PROXY
-                SagerNet.startService()
-                onMainDispatcher {
-                    binding.startupLoading.isVisible = false
-                }
-            } else {
-                onMainDispatcher {
-                    binding.startupLoading.isVisible = false
-                    val snack = snackbar(getString(R.string.startup_dedicated_failed))
-                    snack.view.setBackgroundColor(
-                        ContextCompat.getColor(this@MainActivity, R.color.material_red_500)
-                    )
-                    snack.show()
-                }
-            }
-        }
-    }
-
     private fun ensureDefaultAutoSelectOnFirstRun() {
         runOnDefaultDispatcher {
             val all = SagerDatabase.proxyDao.getAll()
@@ -1154,21 +1101,16 @@ class MainActivity : ThemedActivity(),
         }
     }
 
-    private suspend fun runFirstRunUpdate(
-        defaultGroup: ProxyGroup?,
-        dedicatedGroup: ProxyGroup?
-    ) {
+    private suspend fun runFirstRunUpdate(defaultGroup: ProxyGroup?) {
         if (DataStore.firstRunDone) return
-        if (defaultGroup == null || dedicatedGroup == null) return
+        if (defaultGroup == null) return
         val needsDefault = isGroupEmptyForFirstRun(defaultGroup)
-        val needsDedicated = isGroupEmptyForFirstRun(dedicatedGroup)
-        if (!needsDefault || !needsDedicated) return
+        if (!needsDefault) return
 
         DataStore.firstRunSilentUpdateActive = true
         try {
             val okDefault = GroupUpdater.executeUpdate(defaultGroup, false)
-            val okDedicated = GroupUpdater.executeUpdate(dedicatedGroup, false)
-            if (okDefault && okDedicated) {
+            if (okDefault) {
                 DataStore.firstRunDone = true
                 onMainDispatcher {
                     snackbar(getString(R.string.first_run_update_success)).show()
@@ -1186,8 +1128,6 @@ class MainActivity : ThemedActivity(),
         val hasRealProxy = proxies.any { proxy ->
             when {
                 GroupManager.isAutoSelectAggregate(proxy) -> false
-                GroupManager.isYoutubeInstagramConfig(proxy) -> false
-                GroupManager.isDedicatedConfig(proxy) -> false
                 else -> true
             }
         }

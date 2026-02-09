@@ -110,13 +110,7 @@ object RawUpdater : GroupUpdater() {
             }
         }
 
-        val aggregateName = if (proxyGroup.subscription?.link?.trim()
-                ?.equals(GroupManager.DEDICATED_SUBSCRIPTION_LINK, true) == true
-        ) {
-            GroupManager.DEDICATED_CONFIG_NAME
-        } else {
-            app.getString(R.string.menu_auto_select)
-        }
+        val aggregateName = app.getString(R.string.menu_auto_select)
         if (aggregateConfig.isBlank()) {
             aggregateConfig = sanitizeAggregateConfig(
                 ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
@@ -357,8 +351,7 @@ object RawUpdater : GroupUpdater() {
     }
 
     private fun isSmartHeadCompareEnabled(group: ProxyGroup): Boolean {
-        return GroupManager.isDefaultSubscriptionGroup(group) ||
-            GroupManager.isDedicatedSubscriptionGroup(group)
+        return GroupManager.isDefaultSubscriptionGroup(group)
     }
 
     private fun filterProxiesForCompare(
@@ -379,8 +372,6 @@ object RawUpdater : GroupUpdater() {
             .sortedWith(compareBy<ProxyEntity> { it.userOrder }.thenBy { it.id })
             .mapNotNull { proxy ->
                 when {
-                    GroupManager.isYoutubeInstagramConfig(proxy) -> null
-                    GroupManager.isDedicatedConfig(proxy) -> null
                     GroupManager.isDefaultAutoSelectConfig(proxy) -> null
                     GroupManager.isAutoSelectAggregate(proxy) -> null
                     else -> runCatching { proxy.requireBean() }.getOrNull()

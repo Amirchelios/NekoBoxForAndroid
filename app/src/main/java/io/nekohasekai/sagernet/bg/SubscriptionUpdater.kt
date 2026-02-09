@@ -114,8 +114,7 @@ object SubscriptionUpdater {
 
     private suspend fun scheduleSmartHeadUpdater() {
         val candidates = SagerDatabase.groupDao.subscriptions().filter { group ->
-            GroupManager.isDefaultSubscriptionGroup(group) ||
-                GroupManager.isDedicatedSubscriptionGroup(group)
+            GroupManager.isDefaultSubscriptionGroup(group)
         }
         if (candidates.isEmpty()) return
 
@@ -134,8 +133,7 @@ object SubscriptionUpdater {
 
         override suspend fun doWork(): Result {
             val subscriptions = SagerDatabase.groupDao.subscriptions().filter { group ->
-                GroupManager.isDefaultSubscriptionGroup(group) ||
-                    GroupManager.isDedicatedSubscriptionGroup(group)
+                GroupManager.isDefaultSubscriptionGroup(group)
             }
 
             if (subscriptions.isNotEmpty()) for (profile in subscriptions) {

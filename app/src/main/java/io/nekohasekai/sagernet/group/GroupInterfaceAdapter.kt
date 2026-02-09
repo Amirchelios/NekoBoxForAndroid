@@ -17,9 +17,7 @@ import kotlin.coroutines.suspendCoroutine
 class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interface {
 
     private val summaryTargets = setOf(
-        SagerNet.application.getString(R.string.menu_auto_select),
-        GroupManager.YOUTUBE_INSTAGRAM_CONFIG_NAME,
-        GroupManager.DEDICATED_CONFIG_NAME
+        SagerNet.application.getString(R.string.menu_auto_select)
     )
     private val pendingSummary = LinkedHashMap<String, Boolean>()
     private val pendingErrors = LinkedHashMap<String, String>()

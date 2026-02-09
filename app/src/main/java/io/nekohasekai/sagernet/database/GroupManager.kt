@@ -7,18 +7,17 @@ import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.bg.SubscriptionUpdater
 import io.nekohasekai.sagernet.ktx.applyDefaultValues
-import io.nekohasekai.sagernet.ktx.Logs
 import moe.matsuri.nb4a.proxy.config.ConfigBean
 
 object GroupManager {
 
-    const val YOUTUBE_INSTAGRAM_CONFIG_NAME = "باز کننده یوتویب و اینستاگرام"
-    const val DEDICATED_SUBSCRIPTION_GROUP_NAME = "کانفیگ اختصاصی"
-    const val DEDICATED_SUBSCRIPTION_GITHUB_LINK =
+    private const val LEGACY_YOUTUBE_CONFIG_NAME = "باز کننده یوتویب و اینستاگرام"
+    private const val LEGACY_DEDICATED_GROUP_NAME = "کانفیگ اختصاصی"
+    private const val LEGACY_DEDICATED_SUBSCRIPTION_GITHUB_LINK =
         "https://raw.githubusercontent.com/Amirchelios/NG_manager_app/refs/heads/main/ml.txt?token=GHSAT0AAAAAADT4P36OTRU6MU7F7LDIVHJO2MAOJAA"
-    const val DEDICATED_SUBSCRIPTION_LINK =
+    private const val LEGACY_DEDICATED_SUBSCRIPTION_LINK =
         "https://drive.usercontent.google.com/u/0/uc?id=1JHaY3RHNHR2sYd_zu9CvNH6IdFv2ggec&export=download"
-    const val DEDICATED_CONFIG_NAME = "کانفیگ اختصاصی"
+    private const val LEGACY_DEDICATED_CONFIG_NAME = "کانفیگ اختصاصی"
 
     interface Listener {
         suspend fun groupAdd(group: ProxyGroup)
@@ -138,7 +137,7 @@ object GroupManager {
                 iterator { groupUpdated(existing) }
             }
             ensureDefaultAutoSelectConfig(existing)
-            ensureDefaultYoutubeInstagramConfig(existing)
+            cleanupLegacyArtifacts()
             cleanupDuplicateSpecialConfigs(existing)
             return existing
         }
@@ -151,7 +150,7 @@ object GroupManager {
         return createGroup(group).also {
             if (it != null) {
                 ensureDefaultAutoSelectConfig(it)
-                ensureDefaultYoutubeInstagramConfig(it)
+                cleanupLegacyArtifacts()
                 cleanupDuplicateSpecialConfigs(it)
             }
         }
@@ -160,8 +159,7 @@ object GroupManager {
     fun isProtectedGroup(group: ProxyGroup): Boolean {
         val link = group.subscription?.link?.trim().orEmpty()
         return group.type == GroupType.SUBSCRIPTION &&
-            (link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true) ||
-                link.equals(DEDICATED_SUBSCRIPTION_LINK, ignoreCase = true))
+            link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true)
     }
 
     fun isDefaultSubscriptionGroup(group: ProxyGroup): Boolean {
@@ -170,75 +168,36 @@ object GroupManager {
         return link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true)
     }
 
-    fun isDedicatedSubscriptionGroup(group: ProxyGroup): Boolean {
-        if (group.type != GroupType.SUBSCRIPTION) return false
-        val link = group.subscription?.link?.trim().orEmpty()
-        return link.equals(DEDICATED_SUBSCRIPTION_LINK, true) ||
-            link.equals(DEDICATED_SUBSCRIPTION_GITHUB_LINK, true) ||
-            group.name == DEDICATED_SUBSCRIPTION_GROUP_NAME
-    }
-
-
-    suspend fun ensureDedicatedSubscriptionGroup(): ProxyGroup? {
-        val groups = SagerDatabase.groupDao.allGroups().filter { group ->
+    private suspend fun cleanupLegacyArtifacts() {
+        val legacyGroups = SagerDatabase.groupDao.allGroups().filter { group ->
             if (group.type != GroupType.SUBSCRIPTION) return@filter false
             val link = group.subscription?.link?.trim().orEmpty()
-            link.equals(DEDICATED_SUBSCRIPTION_LINK, true) ||
-                link.equals(DEDICATED_SUBSCRIPTION_GITHUB_LINK, true) ||
-                group.name == DEDICATED_SUBSCRIPTION_GROUP_NAME
+            link.equals(LEGACY_DEDICATED_SUBSCRIPTION_LINK, true) ||
+                link.equals(LEGACY_DEDICATED_SUBSCRIPTION_GITHUB_LINK, true) ||
+                group.name == LEGACY_DEDICATED_GROUP_NAME
         }
-        if (groups.isNotEmpty()) {
-            val primary = groups.firstOrNull { group ->
-                group.subscription?.link?.trim()?.equals(DEDICATED_SUBSCRIPTION_LINK, true) == true
-            } ?: groups.first()
-            var changed = false
-            if (primary.name != DEDICATED_SUBSCRIPTION_GROUP_NAME) {
-                primary.name = DEDICATED_SUBSCRIPTION_GROUP_NAME
-                changed = true
+        if (legacyGroups.isNotEmpty()) {
+            legacyGroups.forEach { group ->
+                SagerDatabase.proxyDao.deleteByGroup(group.id)
+                SagerDatabase.groupDao.deleteById(group.id)
+                iterator { groupRemoved(group.id) }
             }
-            val currentLink = primary.subscription?.link?.trim().orEmpty()
-            if (!currentLink.equals(DEDICATED_SUBSCRIPTION_LINK, true)) {
-                primary.subscription?.link = DEDICATED_SUBSCRIPTION_LINK
-                changed = true
-            }
-            if (changed) {
-                SagerDatabase.groupDao.updateGroup(primary)
-                iterator { groupUpdated(primary) }
-            }
-            val duplicates = groups.filter { it.id != primary.id }
-            if (duplicates.isNotEmpty()) {
-                for (dup in duplicates) {
-                    val proxies = SagerDatabase.proxyDao.getByGroup(dup.id)
-                    if (proxies.isNotEmpty()) {
-                        proxies.forEach { it.groupId = primary.id }
-                        SagerDatabase.proxyDao.updateProxy(proxies)
-                    }
-                }
-                SagerDatabase.groupDao.deleteGroup(duplicates)
-                duplicates.forEach { iterator { groupRemoved(it.id) } }
-            }
-            ensureDedicatedAutoSelectConfig(primary)
-            cleanupDuplicateSpecialConfigs(primary)
-            return primary
+            SubscriptionUpdater.reconfigureUpdater()
         }
-        val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
-            name = DEDICATED_SUBSCRIPTION_GROUP_NAME
-            subscription = SubscriptionBean().applyDefaultValues().also {
-                it.link = DEDICATED_SUBSCRIPTION_LINK
+        val proxies = SagerDatabase.proxyDao.getAll()
+        val legacyConfigs = proxies.filter { proxy ->
+            if (proxy.type != ProxyEntity.TYPE_CONFIG) return@filter false
+            val bean = proxy.requireBean() as? ConfigBean ?: return@filter false
+            bean.type == 0 && (bean.name == LEGACY_YOUTUBE_CONFIG_NAME || bean.name == LEGACY_DEDICATED_CONFIG_NAME)
+        }
+        if (legacyConfigs.isNotEmpty()) {
+            val affectedGroupIds = legacyConfigs.map { it.groupId }.toSet()
+            legacyConfigs.forEach { SagerDatabase.proxyDao.deleteById(it.id) }
+            affectedGroupIds.forEach { groupId ->
+                rearrange(groupId)
+                iterator { groupUpdated(groupId) }
             }
         }
-        return createGroup(group).also {
-            if (it != null) {
-                ensureDedicatedAutoSelectConfig(it)
-                cleanupDuplicateSpecialConfigs(it)
-            }
-        }
-    }
-
-    fun isYoutubeInstagramConfig(proxy: ProxyEntity): Boolean {
-        if (proxy.type != ProxyEntity.TYPE_CONFIG) return false
-        val bean = proxy.requireBean() as? ConfigBean ?: return false
-        return bean.type == 0 && bean.name == YOUTUBE_INSTAGRAM_CONFIG_NAME
     }
 
     fun isAutoSelectConfig(proxy: ProxyEntity): Boolean {
@@ -254,7 +213,7 @@ object GroupManager {
     }
 
     fun isProtectedProfile(group: ProxyGroup, proxy: ProxyEntity): Boolean {
-        return isProtectedGroup(group) && isYoutubeInstagramConfig(proxy)
+        return isProtectedGroup(group) && isDefaultAutoSelectConfig(proxy)
     }
 
     fun isProtectedProfile(proxy: ProxyEntity): Boolean {
@@ -272,16 +231,6 @@ object GroupManager {
             bean.name == SagerNet.application.getString(R.string.menu_auto_select)
     }
 
-    fun isDedicatedConfig(proxy: ProxyEntity): Boolean {
-        val group = SagerDatabase.groupDao.getById(proxy.groupId) ?: return false
-        val link = group.subscription?.link?.trim().orEmpty()
-        if (!link.equals(DEDICATED_SUBSCRIPTION_LINK, ignoreCase = true)) return false
-        val bean = proxy.requireBean() as? ConfigBean ?: return false
-        return proxy.type == ProxyEntity.TYPE_CONFIG &&
-            bean.type == 0 &&
-            bean.name == DEDICATED_CONFIG_NAME
-    }
-
     fun isRemovalBlocked(group: ProxyGroup, proxy: ProxyEntity): Boolean {
         return isProtectedProfile(group, proxy) || isAutoSelectConfig(proxy)
     }
@@ -297,7 +246,7 @@ private suspend fun cleanupDuplicateSpecialConfigs(group: ProxyGroup) {
     val proxies = SagerDatabase.proxyDao.getByGroup(group.id)
     if (proxies.size < 2) return
     val autoName = SagerNet.application.getString(R.string.menu_auto_select)
-    val targets = setOf(autoName, GroupManager.YOUTUBE_INSTAGRAM_CONFIG_NAME, GroupManager.DEDICATED_CONFIG_NAME)
+    val targets = setOf(autoName)
     val candidates = proxies.filter { proxy ->
         proxy.type == ProxyEntity.TYPE_CONFIG &&
             (proxy.requireBean() as? ConfigBean)?.let { it.type == 0 && it.name in targets } == true
@@ -323,31 +272,6 @@ private suspend fun cleanupDuplicateSpecialConfigs(group: ProxyGroup) {
     }
 }
 
-private suspend fun ensureDefaultYoutubeInstagramConfig(group: ProxyGroup) {
-    val existing = SagerDatabase.proxyDao.getByGroup(group.id).firstOrNull { proxy ->
-        if (proxy.type != ProxyEntity.TYPE_CONFIG) return@firstOrNull false
-        val bean = proxy.requireBean() as? ConfigBean ?: return@firstOrNull false
-        bean.type == 0 && bean.name == GroupManager.YOUTUBE_INSTAGRAM_CONFIG_NAME
-    }
-    if (existing != null) return
-
-    val configText = runCatching {
-        SagerNet.application.assets.open("sing-box-config-all.json").bufferedReader().use {
-            it.readText()
-        }
-    }.getOrElse {
-        Logs.w(it)
-        return
-    }
-
-    val bean = ConfigBean().applyDefaultValues().apply {
-        type = 0
-        config = configText
-        name = GroupManager.YOUTUBE_INSTAGRAM_CONFIG_NAME
-    }
-    ProfileManager.createProfile(group.id, bean)
-}
-
 private suspend fun ensureDefaultAutoSelectConfig(group: ProxyGroup) {
     val autoName = SagerNet.application.getString(R.string.menu_auto_select)
     val existing = SagerDatabase.proxyDao.getByGroup(group.id).firstOrNull { proxy ->
@@ -361,22 +285,6 @@ private suspend fun ensureDefaultAutoSelectConfig(group: ProxyGroup) {
         type = 0
         config = ""
         name = autoName
-    }
-    ProfileManager.createProfile(group.id, bean)
-}
-
-private suspend fun ensureDedicatedAutoSelectConfig(group: ProxyGroup) {
-    val existing = SagerDatabase.proxyDao.getByGroup(group.id).firstOrNull { proxy ->
-        if (proxy.type != ProxyEntity.TYPE_CONFIG) return@firstOrNull false
-        val bean = proxy.requireBean() as? ConfigBean ?: return@firstOrNull false
-        bean.type == 0 && bean.name == GroupManager.DEDICATED_CONFIG_NAME
-    }
-    if (existing != null) return
-
-    val bean = ConfigBean().applyDefaultValues().apply {
-        type = 0
-        config = ""
-        name = GroupManager.DEDICATED_CONFIG_NAME
     }
     ProfileManager.createProfile(group.id, bean)
 }
