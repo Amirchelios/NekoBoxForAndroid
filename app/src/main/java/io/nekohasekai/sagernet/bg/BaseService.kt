@@ -17,7 +17,11 @@ import io.nekohasekai.sagernet.bg.proto.SmartSelector
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.SagerDatabase
-import io.nekohasekai.sagernet.ktx.*
+import io.nekohasekai.sagernet.ktx.Logs
+import io.nekohasekai.sagernet.ktx.broadcastReceiver
+import io.nekohasekai.sagernet.ktx.readableMessage
+import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
+import io.nekohasekai.sagernet.ktx.runOnMainDispatcher
 import io.nekohasekai.sagernet.plugin.PluginManager
 import io.nekohasekai.sagernet.utils.DefaultNetworkListener
 import kotlinx.coroutines.*
@@ -181,7 +185,15 @@ class BaseService {
 
         fun reload() {
             if (DataStore.selectedProxy == 0L) {
-                stopRunner(false, (this as Context).getString(R.string.profile_empty))
+                val auto = SagerDatabase.proxyDao.getAll()
+                    .firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
+                if (auto != null) {
+                    DataStore.selectedProxy = auto.id
+                    DataStore.currentProfile = auto.id
+                } else {
+                    stopRunner(false, (this as Context).getString(R.string.profile_empty))
+                    return
+                }
             }
             if (canReloadSelector()) {
                 val ent = SagerDatabase.proxyDao.getById(DataStore.selectedProxy)
