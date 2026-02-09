@@ -61,6 +61,9 @@
     <string name="update_status_line">%1$s: %2$s</string>
     <string name="startup_dedicated_checking">Checking dedicated config...</string>
     <string name="startup_dedicated_failed">Currently the app is experiencing issues. Thank you for your patience.</string>
+    <string name="startup_checking_servers">Checking server updates...</string>
+    <string name="startup_updating_servers">Updating servers...</string>
+    <string name="startup_brand_name">BluBox</string>
     <string name="group_status_proxies">%d Proxies</string>
     <string name="group_status_proxies_subscription">%d Proxies | Updated on %s</string>
     <string name="group_no_difference">%s: No difference</string>

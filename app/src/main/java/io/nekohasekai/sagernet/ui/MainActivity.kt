@@ -69,6 +69,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.max
 
 class MainActivity : ThemedActivity(),
     SagerConnection.Callback,
@@ -188,6 +189,7 @@ class MainActivity : ThemedActivity(),
             runFirstRunUpdate(defaultGroup)
         }
         ensureDefaultAutoSelectOnFirstRun()
+        runStartupServerCheck()
 
         if (intent?.action == Intent.ACTION_VIEW) {
             onNewIntent(intent)
@@ -1097,6 +1099,43 @@ class MainActivity : ThemedActivity(),
                     DataStore.selectedProxy = auto.id
                     DataStore.currentProfile = auto.id
                 }
+            }
+        }
+    }
+
+    private fun runStartupServerCheck() {
+        binding.startupLoading.isVisible = true
+        binding.startupLoading.post {
+            binding.startupLoading.bringToFront()
+            binding.startupLoading.alpha = 1f
+        }
+        binding.startupLoadingProgress.isIndeterminate = true
+        binding.startupLoadingText.setText(R.string.startup_checking_servers)
+        runOnDefaultDispatcher {
+            val startMs = System.currentTimeMillis()
+            val group = GroupManager.ensureDefaultSubscriptionGroup()
+            val subscription = group?.subscription
+            val needsUpdate = if (subscription == null) {
+                false
+            } else {
+                val lastUpdated = subscription.lastUpdated ?: 0
+                val delayMin = subscription.autoUpdateDelay ?: 1440
+                val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
+                lastUpdated == 0 || elapsedSec >= delayMin * 60
+            }
+            if (group != null && needsUpdate) {
+                onMainDispatcher {
+                    binding.startupLoadingText.setText(R.string.startup_updating_servers)
+                }
+                GroupUpdater.executeUpdate(group, false)
+            }
+            val elapsed = System.currentTimeMillis() - startMs
+            val remaining = max(0L, 4000L - elapsed)
+            if (remaining > 0L) {
+                delay(remaining)
+            }
+            onMainDispatcher {
+                binding.startupLoading.isVisible = false
             }
         }
     }
