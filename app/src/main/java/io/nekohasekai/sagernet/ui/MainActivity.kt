@@ -23,6 +23,7 @@ import androidx.activity.addCallback
 import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -51,6 +52,7 @@ import io.nekohasekai.sagernet.databinding.LayoutMainBinding
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.KryoConverters
 import io.nekohasekai.sagernet.fmt.PluginEntry
+import io.nekohasekai.sagernet.group.RawUpdater
 import io.nekohasekai.sagernet.group.GroupInterfaceAdapter
 import io.nekohasekai.sagernet.group.GroupUpdater
 import io.nekohasekai.sagernet.ktx.alert
@@ -63,6 +65,7 @@ import io.nekohasekai.sagernet.ktx.readableMessage
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import moe.matsuri.nb4a.utils.Util
 import libcore.Libcore
+import moe.matsuri.nb4a.proxy.config.ConfigBean
 import org.json.JSONObject
 import java.util.Locale
 import kotlinx.coroutines.Job
@@ -189,6 +192,7 @@ class MainActivity : ThemedActivity(),
             runFirstRunUpdate(defaultGroup, dedicatedGroup)
         }
         ensureDefaultAutoSelectOnFirstRun()
+        runStartupDriveAutoSelectSync()
         runStartupDedicatedGate()
 
         if (intent?.action == Intent.ACTION_VIEW) {
@@ -1152,6 +1156,48 @@ class MainActivity : ThemedActivity(),
                 }
             }
         }
+    }
+
+    private fun runStartupDriveAutoSelectSync() {
+        runOnDefaultDispatcher {
+            val groups = SagerDatabase.groupDao.subscriptions()
+            groups.forEach { group ->
+                val subscription = group.subscription ?: return@forEach
+                val link = subscription.link.trim()
+                if (!link.startsWith("content://")) return@forEach
+                val rawText = runCatching {
+                    contentResolver.openInputStream(link.toUri())
+                        ?.bufferedReader()
+                        ?.readText()
+                        .orEmpty()
+                }.getOrDefault("")
+                if (rawText.isBlank()) return@forEach
+                val fileProxies = RawUpdater.parseRaw(rawText) ?: return@forEach
+                val fileSignature = buildProxySignature(fileProxies)
+                val currentProxies = SagerDatabase.proxyDao.getByGroup(group.id)
+                val currentSignature = buildProxySignature(currentProxies)
+                if (fileSignature != currentSignature) {
+                    GroupUpdater.executeUpdate(group, false)
+                }
+            }
+        }
+    }
+
+    private fun buildProxySignature(proxies: List<AbstractBean>): List<String> {
+        return proxies
+            .filterNot { it is ConfigBean && it.type == 0 }
+            .map { "${it.displayName()}|${it.javaClass.name}" }
+            .sorted()
+    }
+
+    private fun buildProxySignature(proxies: List<io.nekohasekai.sagernet.database.ProxyEntity>): List<String> {
+        return proxies
+            .filterNot { GroupManager.isAutoSelectConfig(it) }
+            .mapNotNull { proxy ->
+                runCatching { proxy.requireBean() }.getOrNull()
+            }
+            .map { "${it.displayName()}|${it.javaClass.name}" }
+            .sorted()
     }
 
     private suspend fun runFirstRunUpdate(
