@@ -62,6 +62,7 @@
     <string name="startup_dedicated_checking">Checking dedicated config...</string>
     <string name="startup_dedicated_failed">Currently the app is experiencing issues. Thank you for your patience.</string>
     <string name="startup_checking_servers">Checking server updates...</string>
+    <string name="startup_checking_proxy_file">Checking proxy file...</string>
     <string name="startup_updating_servers">Updating servers...</string>
     <string name="startup_brand_name">BluBox</string>
     <string name="group_status_proxies">%d Proxies</string>

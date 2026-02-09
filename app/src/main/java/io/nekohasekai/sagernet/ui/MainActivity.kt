@@ -44,6 +44,7 @@ import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.database.ProxyGroup
+import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.SubscriptionBean
 import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.database.preference.OnPreferenceDataStoreChangeListener
@@ -53,10 +54,13 @@ import io.nekohasekai.sagernet.fmt.KryoConverters
 import io.nekohasekai.sagernet.fmt.PluginEntry
 import io.nekohasekai.sagernet.group.GroupInterfaceAdapter
 import io.nekohasekai.sagernet.group.GroupUpdater
+import io.nekohasekai.sagernet.group.RawUpdater
 import io.nekohasekai.sagernet.ktx.alert
+import io.nekohasekai.sagernet.ktx.applyDefaultValues
 import io.nekohasekai.sagernet.ktx.isPlay
 import io.nekohasekai.sagernet.ktx.isPreview
 import io.nekohasekai.sagernet.ktx.launchCustomTab
+import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.onMainDispatcher
 import io.nekohasekai.sagernet.ktx.parseProxies
 import io.nekohasekai.sagernet.ktx.readableMessage
@@ -70,6 +74,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
+import java.security.MessageDigest
+import androidx.core.net.toUri
+import moe.matsuri.nb4a.proxy.config.ConfigBean
 
 class MainActivity : ThemedActivity(),
     SagerConnection.Callback,
@@ -1103,6 +1110,85 @@ class MainActivity : ThemedActivity(),
         }
     }
 
+    private fun sha256Hex(text: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun resolveLocalSubscriptionGroup(): ProxyGroup? {
+        val groups = SagerDatabase.groupDao.allGroups()
+        val defaultGroup = groups.firstOrNull { GroupManager.isDefaultSubscriptionGroup(it) }
+        val defaultLink = defaultGroup?.subscription?.link?.trim().orEmpty()
+        if (defaultLink.startsWith("content://")) return defaultGroup
+        return groups.firstOrNull { group ->
+            group.type == GroupType.SUBSCRIPTION &&
+                group.subscription?.link?.trim()?.startsWith("content://") == true
+        }
+    }
+
+    private suspend fun updateAutoSelectFromLocalFile(): Boolean {
+        val group = resolveLocalSubscriptionGroup() ?: return false
+        val link = group.subscription?.link?.trim().orEmpty()
+        if (!link.startsWith("content://")) return false
+
+        onMainDispatcher {
+            binding.startupLoadingText.setText(R.string.startup_checking_proxy_file)
+        }
+
+        val rawText = runCatching {
+            SagerNet.application.contentResolver.openInputStream(link.toUri())
+                ?.bufferedReader()
+                ?.use { it.readText() }
+                .orEmpty()
+        }.getOrElse { e ->
+            Logs.w(e)
+            return false
+        }
+        if (rawText.isBlank()) return false
+
+        val newHash = sha256Hex(rawText)
+        if (newHash == DataStore.startupLocalSubHash) return false
+
+        val aggregateConfig = RawUpdater.buildAggregateConfigForRaw(rawText)
+        if (aggregateConfig.isBlank()) {
+            DataStore.startupLocalSubHash = newHash
+            return false
+        }
+
+        val autoName = getString(R.string.menu_auto_select)
+        val proxies = SagerDatabase.proxyDao.getByGroup(group.id)
+        val auto = proxies
+            .filter { it.type == ProxyEntity.TYPE_CONFIG }
+            .sortedWith(
+                compareByDescending<ProxyEntity> {
+                    (it.configBean as? ConfigBean)?.config?.isNotBlank() == true
+                }.thenBy { it.id }
+            )
+            .firstOrNull { proxy ->
+                val bean = proxy.configBean as? ConfigBean ?: return@firstOrNull false
+                bean.type == 0 && bean.name == autoName
+            }
+
+        if (auto == null) {
+            val bean = ConfigBean().applyDefaultValues().apply {
+                type = 0
+                config = aggregateConfig
+                name = autoName
+            }
+            ProfileManager.createProfile(group.id, bean)
+        } else {
+            val bean = (auto.configBean as? ConfigBean) ?: return false
+            if (bean.config != aggregateConfig) {
+                bean.config = aggregateConfig
+                auto.putBean(bean)
+                ProfileManager.updateProfile(auto)
+            }
+        }
+
+        DataStore.startupLocalSubHash = newHash
+        return true
+    }
+
     private fun runStartupServerCheck() {
         binding.startupLoading.isVisible = true
         binding.startupLoading.post {
@@ -1113,10 +1199,13 @@ class MainActivity : ThemedActivity(),
         binding.startupLoadingText.setText(R.string.startup_checking_servers)
         runOnDefaultDispatcher {
             val startMs = System.currentTimeMillis()
+            runCatching { updateAutoSelectFromLocalFile() }
             val group = GroupManager.ensureDefaultSubscriptionGroup()
             val subscription = group?.subscription
             val needsUpdate = if (subscription == null) {
                 false
+            } else if (group != null && GroupManager.isDefaultSubscriptionGroup(group)) {
+                true
             } else {
                 val lastUpdated = subscription.lastUpdated ?: 0
                 val delayMin = subscription.autoUpdateDelay ?: 1440

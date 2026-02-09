@@ -176,6 +176,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var parallelTolerance by configurationStore.int(Key.PARALLEL_TOLERANCE) { 50 }
     var autoSelectPrimary by configurationStore.string(Key.AUTO_SELECT_PRIMARY) { "parallel" }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
+    var startupLocalSubHash by configurationStore.string(Key.STARTUP_LOCAL_SUB_HASH) { "" }
 
     var tunImplementation by configurationStore.stringToInt(Key.TUN_IMPLEMENTATION) { TunImplementation.GVISOR }
     var profileTrafficStatistics by configurationStore.boolean(Key.PROFILE_TRAFFIC_STATISTICS) { true }

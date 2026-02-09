@@ -835,7 +835,7 @@ object RawUpdater : GroupUpdater() {
         }
     }
 
-    private fun sanitizeAggregateConfig(config: String): String {
+    internal fun sanitizeAggregateConfig(config: String): String {
         if (config.isBlank()) return config
         return runCatching {
             val root = JSONObject(config)
@@ -843,6 +843,12 @@ object RawUpdater : GroupUpdater() {
             sanitizeOutbounds(root)
             root.toString()
         }.getOrDefault(config)
+    }
+
+    fun buildAggregateConfigForRaw(rawText: String): String {
+        return sanitizeAggregateConfig(
+            ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
+        )
     }
 
     private fun sanitizeSingBoxConfig(config: String): String {
