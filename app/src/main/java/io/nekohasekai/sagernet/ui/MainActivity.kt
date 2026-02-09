@@ -1205,7 +1205,9 @@ class MainActivity : ThemedActivity(),
             val needsUpdate = if (subscription == null) {
                 false
             } else if (group != null && GroupManager.isDefaultSubscriptionGroup(group)) {
-                true
+                val lastUpdated = subscription.lastUpdated ?: 0
+                val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
+                lastUpdated == 0 || elapsedSec >= 3600
             } else {
                 val lastUpdated = subscription.lastUpdated ?: 0
                 val delayMin = subscription.autoUpdateDelay ?: 1440
