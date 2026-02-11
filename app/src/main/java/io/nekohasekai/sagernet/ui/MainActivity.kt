@@ -74,6 +74,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlin.math.max
 import java.security.MessageDigest
 import androidx.core.net.toUri
@@ -105,6 +107,9 @@ class MainActivity : ThemedActivity(),
     }
     private var internalProxyRestartJob: Job? = null
     private var pendingVpnStartJob: Job? = null
+    private val startupMinVisibleMs = 650L
+    private val startupUpdateTimeoutMs = 12_000L
+    private val startupUpdateIntervalSec = 7_200
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -194,8 +199,7 @@ class MainActivity : ThemedActivity(),
         GroupUpdater.listeners.add(updateProgressListener)
         applyConnectionPerformanceBaseline()
         runOnDefaultDispatcher {
-            val defaultGroup = GroupManager.ensureDefaultSubscriptionGroup()
-            runFirstRunUpdate(defaultGroup)
+            GroupManager.ensureDefaultSubscriptionGroup()
         }
         ensureDefaultAutoSelectOnFirstRun()
         runStartupServerCheck()
@@ -1284,11 +1288,14 @@ class MainActivity : ThemedActivity(),
 
     private fun runStartupServerCheck() {
         binding.startupLoading.isVisible = true
+        binding.startupLoadingText.isVisible = true
         binding.startupLoading.post {
             binding.startupLoading.bringToFront()
             binding.startupLoading.alpha = 1f
         }
-        binding.startupLoadingProgress.isIndeterminate = true
+        binding.startupLoadingProgress.isIndeterminate = false
+        binding.startupLoadingProgress.max = 1000
+        binding.startupLoadingProgress.progress = 0
         binding.startupLoadingText.setText(R.string.startup_checking_servers)
         runOnDefaultDispatcher {
             val startMs = System.currentTimeMillis()
@@ -1298,29 +1305,58 @@ class MainActivity : ThemedActivity(),
                 val subscription = group?.subscription
                 val needsUpdate = if (subscription == null) {
                     false
-                } else if (group != null && GroupManager.isDefaultSubscriptionGroup(group)) {
-                    val lastUpdated = subscription.lastUpdated ?: 0
-                    val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
-                    lastUpdated == 0 || elapsedSec >= 3600
                 } else {
                     val lastUpdated = subscription.lastUpdated ?: 0
-                    val delayMin = subscription.autoUpdateDelay ?: 1440
+                    val delayMin = max(120, subscription.autoUpdateDelay ?: 1440)
                     val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
-                    lastUpdated == 0 || elapsedSec >= delayMin * 60
+                    val intervalSec = if (group != null && GroupManager.isDefaultSubscriptionGroup(group)) {
+                        startupUpdateIntervalSec
+                    } else {
+                        delayMin * 60
+                    }
+                    lastUpdated == 0 || elapsedSec >= intervalSec
                 }
                 if (group != null && needsUpdate) {
                     onMainDispatcher {
                         binding.startupLoadingText.setText(R.string.startup_updating_servers)
+                        binding.startupLoadingProgress.progress = 0
                     }
-                    val updateResult = withTimeoutOrNull(25_000L) {
-                        GroupUpdater.executeUpdate(group, false)
+                    val updateStartedAt = System.currentTimeMillis()
+                    val updateResult = coroutineScope {
+                        val updater = async {
+                            withTimeoutOrNull(startupUpdateTimeoutMs) {
+                                GroupUpdater.executeUpdate(group, false)
+                            }
+                        }
+                        while (!updater.isCompleted) {
+                            val elapsed = System.currentTimeMillis() - updateStartedAt
+                            val progress =
+                                ((elapsed.coerceAtMost(startupUpdateTimeoutMs) * 1000L) / startupUpdateTimeoutMs).toInt()
+                            val elapsedSec = (elapsed / 1000L).toInt()
+                            val totalSec = (startupUpdateTimeoutMs / 1000L).toInt()
+                            val remainSec = (totalSec - elapsedSec).coerceAtLeast(0)
+                            onMainDispatcher {
+                                binding.startupLoadingProgress.progress = progress
+                                binding.startupLoadingText.text = getString(
+                                    R.string.startup_updating_servers_progress,
+                                    elapsedSec,
+                                    totalSec,
+                                    remainSec
+                                )
+                            }
+                            delay(200L)
+                        }
+                        updater.await()
                     }
                     if (updateResult == null) {
                         Logs.w("Startup server update timed out; continue launching UI.")
                     }
+                    onMainDispatcher {
+                        binding.startupLoadingProgress.progress = 1000
+                    }
                 }
                 val elapsed = System.currentTimeMillis() - startMs
-                val remaining = max(0L, 4000L - elapsed)
+                val remaining = max(0L, startupMinVisibleMs - elapsed)
                 if (remaining > 0L) {
                     delay(remaining)
                 }

@@ -32,6 +32,9 @@ import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.error.YAMLException
 import java.io.StringReader
 import androidx.core.net.toUri
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 @Suppress("EXPERIMENTAL_API_USAGE")
 object RawUpdater : GroupUpdater() {
@@ -68,19 +71,26 @@ object RawUpdater : GroupUpdater() {
             if (subscriptionLinks.isNotEmpty()) {
                 val aggregated = mutableListOf<AbstractBean>()
                 val rawTexts = mutableListOf<String>()
-                for (subLink in subscriptionLinks) {
-                    val subText = runCatching {
-                        Util.getStringBox(
-                            buildSubscriptionRequest(
-                                subLink,
-                                subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
-                            ).execute().contentString
-                        )
-                    }.getOrDefault("")
+                val userAgent = subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
+                val batches = coroutineScope {
+                    subscriptionLinks.take(8).map { subLink ->
+                        async {
+                            val subText = runCatching {
+                                Util.getStringBox(
+                                    buildSubscriptionRequest(subLink, userAgent)
+                                        .execute().contentString
+                                )
+                            }.getOrDefault("")
+                            if (subText.isBlank()) return@async Pair("", emptyList<AbstractBean>())
+                            val parsed = runCatching { parseRaw(subText).orEmpty() }.getOrElse { emptyList() }
+                            Pair(subText, parsed)
+                        }
+                    }.awaitAll()
+                }
+                for ((subText, subProxies) in batches) {
                     if (subText.isBlank()) continue
                     rawTexts.add(subText)
-                    val subProxies = parseRaw(subText)
-                    if (subProxies != null) {
+                    if (subProxies.isNotEmpty()) {
                         aggregated.addAll(subProxies)
                     }
                 }

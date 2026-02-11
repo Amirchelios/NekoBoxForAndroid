@@ -64,6 +64,7 @@
     <string name="startup_checking_servers">Checking server updates...</string>
     <string name="startup_checking_proxy_file">Checking proxy file...</string>
     <string name="startup_updating_servers">Updating servers...</string>
+    <string name="startup_updating_servers_progress">Updating servers... %1$ds/%2$ds (remaining %3$ds)</string>
     <string name="startup_brand_name">BluBox</string>
     <string name="group_status_proxies">%d Proxies</string>
     <string name="group_status_proxies_subscription">%d Proxies | Updated on %s</string>
