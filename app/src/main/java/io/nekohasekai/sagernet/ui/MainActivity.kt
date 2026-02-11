@@ -72,6 +72,7 @@ import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 import java.security.MessageDigest
@@ -1096,15 +1097,21 @@ class MainActivity : ThemedActivity(),
     private fun ensureDefaultAutoSelectOnFirstRun() {
         runOnDefaultDispatcher {
             val all = SagerDatabase.proxyDao.getAll()
-            val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) } ?: return@runOnDefaultDispatcher
+            val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
+            val fallback = auto ?: all.firstOrNull()
+            if (fallback == null) return@runOnDefaultDispatcher
             if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
-                if (DataStore.internalProxyUserSelected == 0L) {
-                    DataStore.internalProxyUserSelected = auto.id
+                val selected = DataStore.internalProxyUserSelected
+                val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
+                if (!selectedExists) {
+                    DataStore.internalProxyUserSelected = fallback.id
                 }
             } else {
-                if (DataStore.selectedProxy == 0L) {
-                    DataStore.selectedProxy = auto.id
-                    DataStore.currentProfile = auto.id
+                val selected = DataStore.selectedProxy
+                val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
+                if (!selectedExists) {
+                    DataStore.selectedProxy = fallback.id
+                    DataStore.currentProfile = fallback.id
                 }
             }
         }
@@ -1199,34 +1206,44 @@ class MainActivity : ThemedActivity(),
         binding.startupLoadingText.setText(R.string.startup_checking_servers)
         runOnDefaultDispatcher {
             val startMs = System.currentTimeMillis()
-            runCatching { updateAutoSelectFromLocalFile() }
-            val group = GroupManager.ensureDefaultSubscriptionGroup()
-            val subscription = group?.subscription
-            val needsUpdate = if (subscription == null) {
-                false
-            } else if (group != null && GroupManager.isDefaultSubscriptionGroup(group)) {
-                val lastUpdated = subscription.lastUpdated ?: 0
-                val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
-                lastUpdated == 0 || elapsedSec >= 3600
-            } else {
-                val lastUpdated = subscription.lastUpdated ?: 0
-                val delayMin = subscription.autoUpdateDelay ?: 1440
-                val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
-                lastUpdated == 0 || elapsedSec >= delayMin * 60
-            }
-            if (group != null && needsUpdate) {
-                onMainDispatcher {
-                    binding.startupLoadingText.setText(R.string.startup_updating_servers)
+            try {
+                runCatching { updateAutoSelectFromLocalFile() }
+                val group = runCatching { GroupManager.ensureDefaultSubscriptionGroup() }.getOrNull()
+                val subscription = group?.subscription
+                val needsUpdate = if (subscription == null) {
+                    false
+                } else if (group != null && GroupManager.isDefaultSubscriptionGroup(group)) {
+                    val lastUpdated = subscription.lastUpdated ?: 0
+                    val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
+                    lastUpdated == 0 || elapsedSec >= 3600
+                } else {
+                    val lastUpdated = subscription.lastUpdated ?: 0
+                    val delayMin = subscription.autoUpdateDelay ?: 1440
+                    val elapsedSec = (System.currentTimeMillis() / 1000).toInt() - lastUpdated
+                    lastUpdated == 0 || elapsedSec >= delayMin * 60
                 }
-                GroupUpdater.executeUpdate(group, false)
-            }
-            val elapsed = System.currentTimeMillis() - startMs
-            val remaining = max(0L, 4000L - elapsed)
-            if (remaining > 0L) {
-                delay(remaining)
-            }
-            onMainDispatcher {
-                binding.startupLoading.isVisible = false
+                if (group != null && needsUpdate) {
+                    onMainDispatcher {
+                        binding.startupLoadingText.setText(R.string.startup_updating_servers)
+                    }
+                    val updateResult = withTimeoutOrNull(25_000L) {
+                        GroupUpdater.executeUpdate(group, false)
+                    }
+                    if (updateResult == null) {
+                        Logs.w("Startup server update timed out; continue launching UI.")
+                    }
+                }
+                val elapsed = System.currentTimeMillis() - startMs
+                val remaining = max(0L, 4000L - elapsed)
+                if (remaining > 0L) {
+                    delay(remaining)
+                }
+            } catch (e: Throwable) {
+                Logs.w(e)
+            } finally {
+                onMainDispatcher {
+                    binding.startupLoading.isVisible = false
+                }
             }
         }
     }

@@ -184,12 +184,16 @@ class BaseService {
             if (intent.action == Action.SERVICE) data.binder else null
 
         fun reload() {
-            if (DataStore.selectedProxy == 0L) {
-                val auto = SagerDatabase.proxyDao.getAll()
+            val selected = DataStore.selectedProxy
+            val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
+            if (!selectedExists) {
+                val all = SagerDatabase.proxyDao.getAll()
+                val auto = all
                     .firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
-                if (auto != null) {
-                    DataStore.selectedProxy = auto.id
-                    DataStore.currentProfile = auto.id
+                val fallback = auto ?: all.firstOrNull()
+                if (fallback != null) {
+                    DataStore.selectedProxy = fallback.id
+                    DataStore.currentProfile = fallback.id
                 } else {
                     stopRunner(false, (this as Context).getString(R.string.profile_empty))
                     return

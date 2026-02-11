@@ -7,6 +7,8 @@ import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.bg.SubscriptionUpdater
 import io.nekohasekai.sagernet.ktx.applyDefaultValues
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import moe.matsuri.nb4a.proxy.config.ConfigBean
 
 object GroupManager {
@@ -18,6 +20,7 @@ object GroupManager {
     private const val LEGACY_DEDICATED_SUBSCRIPTION_LINK =
         "https://drive.usercontent.google.com/u/0/uc?id=1JHaY3RHNHR2sYd_zu9CvNH6IdFv2ggec&export=download"
     private const val LEGACY_DEDICATED_CONFIG_NAME = "کانفیگ اختصاصی"
+    private val ensureDefaultGroupMutex = Mutex()
 
     interface Listener {
         suspend fun groupAdd(group: ProxyGroup)
@@ -128,18 +131,38 @@ object GroupManager {
         SubscriptionUpdater.reconfigureUpdater()
     }
 
-    suspend fun ensureDefaultSubscriptionGroup(): ProxyGroup? {
-        val existing = SagerDatabase.groupDao.allGroups().firstOrNull { isProtectedGroup(it) }
+    suspend fun ensureDefaultSubscriptionGroup(): ProxyGroup? = ensureDefaultGroupMutex.withLock {
+        val groups = SagerDatabase.groupDao.allGroups()
+        var existing = groups.firstOrNull { isProtectedGroup(it) }
+            ?: groups.firstOrNull { it.type == GroupType.SUBSCRIPTION && it.name == DEFAULT_SUBSCRIPTION_GROUP_NAME }
         if (existing != null) {
+            var changed = false
             if (existing.name != DEFAULT_SUBSCRIPTION_GROUP_NAME) {
                 existing.name = DEFAULT_SUBSCRIPTION_GROUP_NAME
+                changed = true
+            }
+            if (existing.type != GroupType.SUBSCRIPTION) {
+                existing.type = GroupType.SUBSCRIPTION
+                changed = true
+            }
+            if (existing.subscription == null) {
+                existing.subscription = SubscriptionBean().applyDefaultValues()
+                changed = true
+            }
+            if (!isDefaultSubscriptionGroup(existing)) {
+                existing.subscription!!.link = DEFAULT_SUBSCRIPTION_LINK
+                changed = true
+            }
+            if (changed) {
                 SagerDatabase.groupDao.updateGroup(existing)
                 iterator { groupUpdated(existing) }
+                SubscriptionUpdater.reconfigureUpdater()
             }
             ensureDefaultAutoSelectConfig(existing)
+            cleanupDuplicateDefaultSubscriptionGroups(existing)
             cleanupLegacyArtifacts()
             cleanupDuplicateSpecialConfigs(existing)
-            return existing
+            return@withLock existing
         }
         val group = ProxyGroup(type = GroupType.SUBSCRIPTION).apply {
             name = DEFAULT_SUBSCRIPTION_GROUP_NAME
@@ -147,12 +170,11 @@ object GroupManager {
                 it.link = DEFAULT_SUBSCRIPTION_LINK
             }
         }
-        return createGroup(group).also {
-            if (it != null) {
-                ensureDefaultAutoSelectConfig(it)
-                cleanupLegacyArtifacts()
-                cleanupDuplicateSpecialConfigs(it)
-            }
+        return@withLock createGroup(group).also {
+            ensureDefaultAutoSelectConfig(it)
+            cleanupDuplicateDefaultSubscriptionGroups(it)
+            cleanupLegacyArtifacts()
+            cleanupDuplicateSpecialConfigs(it)
         }
     }
 
@@ -240,6 +262,36 @@ object GroupManager {
         return isRemovalBlocked(group, proxy)
     }
 
+}
+
+private suspend fun cleanupDuplicateDefaultSubscriptionGroups(keepGroup: ProxyGroup) {
+    val duplicates = SagerDatabase.groupDao.allGroups().filter { group ->
+        group.id != keepGroup.id &&
+            group.type == GroupType.SUBSCRIPTION &&
+            (group.name == DEFAULT_SUBSCRIPTION_GROUP_NAME || GroupManager.isDefaultSubscriptionGroup(group))
+    }
+    if (duplicates.isEmpty()) return
+
+    for (duplicate in duplicates) {
+        val proxies = SagerDatabase.proxyDao.getByGroup(duplicate.id)
+        if (proxies.isNotEmpty()) {
+            val nextOrderStart = (SagerDatabase.proxyDao.nextOrder(keepGroup.id) ?: 1L) - 1L
+            proxies.forEachIndexed { index, proxy ->
+                proxy.groupId = keepGroup.id
+                proxy.userOrder = nextOrderStart + index + 1
+            }
+            SagerDatabase.proxyDao.updateProxy(proxies)
+        }
+
+        if (DataStore.selectedGroup == duplicate.id) {
+            DataStore.selectedGroup = keepGroup.id
+        }
+        SagerDatabase.groupDao.deleteById(duplicate.id)
+        GroupManager.iterator { groupRemoved(duplicate.id) }
+    }
+    GroupManager.rearrange(keepGroup.id)
+    GroupManager.iterator { groupUpdated(keepGroup.id) }
+    SubscriptionUpdater.reconfigureUpdater()
 }
 
 private suspend fun cleanupDuplicateSpecialConfigs(group: ProxyGroup) {
