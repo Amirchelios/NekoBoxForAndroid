@@ -158,12 +158,12 @@ class MainActivity : ThemedActivity(),
                         }
                         DataStore.internalProxyActive = false
                         DataStore.internalProxyProfileId = 0L
-                        connect.launch(null)
+                        launchConnectWithAutoFallback()
                     }
                 } else {
                     DataStore.internalProxyActive = false
                     DataStore.internalProxyProfileId = 0L
-                    connect.launch(null)
+                    launchConnectWithAutoFallback()
                 }
             } else if (DataStore.serviceState.canStop) {
                 SagerNet.stopService()
@@ -171,7 +171,7 @@ class MainActivity : ThemedActivity(),
                 if (DataStore.clientMode && DataStore.serviceMode != Key.MODE_VPN) {
                     DataStore.serviceMode = Key.MODE_VPN
                 }
-                connect.launch(null)
+                launchConnectWithAutoFallback()
             }
         }
         binding.stats.setOnClickListener(null)
@@ -535,7 +535,7 @@ class MainActivity : ThemedActivity(),
                 }
                 delay(100L)
             }
-            connect.launch(null)
+            launchConnectWithAutoFallback()
         }
     }
 
@@ -1115,6 +1115,32 @@ class MainActivity : ThemedActivity(),
                 }
             }
         }
+    }
+
+    private fun launchConnectWithAutoFallback() {
+        runOnDefaultDispatcher {
+            val ok = ensureSelectedProxyForConnect()
+            onMainDispatcher {
+                if (ok) {
+                    connect.launch(null)
+                } else {
+                    snackbar(R.string.profile_empty).show()
+                }
+            }
+        }
+    }
+
+    private fun ensureSelectedProxyForConnect(): Boolean {
+        val selected = DataStore.selectedProxy
+        val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
+        if (selectedExists) return true
+
+        val all = SagerDatabase.proxyDao.getAll()
+        val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
+        val fallback = auto ?: all.firstOrNull() ?: return false
+        DataStore.selectedProxy = fallback.id
+        DataStore.currentProfile = fallback.id
+        return true
     }
 
     private fun sha256Hex(text: String): String {
