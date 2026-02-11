@@ -908,6 +908,7 @@ object RawUpdater : GroupUpdater() {
             if (type == "urltest") {
                 outbound.remove("timeout")
                 outbound.remove("timeoout")
+                outbound.put("interrupt_exist_connections", false)
             }
             if (isInvalidRealityOutbound(outbound)) {
                 outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
@@ -934,6 +935,9 @@ object RawUpdater : GroupUpdater() {
                         filtered.put("direct")
                     }
                     outbound.put("outbounds", filtered)
+                    if (outbound.optString("type") == "selector") {
+                        fixSelectorDefault(outbound, filtered)
+                    }
                 }
             }
         }
@@ -979,10 +983,31 @@ object RawUpdater : GroupUpdater() {
                         filtered.put("direct")
                     }
                     outbound.put("outbounds", filtered)
+                    if (outbound.optString("type") == "selector") {
+                        fixSelectorDefault(outbound, filtered)
+                    }
                 }
             }
         }
         root.put("outbounds", newOutbounds)
+    }
+
+    private fun fixSelectorDefault(selector: JSONObject, outbounds: JSONArray) {
+        val defaultTag = selector.optString("default")
+        if (defaultTag.isBlank()) return
+        var exists = false
+        for (i in 0 until outbounds.length()) {
+            if (outbounds.optString(i) == defaultTag) {
+                exists = true
+                break
+            }
+        }
+        if (exists) return
+        if (outbounds.length() > 0) {
+            selector.put("default", outbounds.optString(0))
+        } else {
+            selector.remove("default")
+        }
     }
 
     private fun isInvalidRealityOutbound(outbound: JSONObject): Boolean {
@@ -1026,8 +1051,10 @@ object RawUpdater : GroupUpdater() {
         val parallelConcurrency = DataStore.parallelConcurrency.coerceIn(2, 32)
         val parallelDelayMs = DataStore.parallelDelayMs.coerceIn(50, 1500)
         val parallelTimeoutMs = DataStore.parallelTimeoutMs.coerceIn(1500, 15000)
-        val parallelIntervalSec = DataStore.parallelIntervalSec.coerceIn(10, 600)
+        val parallelIntervalSec = DataStore.parallelIntervalSec.coerceIn(5, 600)
         val parallelTolerance = DataStore.parallelTolerance.coerceIn(10, 300)
+        val parallelStrategy = DataStore.parallelStrategy.ifBlank { "race" }
+        val primaryTag = if (DataStore.autoSelectPrimary == "urltest") "auto" else "auto_parallel"
         for (raw in rawTexts) {
             val jsonText = ProxyToSingboxConverter.convertToSingBoxJson(raw).orEmpty()
             if (jsonText.isBlank()) continue
@@ -1065,6 +1092,7 @@ object RawUpdater : GroupUpdater() {
         merged.put(JSONObject().apply {
             put("type", "selector")
             put("tag", "proxy")
+            put("default", primaryTag)
             val list = JSONArray()
             list.put("auto_parallel")
             list.put("auto")
@@ -1082,7 +1110,7 @@ object RawUpdater : GroupUpdater() {
             val list = JSONArray()
             validTags.forEach { list.put(it) }
             put("outbounds", list)
-            put("strategy", "race")
+            put("strategy", parallelStrategy)
             put("concurrency", parallelConcurrency)
             put("delay", "${parallelDelayMs}ms")
             put("timeout", "${parallelTimeoutMs}ms")

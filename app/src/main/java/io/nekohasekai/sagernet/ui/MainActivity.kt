@@ -192,6 +192,7 @@ class MainActivity : ThemedActivity(),
         DataStore.configurationStore.registerChangeListener(this)
         GroupManager.userInterface = GroupInterfaceAdapter(this)
         GroupUpdater.listeners.add(updateProgressListener)
+        applyConnectionPerformanceBaseline()
         runOnDefaultDispatcher {
             val defaultGroup = GroupManager.ensureDefaultSubscriptionGroup()
             runFirstRunUpdate(defaultGroup)
@@ -1127,6 +1128,65 @@ class MainActivity : ThemedActivity(),
                     snackbar(R.string.profile_empty).show()
                 }
             }
+        }
+    }
+
+    private fun applyConnectionPerformanceBaseline() {
+        runOnDefaultDispatcher {
+            val key = "perfBaselineV4Done"
+            if (DataStore.configurationStore.getBoolean(key, false)) return@runOnDefaultDispatcher
+
+            if (DataStore.parallelConcurrency < 16) DataStore.parallelConcurrency = 24
+            if (DataStore.parallelDelayMs > 180) DataStore.parallelDelayMs = 120
+            if (DataStore.parallelTimeoutMs < 5000) DataStore.parallelTimeoutMs = 8000
+            if (DataStore.parallelIntervalSec > 60) DataStore.parallelIntervalSec = 20
+            if (DataStore.parallelTolerance > 40) DataStore.parallelTolerance = 20
+            if (DataStore.connectionTestConcurrent > 32 || DataStore.connectionTestConcurrent < 8) {
+                DataStore.connectionTestConcurrent = 20
+            }
+            val oldParallelUrl = DataStore.parallelUrl.trim()
+            if (
+                oldParallelUrl.isBlank() ||
+                oldParallelUrl == "https://cp.cloudflare.com/generate_204" ||
+                oldParallelUrl == "http://cp.cloudflare.com/" ||
+                oldParallelUrl == "https://www.gstatic.com/generate_204"
+            ) {
+                DataStore.parallelUrl = "https://speed.cloudflare.com/__down?bytes=1000000"
+            }
+            DataStore.autoSelectPrimary = "parallel"
+            if (DataStore.smartSwitchCooldownSec < 90) DataStore.smartSwitchCooldownSec = 120
+            if (DataStore.smartSwitchMinDwellSec < 90) DataStore.smartSwitchMinDwellSec = 150
+            if (DataStore.smartSwitchProbeIntervalSec < 20 || DataStore.smartSwitchProbeIntervalSec > 60) {
+                DataStore.smartSwitchProbeIntervalSec = 30
+            }
+            if (DataStore.smartSwitchBadProbeIntervalSec < 6 || DataStore.smartSwitchBadProbeIntervalSec > 20) {
+                DataStore.smartSwitchBadProbeIntervalSec = 10
+            }
+            if (DataStore.smartSwitchWarmupRounds < 2 || DataStore.smartSwitchWarmupRounds > 6) {
+                DataStore.smartSwitchWarmupRounds = 3
+            }
+            if (DataStore.smartSwitchCandidateWins < 3 || DataStore.smartSwitchCandidateWins > 8) {
+                DataStore.smartSwitchCandidateWins = 4
+            }
+            if (DataStore.smartSwitchCandidateWinsWarmup < 1 || DataStore.smartSwitchCandidateWinsWarmup > 4) {
+                DataStore.smartSwitchCandidateWinsWarmup = 2
+            }
+            if (DataStore.smartSwitchMinImproveAbs < 150 || DataStore.smartSwitchMinImproveAbs > 600) {
+                DataStore.smartSwitchMinImproveAbs = 260
+            }
+            if (DataStore.smartSwitchMinImprovePct < 10 || DataStore.smartSwitchMinImprovePct > 40) {
+                DataStore.smartSwitchMinImprovePct = 20
+            }
+            if (DataStore.smartSwitchWeakScore < 800 || DataStore.smartSwitchWeakScore > 1800) {
+                DataStore.smartSwitchWeakScore = 1100
+            }
+            if (DataStore.smartSwitchCriticalScore < 1000 || DataStore.smartSwitchCriticalScore > 2600) {
+                DataStore.smartSwitchCriticalScore = 1500
+            }
+            if (DataStore.smartSwitchFailStreakTrigger < 2 || DataStore.smartSwitchFailStreakTrigger > 8) {
+                DataStore.smartSwitchFailStreakTrigger = 3
+            }
+            DataStore.configurationStore.putBoolean(key, true)
         }
     }
 

@@ -112,27 +112,27 @@
             app:title="@string/parallel_strategy"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
-            app:defaultValue="15"
+            app:defaultValue="24"
             app:key="parallelConcurrency"
             app:title="@string/parallel_concurrency"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
-            app:defaultValue="300"
+            app:defaultValue="120"
             app:key="parallelDelayMs"
             app:title="@string/parallel_delay_ms"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
-            app:defaultValue="5000"
+            app:defaultValue="8000"
             app:key="parallelTimeoutMs"
             app:title="@string/parallel_timeout_ms"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
-            app:defaultValue="https://cp.cloudflare.com/generate_204"
+            app:defaultValue="https://speed.cloudflare.com/__down?bytes=1000000"
             app:key="parallelUrl"
             app:title="@string/parallel_url"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
-            app:defaultValue="180"
+            app:defaultValue="20"
             app:key="parallelIntervalSec"
             app:title="@string/parallel_interval_sec"
             app:useSimpleSummaryProvider="true" />
@@ -142,7 +142,7 @@
             app:title="@string/parallel_idle_timeout_min"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
-            app:defaultValue="50"
+            app:defaultValue="20"
             app:key="parallelTolerance"
             app:title="@string/parallel_tolerance"
             app:useSimpleSummaryProvider="true" />

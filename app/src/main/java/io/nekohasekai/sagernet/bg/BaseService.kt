@@ -86,6 +86,7 @@ class BaseService {
 
         val binder = Binder(this)
         var connectingJob: Job? = null
+        var smartSwitchJob: Job? = null
 
         fun changeState(s: State, msg: String? = null) {
             if (state == s && msg == null) return
@@ -264,6 +265,7 @@ class BaseService {
 
             runOnMainDispatcher {
                 data.connectingJob?.cancelAndJoin() // ensure stop connecting first
+                data.smartSwitchJob?.cancelAndJoin()
                 // we use a coroutineScope here to allow clean-up in parallel
                 coroutineScope {
                     killProcesses()
@@ -273,6 +275,7 @@ class BaseService {
                         data.closeReceiverRegistered = false
                     }
                     data.proxy = null
+                    data.smartSwitchJob = null
                 }
 
                 // change the state
@@ -394,22 +397,149 @@ class BaseService {
 
                     if (GroupManager.isAutoSelectAggregate(profile)) {
                         runOnDefaultDispatcher {
+                            val cooldownMs =
+                                DataStore.smartSwitchCooldownSec.coerceIn(30, 900) * 1000L
+                            val minDwellMs =
+                                DataStore.smartSwitchMinDwellSec.coerceIn(30, 1200) * 1000L
+                            val normalProbeMs =
+                                DataStore.smartSwitchProbeIntervalSec.coerceIn(10, 120) * 1000L
+                            val badProbeMs =
+                                DataStore.smartSwitchBadProbeIntervalSec.coerceIn(5, 60) * 1000L
+                            val warmupRounds = DataStore.smartSwitchWarmupRounds.coerceIn(1, 8)
+                            val baseWins = DataStore.smartSwitchCandidateWins.coerceIn(2, 10)
+                            val warmupWins =
+                                DataStore.smartSwitchCandidateWinsWarmup.coerceIn(1, 5)
+                            val minImproveAbs =
+                                DataStore.smartSwitchMinImproveAbs.coerceIn(80, 1200)
+                            val minImprovePct =
+                                DataStore.smartSwitchMinImprovePct.coerceIn(8, 60)
+                            val weakScore = DataStore.smartSwitchWeakScore.coerceIn(600, 3000)
+                            val criticalScore =
+                                DataStore.smartSwitchCriticalScore.coerceIn(800, 5000)
+                            val failTrigger =
+                                DataStore.smartSwitchFailStreakTrigger.coerceIn(1, 10)
+
+                            var activeId = 0L
+                            var activeSinceMs = System.currentTimeMillis()
+                            var lastSwitchAtMs = 0L
+                            var pendingCandidateId = 0L
+                            var pendingWins = 0
+
+                            fun activeStats(): Pair<Int, Int> {
+                                if (activeId <= 0L) return Pair(-1, 0)
+                                return Pair(
+                                    DataStore.getSmartLastScore(activeId),
+                                    DataStore.getSmartFailureStreak(activeId)
+                                )
+                            }
+
+                            fun isCritical(score: Int, streak: Int): Boolean {
+                                return score <= 0 || score >= criticalScore || streak >= failTrigger + 1
+                            }
+
+                            fun isWeak(score: Int, streak: Int): Boolean {
+                                return isCritical(score, streak) || score >= weakScore || streak >= failTrigger
+                            }
+
+                            fun selectOutboundById(id: Long): Boolean {
+                                if (id <= 0L) return false
+                                val tag = data.proxy?.config?.profileTagMap?.get(id).orEmpty()
+                                if (tag.isBlank()) return false
+                                data.proxy?.box?.selectOutbound(tag)
+                                activeId = id
+                                activeSinceMs = System.currentTimeMillis()
+                                lastSwitchAtMs = activeSinceMs
+                                return true
+                            }
+
+                            fun maybeSwitchTo(id: Long, warmup: Boolean) {
+                                if (id <= 0L) return
+                                if (id == activeId) {
+                                    pendingCandidateId = 0L
+                                    pendingWins = 0
+                                    return
+                                }
+                                val candidateScore = DataStore.getSmartLastScore(id)
+                                if (candidateScore <= 0) return
+
+                                val now = System.currentTimeMillis()
+                                val (activeScore, activeStreak) = activeStats()
+                                val activeCritical = isCritical(activeScore, activeStreak)
+                                val activeWeak = isWeak(activeScore, activeStreak)
+
+                                if (!warmup && !activeCritical && now - lastSwitchAtMs < cooldownMs) return
+                                if (!activeCritical && now - activeSinceMs < minDwellMs) return
+
+                                val improveAbs = if (activeScore > 0) activeScore - candidateScore else Int.MAX_VALUE
+                                val improvePctEnough =
+                                    activeScore <= 0 || candidateScore * 100 <= activeScore * (100 - minImprovePct)
+                                val improveAbsEnough = activeScore <= 0 || improveAbs >= minImproveAbs
+                                val activeExcellent = activeScore in 1..700 && activeStreak == 0
+                                val improveEnough = when {
+                                    activeCritical -> true
+                                    activeExcellent -> {
+                                        val strictAbs = minImproveAbs + 180
+                                        val strictPct = (minImprovePct + 8).coerceAtMost(70)
+                                        improveAbs >= strictAbs ||
+                                            candidateScore * 100 <= activeScore * (100 - strictPct)
+                                    }
+                                    else -> improveAbsEnough || improvePctEnough
+                                }
+                                if (!improveEnough) {
+                                    if (pendingCandidateId == id) pendingWins = 0
+                                    return
+                                }
+
+                                if (pendingCandidateId == id) {
+                                    pendingWins++
+                                } else {
+                                    pendingCandidateId = id
+                                    pendingWins = 1
+                                }
+
+                                val requiredWins = when {
+                                    activeCritical -> 1
+                                    warmup -> warmupWins + if (activeExcellent) 1 else 0
+                                    activeWeak -> baseWins
+                                    else -> baseWins + 1
+                                }.coerceAtLeast(1)
+                                if (pendingWins < requiredWins) return
+
+                                if (selectOutboundById(id)) {
+                                    pendingCandidateId = 0L
+                                    pendingWins = 0
+                                }
+                            }
+
                             val preferredId = DataStore.getSmartPreferredProxy(profile.groupId)
                             if (preferredId > 0L) {
-                                data.proxy?.config?.profileTagMap?.get(preferredId)?.let { tag ->
-                                    data.proxy?.box?.selectOutbound(tag)
-                                }
+                                selectOutboundById(preferredId)
                             }
                             val fastId = SmartSelector.selectBestFast(profile.groupId)
                             if (fastId != null) {
-                                data.proxy?.config?.profileTagMap?.get(fastId)?.let { tag ->
-                                    data.proxy?.box?.selectOutbound(tag)
-                                }
+                                maybeSwitchTo(fastId, warmup = true)
                             }
                             SmartSelector.applyCachedOrder(profile.groupId)
                             val best = SmartSelector.selectBest(profile.groupId)
                             if (best != null) {
-                                SagerNet.reloadService()
+                                maybeSwitchTo(best, warmup = true)
+                            }
+
+                            data.smartSwitchJob?.cancel()
+                            data.smartSwitchJob = runOnDefaultDispatcher {
+                                repeat(warmupRounds) {
+                                    delay(badProbeMs)
+                                    if (DataStore.serviceState != State.Connected) return@runOnDefaultDispatcher
+                                    val id = SmartSelector.selectBestFast(profile.groupId) ?: return@repeat
+                                    maybeSwitchTo(id, warmup = true)
+                                }
+                                while (DataStore.serviceState == State.Connected) {
+                                    val (score, streak) = activeStats()
+                                    val delayMs = if (isWeak(score, streak)) badProbeMs else normalProbeMs
+                                    delay(delayMs)
+                                    val id = SmartSelector.selectBestFast(profile.groupId) ?: continue
+                                    maybeSwitchTo(id, warmup = false)
+                                }
                             }
                         }
                     }

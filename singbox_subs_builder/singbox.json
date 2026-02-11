@@ -95,6 +95,7 @@
     {
       "type": "selector",
       "tag": "proxy",
+      "default": "auto_parallel",
       "outbounds": [
         "auto_parallel",
         "auto",
@@ -311,9 +312,9 @@
         "vless-e3f8b2ec"
       ],
       "strategy": "race",
-      "concurrency": 12,
-      "delay": "250ms",
-      "timeout": "5000ms"
+      "concurrency": 24,
+      "delay": "120ms",
+      "timeout": "8000ms"
     },
     {
       "type": "urltest",
@@ -420,10 +421,10 @@
         "vless-746c5c75",
         "vless-e3f8b2ec"
       ],
-      "url": "https://cp.cloudflare.com/generate_204",
+      "url": "https://speed.cloudflare.com/__down?bytes=1000000",
       "interrupt_exist_connections": false,
-      "interval": "15s",
-      "tolerance": 80
+      "interval": "8s",
+      "tolerance": 20
     },
     {
       "type": "vless",

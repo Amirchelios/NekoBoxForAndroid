@@ -169,16 +169,30 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     var appendHttpProxy by configurationStore.boolean(Key.APPEND_HTTP_PROXY)
     var connectionTestURL by configurationStore.string(Key.CONNECTION_TEST_URL) { CONNECTION_TEST_URL }
-    var connectionTestConcurrent by configurationStore.int("connectionTestConcurrent") { 50 }
+    var connectionTestConcurrent by configurationStore.int("connectionTestConcurrent") { 20 }
     var parallelStrategy by configurationStore.string(Key.PARALLEL_STRATEGY) { "race" }
-    var parallelConcurrency by configurationStore.int(Key.PARALLEL_CONCURRENCY) { 15 }
-    var parallelDelayMs by configurationStore.int(Key.PARALLEL_DELAY) { 300 }
-    var parallelTimeoutMs by configurationStore.int(Key.PARALLEL_TIMEOUT) { 5000 }
-    var parallelUrl by configurationStore.string(Key.PARALLEL_URL) { CONNECTION_TEST_URL }
-    var parallelIntervalSec by configurationStore.int(Key.PARALLEL_INTERVAL) { 180 }
+    var parallelConcurrency by configurationStore.int(Key.PARALLEL_CONCURRENCY) { 24 }
+    var parallelDelayMs by configurationStore.int(Key.PARALLEL_DELAY) { 120 }
+    var parallelTimeoutMs by configurationStore.int(Key.PARALLEL_TIMEOUT) { 8000 }
+    var parallelUrl by configurationStore.string(Key.PARALLEL_URL) {
+        "https://speed.cloudflare.com/__down?bytes=1000000"
+    }
+    var parallelIntervalSec by configurationStore.int(Key.PARALLEL_INTERVAL) { 20 }
     var parallelIdleTimeoutMin by configurationStore.int(Key.PARALLEL_IDLE_TIMEOUT) { 30 }
-    var parallelTolerance by configurationStore.int(Key.PARALLEL_TOLERANCE) { 50 }
+    var parallelTolerance by configurationStore.int(Key.PARALLEL_TOLERANCE) { 20 }
     var autoSelectPrimary by configurationStore.string(Key.AUTO_SELECT_PRIMARY) { "parallel" }
+    var smartSwitchCooldownSec by configurationStore.int("smartSwitchCooldownSec") { 120 }
+    var smartSwitchMinDwellSec by configurationStore.int("smartSwitchMinDwellSec") { 150 }
+    var smartSwitchProbeIntervalSec by configurationStore.int("smartSwitchProbeIntervalSec") { 30 }
+    var smartSwitchBadProbeIntervalSec by configurationStore.int("smartSwitchBadProbeIntervalSec") { 10 }
+    var smartSwitchWarmupRounds by configurationStore.int("smartSwitchWarmupRounds") { 3 }
+    var smartSwitchCandidateWins by configurationStore.int("smartSwitchCandidateWins") { 4 }
+    var smartSwitchCandidateWinsWarmup by configurationStore.int("smartSwitchCandidateWinsWarmup") { 2 }
+    var smartSwitchMinImproveAbs by configurationStore.int("smartSwitchMinImproveAbs") { 260 }
+    var smartSwitchMinImprovePct by configurationStore.int("smartSwitchMinImprovePct") { 20 }
+    var smartSwitchWeakScore by configurationStore.int("smartSwitchWeakScore") { 1100 }
+    var smartSwitchCriticalScore by configurationStore.int("smartSwitchCriticalScore") { 1500 }
+    var smartSwitchFailStreakTrigger by configurationStore.int("smartSwitchFailStreakTrigger") { 3 }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
     var startupLocalSubHash by configurationStore.string(Key.STARTUP_LOCAL_SUB_HASH) { "" }
 
@@ -331,6 +345,30 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     fun setAutoDnsServers(groupId: Long, servers: List<String>) {
         val raw = servers.joinToString(",")
         configurationStore.putString("autoDns.$groupId", raw)
+    }
+
+    fun getSmartHealthPenalty(profileId: Long): Int {
+        return configurationStore.getInt("smartHealthPenalty.$profileId", 0).coerceAtLeast(0)
+    }
+
+    fun setSmartHealthPenalty(profileId: Long, penalty: Int) {
+        configurationStore.putInt("smartHealthPenalty.$profileId", penalty.coerceIn(0, 2000))
+    }
+
+    fun getSmartFailureStreak(profileId: Long): Int {
+        return configurationStore.getInt("smartFailureStreak.$profileId", 0).coerceAtLeast(0)
+    }
+
+    fun setSmartFailureStreak(profileId: Long, streak: Int) {
+        configurationStore.putInt("smartFailureStreak.$profileId", streak.coerceIn(0, 20))
+    }
+
+    fun getSmartLastScore(profileId: Long): Int {
+        return configurationStore.getInt("smartLastScore.$profileId", -1)
+    }
+
+    fun setSmartLastScore(profileId: Long, score: Int) {
+        configurationStore.putInt("smartLastScore.$profileId", score.coerceIn(-1, 20000))
     }
 
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {

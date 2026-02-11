@@ -107,7 +107,7 @@ fun buildConfig(
                 gson.toJson(mergedMap)
             }.getOrDefault(bean.config)
             return ConfigBuildResult(
-                config,
+                sanitizeGeneratedConfig(config),
                 listOf(),
                 proxy.id, //
                 mapOf(TAG_PROXY to listOf(proxy)), //
@@ -873,6 +873,7 @@ private fun sanitizeCustomConfig(config: String): String {
     return runCatching {
         val root = JSONObject(config)
         fixVmessSecurity(root)
+        fixSelectorReferences(root)
         root.toString()
     }.getOrDefault(config)
 }
@@ -882,8 +883,49 @@ private fun sanitizeGeneratedConfig(config: String): String {
     return runCatching {
         val root = JSONObject(config)
         fixVmessSecurity(root)
+        fixSelectorReferences(root)
         root.toString()
     }.getOrDefault(config)
+}
+
+private fun fixSelectorReferences(root: JSONObject) {
+    val outbounds = root.optJSONArray("outbounds") ?: return
+    val tags = HashSet<String>()
+    for (i in 0 until outbounds.length()) {
+        val outbound = outbounds.optJSONObject(i) ?: continue
+        outbound.optString("tag").takeIf { it.isNotBlank() }?.let { tags.add(it) }
+    }
+    for (i in 0 until outbounds.length()) {
+        val outbound = outbounds.optJSONObject(i) ?: continue
+        if (outbound.optString("type") != "selector") continue
+        val list = outbound.optJSONArray("outbounds") ?: continue
+        val filtered = JSONArray()
+        for (j in 0 until list.length()) {
+            val tag = list.optString(j)
+            if (tags.contains(tag)) filtered.put(tag)
+        }
+        if (filtered.length() == 0 && tags.contains("direct")) {
+            filtered.put("direct")
+        }
+        outbound.put("outbounds", filtered)
+        val defaultTag = outbound.optString("default")
+        if (defaultTag.isNotBlank()) {
+            var exists = false
+            for (j in 0 until filtered.length()) {
+                if (filtered.optString(j) == defaultTag) {
+                    exists = true
+                    break
+                }
+            }
+            if (!exists) {
+                if (filtered.length() > 0) {
+                    outbound.put("default", filtered.optString(0))
+                } else {
+                    outbound.remove("default")
+                }
+            }
+        }
+    }
 }
 
 private fun fixVmessSecurity(value: Any?) {
