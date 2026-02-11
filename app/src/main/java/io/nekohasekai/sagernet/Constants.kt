@@ -1,6 +1,6 @@
 package io.nekohasekai.sagernet
 
-const val CONNECTION_TEST_URL = "http://cp.cloudflare.com/"
+const val CONNECTION_TEST_URL = "https://cp.cloudflare.com/generate_204"
 const val DEFAULT_SUBSCRIPTION_LINK =
     "https://drive.usercontent.google.com/u/0/uc?id=17yqD90RrHQkL4VXL2Nk22xW0AqNVT2pv&export=download"
 const val DEFAULT_SUBSCRIPTION_GROUP_NAME = "NG LINK"

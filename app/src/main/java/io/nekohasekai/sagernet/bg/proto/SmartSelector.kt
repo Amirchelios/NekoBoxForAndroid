@@ -21,10 +21,10 @@ object SmartSelector {
     private const val FAST_MAX_ATTEMPTS = 1
     private const val FAST_LIMIT = 30
     private val testUrls = listOf(
-        "https://www.youtube.com/generate_204",
-        "https://www.youtube.com/",
-        "https://i.instagram.com/",
-        "https://www.instagram.com/"
+        "https://cp.cloudflare.com/generate_204",
+        "https://www.gstatic.com/generate_204",
+        "https://www.msftconnecttest.com/connecttest.txt",
+        "https://connectivitycheck.gstatic.com/generate_204"
     )
 
     fun applyCachedOrder(groupId: Long) {
@@ -161,13 +161,19 @@ object SmartSelector {
 
     private suspend fun testOnce(profile: ProxyEntity, timeoutMs: Int): Int? {
         return try {
-            var total = 0
+            val successes = mutableListOf<Int>()
             for (url in testUrls) {
                 val elapsed = TestInstance(profile, url, timeoutMs).doTest()
-                if (elapsed <= 0) return null
-                total += elapsed
+                if (elapsed > 0) successes += elapsed
             }
-            total
+            val minRequired = (testUrls.size / 2).coerceAtLeast(1)
+            if (successes.size < minRequired) {
+                null
+            } else {
+                // Score by fastest successful probes to keep failover responsive.
+                val best = successes.sorted().take(2)
+                (best.sum().toDouble() / best.size).toInt().coerceAtLeast(1)
+            }
         } catch (e: Exception) {
             Logs.w(e.readableMessage)
             null

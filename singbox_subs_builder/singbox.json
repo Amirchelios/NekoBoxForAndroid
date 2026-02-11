@@ -311,8 +311,8 @@
         "vless-e3f8b2ec"
       ],
       "strategy": "race",
-      "concurrency": 15,
-      "delay": "300ms",
+      "concurrency": 12,
+      "delay": "250ms",
       "timeout": "5000ms"
     },
     {
@@ -420,10 +420,10 @@
         "vless-746c5c75",
         "vless-e3f8b2ec"
       ],
-      "url": "https://www.gstatic.com/generate_204",
+      "url": "https://cp.cloudflare.com/generate_204",
       "interrupt_exist_connections": false,
-      "interval": "10s",
-      "tolerance": 50
+      "interval": "15s",
+      "tolerance": 80
     },
     {
       "type": "vless",

@@ -102,18 +102,30 @@ object ProxyToSingboxConverter {
             mapOf(
                 "type" to "selector",
                 "tag" to "proxy",
-                "outbounds" to (listOf("auto") + validTags + "direct")
+                "outbounds" to (listOf("auto_parallel", "auto") + validTags + "direct")
             )
         )
         list.add(mapOf("type" to "direct", "tag" to "direct"))
         list.add(
             mapOf(
+                "type" to "parallel",
+                "tag" to "auto_parallel",
+                "outbounds" to validTags,
+                "strategy" to "race",
+                "concurrency" to 12,
+                "delay" to "250ms",
+                "timeout" to "5000ms"
+            )
+        )
+        list.add(
+            mapOf(
                 "type" to "urltest",
                 "tag" to "auto",
                 "outbounds" to validTags,
-                "url" to "https://www.gstatic.com/generate_204",
+                "url" to "https://cp.cloudflare.com/generate_204",
                 "interrupt_exist_connections" to false,
-                "interval" to "30s"
+                "interval" to "15s",
+                "tolerance" to 80
             )
         )
         list.addAll(outbounds)

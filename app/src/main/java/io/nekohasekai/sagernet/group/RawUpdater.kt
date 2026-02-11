@@ -1022,6 +1022,12 @@ object RawUpdater : GroupUpdater() {
         val outbounds = JSONArray()
         val validTags = ArrayList<String>()
         val usedTags = HashSet<String>()
+        val parallelUrl = DataStore.parallelUrl.takeIf { it.isNotBlank() } ?: DataStore.connectionTestURL
+        val parallelConcurrency = DataStore.parallelConcurrency.coerceIn(2, 32)
+        val parallelDelayMs = DataStore.parallelDelayMs.coerceIn(50, 1500)
+        val parallelTimeoutMs = DataStore.parallelTimeoutMs.coerceIn(1500, 15000)
+        val parallelIntervalSec = DataStore.parallelIntervalSec.coerceIn(10, 600)
+        val parallelTolerance = DataStore.parallelTolerance.coerceIn(10, 300)
         for (raw in rawTexts) {
             val jsonText = ProxyToSingboxConverter.convertToSingBoxJson(raw).orEmpty()
             if (jsonText.isBlank()) continue
@@ -1060,6 +1066,7 @@ object RawUpdater : GroupUpdater() {
             put("type", "selector")
             put("tag", "proxy")
             val list = JSONArray()
+            list.put("auto_parallel")
             list.put("auto")
             validTags.forEach { list.put(it) }
             list.put("direct")
@@ -1070,15 +1077,26 @@ object RawUpdater : GroupUpdater() {
             put("tag", "direct")
         })
         merged.put(JSONObject().apply {
+            put("type", "parallel")
+            put("tag", "auto_parallel")
+            val list = JSONArray()
+            validTags.forEach { list.put(it) }
+            put("outbounds", list)
+            put("strategy", "race")
+            put("concurrency", parallelConcurrency)
+            put("delay", "${parallelDelayMs}ms")
+            put("timeout", "${parallelTimeoutMs}ms")
+        })
+        merged.put(JSONObject().apply {
             put("type", "urltest")
             put("tag", "auto")
             val list = JSONArray()
             validTags.forEach { list.put(it) }
             put("outbounds", list)
-            put("url", "https://www.gstatic.com/generate_204")
+            put("url", parallelUrl)
             put("interrupt_exist_connections", false)
-            put("interval", "10s")
-            put("tolerance", 50)
+            put("interval", "${parallelIntervalSec}s")
+            put("tolerance", parallelTolerance)
         })
         for (i in 0 until outbounds.length()) {
             merged.put(outbounds.getJSONObject(i))

@@ -24,10 +24,10 @@ object SmartGeoTagger {
     private val mutex = Mutex()
     private const val testTimeoutMs = 5000
     private val testLinks = listOf(
-        "https://www.youtube.com/generate_204",
-        "https://www.youtube.com/",
-        "https://i.instagram.com/",
-        "https://www.instagram.com/"
+        "https://cp.cloudflare.com/generate_204",
+        "https://www.gstatic.com/generate_204",
+        "https://www.msftconnecttest.com/connecttest.txt",
+        "https://connectivitycheck.gstatic.com/generate_204"
     )
 
     suspend fun runForGroup(groupId: Long) {
@@ -35,14 +35,12 @@ object SmartGeoTagger {
         try {
             val profiles = SagerDatabase.proxyDao.getByGroup(groupId)
             val toUpdate = mutableListOf<ProxyEntity>()
-            val toDelete = mutableListOf<ProxyEntity>()
 
             for (profile in profiles) {
                 if (isAggregateConfig(profile)) continue
 
                 val testResult = runHealthCheck(profile)
                 if (testResult == null) {
-                    toDelete.add(profile)
                     continue
                 }
 
@@ -63,9 +61,6 @@ object SmartGeoTagger {
             if (toUpdate.isNotEmpty()) {
                 ProfileManager.updateProfile(toUpdate)
             }
-            for (profile in toDelete) {
-                ProfileManager.deleteProfile(profile.groupId, profile.id)
-            }
         } catch (e: Exception) {
             Logs.w(e)
         } finally {
@@ -81,8 +76,10 @@ object SmartGeoTagger {
     private suspend fun runHealthCheck(profile: ProxyEntity): HealthResult? {
         val tester = MultiUrlTest(profile, testLinks, testTimeoutMs)
         val results = runCatching { tester.doTest() }.getOrNull() ?: return null
-        if (results.any { it <= 0 }) return null
-        return HealthResult(results.maxOrNull() ?: 0)
+        val successes = results.filter { it > 0 }
+        if (successes.size < (testLinks.size / 2).coerceAtLeast(1)) return null
+        val best = successes.sorted().take(2)
+        return HealthResult((best.sum().toDouble() / best.size).toInt().coerceAtLeast(1))
     }
 
     private fun resolveServerHost(profile: ProxyEntity): String? {
