@@ -9,18 +9,21 @@ import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import io.nekohasekai.sagernet.ktx.tryResume
 import io.nekohasekai.sagernet.ktx.tryResumeWithException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import libcore.Libcore
 import moe.matsuri.nb4a.net.LocalResolverImpl
-import kotlin.coroutines.suspendCoroutine
 
 class TestInstance(profile: ProxyEntity, val link: String, private val timeout: Int) :
     BoxInstance(profile) {
 
     suspend fun doTest(): Int {
-        return suspendCoroutine { c ->
+        return suspendCancellableCoroutine { c ->
             processes = GuardedProcessPool {
                 Logs.w(it)
                 c.tryResumeWithException(it)
+            }
+            c.invokeOnCancellation {
+                runCatching { close() }
             }
             runOnDefaultDispatcher {
                 use {

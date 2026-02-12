@@ -212,7 +212,7 @@ abstract class BoxInstance(
 
         cacheFiles.removeAll { it.delete(); true }
 
-        if (::processes.isInitialized) processes.close(GlobalScope + Dispatchers.IO)
+        if (::processes.isInitialized) processes.close()
 
         if (::box.isInitialized) {
             box.close()

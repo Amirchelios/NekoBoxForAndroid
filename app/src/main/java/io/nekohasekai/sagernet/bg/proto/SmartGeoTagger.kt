@@ -7,13 +7,13 @@ import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.fmt.buildConfig
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import libcore.Libcore
 import org.json.JSONObject
 import java.net.InetAddress
 import java.net.URLEncoder
 import java.util.Locale
-import kotlin.coroutines.suspendCoroutine
 import io.nekohasekai.sagernet.bg.GuardedProcessPool
 import io.nekohasekai.sagernet.ktx.tryResume
 import io.nekohasekai.sagernet.ktx.tryResumeWithException
@@ -117,10 +117,13 @@ object SmartGeoTagger {
     ) : BoxInstance(profile) {
 
         suspend fun doTest(): List<Int> {
-            return suspendCoroutine { c ->
+            return suspendCancellableCoroutine { c ->
                 processes = GuardedProcessPool {
                     Logs.w(it)
                     c.tryResumeWithException(it)
+                }
+                c.invokeOnCancellation {
+                    runCatching { close() }
                 }
                 runOnDefaultDispatcher {
                     use {
@@ -156,26 +159,12 @@ object SmartGeoTagger {
     private object GeoResolver {
         suspend fun resolve(host: String): GeoInfo? {
             val ip = resolveIp(host) ?: return null
-            return queryIpApi(ip)
-                ?: queryIpApiCo(ip)
+            return queryIpApiCo(ip)
                 ?: queryIpInfo(ip)
         }
 
         private fun resolveIp(host: String): String? {
             return runCatching { InetAddress.getByName(host).hostAddress }.getOrNull()
-        }
-
-        private fun queryIpApi(ip: String): GeoInfo? {
-            val url = "http://ip-api.com/json/${URLEncoder.encode(ip, "UTF-8")}" +
-                "?fields=status,country,countryCode,city,regionName"
-            val json = httpGetJson(url) ?: return null
-            if (json.optString("status") != "success") return null
-            val city = json.optString("city").ifBlank { json.optString("regionName") }
-            return GeoInfo(
-                country = json.optString("country"),
-                countryCode = json.optString("countryCode"),
-                city = city
-            )
         }
 
         private fun queryIpApiCo(ip: String): GeoInfo? {
@@ -198,11 +187,16 @@ object SmartGeoTagger {
 
         private fun httpGetJson(url: String): JSONObject? {
             return runCatching {
-                val response = Libcore.newHttpClient().newRequest().apply {
-                    setURL(url)
-                }.execute()
-                val body = Util.getStringBox(response.contentString)
-                JSONObject(body)
+                val client = Libcore.newHttpClient()
+                try {
+                    val response = client.newRequest().apply {
+                        setURL(url)
+                    }.execute()
+                    val body = Util.getStringBox(response.contentString)
+                    JSONObject(body)
+                } finally {
+                    client.close()
+                }
             }.getOrNull()
         }
     }

@@ -15,7 +15,6 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
-	M "github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/task"
 
 	mDNS "github.com/miekg/dns"
@@ -55,6 +54,16 @@ func (p *platformLocalDNSTransport) Close() error {
 }
 
 func (p *platformLocalDNSTransport) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
+	if message == nil {
+		return nil, E.New("empty dns message")
+	}
+	if len(message.Question) == 0 {
+		return nil, E.New("empty dns question")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if p.raw && rawQueryFunc != nil {
 		// Raw - Android 10 及以上才有
 
@@ -140,11 +149,21 @@ func (c *ExchangeContext) OnCancel(callback Func) {
 }
 
 func (c *ExchangeContext) Success(result string) {
-	c.addresses = common.Map(common.Filter(strings.Split(result, "\n"), func(it string) bool {
+	lines := common.Filter(strings.Split(result, "\n"), func(it string) bool {
 		return !common.IsEmpty(it)
-	}), func(it string) netip.Addr {
-		return M.ParseSocksaddrHostPort(it, 0).Unwrap().Addr
 	})
+	addrs := make([]netip.Addr, 0, len(lines))
+	for _, line := range lines {
+		addr, err := netip.ParseAddr(strings.TrimSpace(line))
+		if err != nil {
+			continue
+		}
+		addrs = append(addrs, addr)
+	}
+	c.addresses = addrs
+	if c.done != nil {
+		c.done()
+	}
 }
 
 func (c *ExchangeContext) RawSuccess(result []byte) {
@@ -152,15 +171,21 @@ func (c *ExchangeContext) RawSuccess(result []byte) {
 	if err != nil {
 		c.error = E.Cause(err, "parse response")
 	}
-	c.done()
+	if c.done != nil {
+		c.done()
+	}
 }
 
 func (c *ExchangeContext) ErrorCode(code int32) {
 	c.error = dns.RcodeError(code)
-	c.done()
+	if c.done != nil {
+		c.done()
+	}
 }
 
 func (c *ExchangeContext) ErrnoCode(code int32) {
 	c.error = syscall.Errno(code)
-	c.done()
+	if c.done != nil {
+		c.done()
+	}
 }

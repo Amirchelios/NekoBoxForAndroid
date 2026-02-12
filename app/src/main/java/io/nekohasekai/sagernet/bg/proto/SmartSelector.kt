@@ -199,15 +199,18 @@ object SmartSelector {
 
     private suspend fun testOnce(profile: ProxyEntity, timeoutMs: Int): ProbeSnapshot? {
         val successes = mutableListOf<Int>()
+        val minRequired = (testUrls.size / 2).coerceAtLeast(1)
+        var remaining = testUrls.size
         for (url in testUrls) {
+            remaining -= 1
             val elapsed = runCatching { TestInstance(profile, url, timeoutMs).doTest() }.getOrNull()
             if (elapsed != null && elapsed > 0) {
                 successes += elapsed
-            } else {
-                // unstable test endpoint for this profile attempt
+            }
+            if (successes.size + remaining < minRequired) {
+                return null
             }
         }
-        val minRequired = (testUrls.size / 2).coerceAtLeast(1)
         if (successes.size < minRequired) return null
 
         val sorted = successes.sorted()
