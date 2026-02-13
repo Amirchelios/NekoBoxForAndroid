@@ -45,7 +45,14 @@ object SmartSelector {
         val jitter: Int,
         val worst: Int,
         val bandwidthKbps: Int,
+        val transportClass: TransportClass,
     )
+
+    private enum class TransportClass(val key: String) {
+        TLS("tls"),
+        PLAIN("plain"),
+        MIXED("mixed"),
+    }
 
     fun applyCachedOrder(groupId: Long) {
         val group = SagerDatabase.groupDao.getById(groupId) ?: return
@@ -69,17 +76,19 @@ object SmartSelector {
         SagerDatabase.proxyDao.updateProxy(profileMap.values.toList())
     }
 
-    suspend fun selectBest(groupId: Long): Long? {
+    suspend fun selectBest(groupId: Long, scope: String = "default"): Long? {
         val group = SagerDatabase.groupDao.getById(groupId) ?: return null
         val profiles = SagerDatabase.proxyDao.getByGroup(groupId)
             .filterNot { it.type == TYPE_CONFIG }
         if (profiles.isEmpty()) return null
 
-        val evaluations = evaluateProfiles(profiles, TIMEOUT_MS, MAX_ATTEMPTS)
+        val evaluations = evaluateProfiles(profiles, groupId, scope, TIMEOUT_MS, MAX_ATTEMPTS)
         if (evaluations.isEmpty()) return null
-        evaluations.forEach { updateHealthState(it) }
+        evaluations.forEach { updateHealthState(groupId, scope, it) }
 
-        val valid = evaluations.filter { it.score != null }.sortedBy { it.score }
+        val valid = refineWithThroughput(evaluations.filter { it.score != null })
+            .sortedWith(compareBy<ProfileEvaluation> { it.score ?: Int.MAX_VALUE }
+                .thenByDescending { it.bandwidthKbps })
         if (valid.isEmpty()) return null
 
         val best = valid.first()
@@ -113,11 +122,11 @@ object SmartSelector {
         return best.profile.id
     }
 
-    suspend fun selectBestFast(groupId: Long): Long? {
-        return selectTopFast(groupId, 1).firstOrNull()
+    suspend fun selectBestFast(groupId: Long, scope: String = "default"): Long? {
+        return selectTopFast(groupId, 1, scope).firstOrNull()
     }
 
-    suspend fun selectTopFast(groupId: Long, limit: Int): List<Long> {
+    suspend fun selectTopFast(groupId: Long, limit: Int, scope: String = "default"): List<Long> {
         val profiles = SagerDatabase.proxyDao.getByGroup(groupId)
             .filterNot { it.type == TYPE_CONFIG }
         if (profiles.isEmpty()) return emptyList()
@@ -134,11 +143,13 @@ object SmartSelector {
             .sortedByDescending { fastPriorityScore(it) }
             .take(FAST_LIMIT)
 
-        val evaluations = evaluateProfiles(candidates, FAST_TIMEOUT_MS, FAST_MAX_ATTEMPTS)
+        val evaluations = evaluateProfiles(candidates, groupId, scope, FAST_TIMEOUT_MS, FAST_MAX_ATTEMPTS)
         if (evaluations.isEmpty()) return emptyList()
-        evaluations.forEach { updateHealthState(it) }
+        evaluations.forEach { updateHealthState(groupId, scope, it) }
 
-        val sorted = evaluations.filter { it.score != null }.sortedBy { it.score }
+        val sorted = refineWithThroughput(evaluations.filter { it.score != null })
+            .sortedWith(compareBy<ProfileEvaluation> { it.score ?: Int.MAX_VALUE }
+                .thenByDescending { it.bandwidthKbps })
         if (sorted.isEmpty()) return emptyList()
         val orderedIds = sorted.map { it.profile.id } + evaluations
             .filterNot { it.score != null }
@@ -168,6 +179,8 @@ object SmartSelector {
 
     private suspend fun evaluateProfiles(
         profiles: List<ProxyEntity>,
+        groupId: Long,
+        scope: String,
         timeoutMs: Int,
         attempts: Int,
     ): List<ProfileEvaluation> {
@@ -177,7 +190,7 @@ object SmartSelector {
             profiles.map { profile ->
                 async {
                     semaphore.withPermit {
-                        evaluateProfile(profile, timeoutMs, attempts)
+                        evaluateProfile(profile, groupId, scope, timeoutMs, attempts)
                     }
                 }
             }.awaitAll().filterNotNull()
@@ -186,10 +199,13 @@ object SmartSelector {
 
     private suspend fun evaluateProfile(
         profile: ProxyEntity,
+        groupId: Long,
+        scope: String,
         timeoutMs: Int,
         attempts: Int,
     ): ProfileEvaluation? {
         return try {
+            val transportClass = detectTransportClass(profile)
             val snapshots = mutableListOf<ProbeSnapshot>()
             repeat(attempts) {
                 testOnce(profile, timeoutMs)?.let { snapshots += it }
@@ -207,10 +223,16 @@ object SmartSelector {
             val healthPenalty = DataStore.getSmartHealthPenalty(profile.id)
             val failStreak = DataStore.getSmartFailureStreak(profile.id)
             val streakPenalty = failStreak * 45
+            val transportPenalty = if (DataStore.smartAdaptiveTransportEnabled) {
+                DataStore.getSmartTransportPenalty(scope, groupId, transportClass.key)
+            } else {
+                0
+            }
             val finalScore = if (baseScore == null || successRatio < MIN_SUCCESS_RATIO) {
                 null
             } else {
-                (baseScore + rawPenalty + healthPenalty + streakPenalty).coerceAtLeast(1)
+                (baseScore + rawPenalty + healthPenalty + streakPenalty + transportPenalty)
+                    .coerceAtLeast(1)
             }
             ProfileEvaluation(
                 profile = profile,
@@ -219,10 +241,54 @@ object SmartSelector {
                 jitter = jitter,
                 worst = worst,
                 bandwidthKbps = bandwidthKbps,
+                transportClass = transportClass,
             )
         } catch (e: Exception) {
             Logs.w(e.readableMessage)
             null
+        }
+    }
+
+    private suspend fun refineWithThroughput(valid: List<ProfileEvaluation>): List<ProfileEvaluation> {
+        if (!DataStore.smartSpeedRefineEnabled) return valid
+        if (valid.size < 2) return valid
+        val topN = DataStore.smartSpeedRefineTopN.coerceIn(2, 8)
+        val timeoutMs = DataStore.smartSpeedRefineTimeoutMs.coerceIn(1200, 7000)
+        val url = DataStore.parallelUrl.ifBlank { "https://speed.cloudflare.com/__down?bytes=800000" }
+        val targets = valid.take(topN)
+        val measured = coroutineScope {
+            targets.map { ev ->
+                async {
+                    val elapsed = runCatching { TestInstance(ev.profile, url, timeoutMs).doTest() }.getOrNull()
+                    val kbps = elapsed?.let { estimateBandwidthKbps(url, it) } ?: 0
+                    if (kbps > 0) {
+                        DataStore.setSmartLastBandwidthKbps(ev.profile.id, kbps)
+                    }
+                    ev.profile.id to kbps
+                }
+            }.awaitAll()
+        }.toMap()
+
+        if (measured.values.none { it > 0 }) return valid
+        return valid.sortedWith(
+            compareBy<ProfileEvaluation> {
+                val base = it.score ?: Int.MAX_VALUE
+                val measuredKbps = measured[it.profile.id] ?: 0
+                val blended = maxOf(it.bandwidthKbps, measuredKbps)
+                base - bandwidthScoreBonus(blended)
+            }.thenBy { it.score ?: Int.MAX_VALUE }
+                .thenByDescending { maxOf(it.bandwidthKbps, measured[it.profile.id] ?: 0) }
+        )
+    }
+
+    private fun bandwidthScoreBonus(kbps: Int): Int {
+        return when {
+            kbps >= 30_000 -> 220
+            kbps >= 20_000 -> 170
+            kbps >= 12_000 -> 120
+            kbps >= 7_000 -> 70
+            kbps >= 3_000 -> 30
+            else -> 0
         }
     }
 
@@ -295,7 +361,7 @@ object SmartSelector {
         return (failPenalty + jitterPenalty + worstPenalty - bandwidthBonus).coerceAtLeast(0)
     }
 
-    private fun updateHealthState(result: ProfileEvaluation) {
+    private fun updateHealthState(groupId: Long, scope: String, result: ProfileEvaluation) {
         val profileId = result.profile.id
         val oldPenalty = DataStore.getSmartHealthPenalty(profileId)
         val oldStreak = DataStore.getSmartFailureStreak(profileId)
@@ -306,6 +372,10 @@ object SmartSelector {
             val bump = (220 + newStreak * 30).coerceAtMost(700)
             DataStore.setSmartFailureStreak(profileId, newStreak)
             DataStore.setSmartHealthPenalty(profileId, oldPenalty + bump)
+            if (DataStore.smartAdaptiveTransportEnabled) {
+                val step = DataStore.smartTransportPenaltyStep.coerceIn(20, 600)
+                DataStore.adjustSmartTransportPenalty(scope, groupId, result.transportClass.key, step)
+            }
             return
         }
 
@@ -317,5 +387,43 @@ object SmartSelector {
         val softness = if (result.successRatio < 0.65) 60 else 0
         DataStore.setSmartFailureStreak(profileId, newStreak)
         DataStore.setSmartHealthPenalty(profileId, oldPenalty - baseDrop + softness)
+        if (DataStore.smartAdaptiveTransportEnabled) {
+            val decay = DataStore.smartTransportPenaltyDecay.coerceIn(10, 400)
+            DataStore.decaySmartTransportPenalty(scope, groupId, result.transportClass.key, decay)
+        }
+    }
+
+    private fun detectTransportClass(profile: ProxyEntity): TransportClass {
+        return when (profile.type) {
+            ProxyEntity.TYPE_TROJAN,
+            ProxyEntity.TYPE_TROJAN_GO,
+            ProxyEntity.TYPE_HYSTERIA,
+            ProxyEntity.TYPE_TUIC,
+            ProxyEntity.TYPE_SHADOWTLS,
+            ProxyEntity.TYPE_ANYTLS,
+            ProxyEntity.TYPE_NAIVE,
+            ProxyEntity.TYPE_MIERU -> TransportClass.TLS
+
+            ProxyEntity.TYPE_HTTP -> {
+                val security = profile.httpBean?.security
+                if (security.equals("tls", ignoreCase = true)) {
+                    TransportClass.TLS
+                } else {
+                    TransportClass.PLAIN
+                }
+            }
+
+            ProxyEntity.TYPE_VMESS -> {
+                val security = profile.vmessBean?.security
+                if (security.equals("tls", ignoreCase = true)) TransportClass.TLS else TransportClass.PLAIN
+            }
+
+            ProxyEntity.TYPE_SOCKS,
+            ProxyEntity.TYPE_SS,
+            ProxyEntity.TYPE_SSH,
+            ProxyEntity.TYPE_WG -> TransportClass.PLAIN
+
+            else -> TransportClass.MIXED
+        }
     }
 }

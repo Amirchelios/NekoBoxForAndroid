@@ -201,6 +201,15 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartDebugEnabled by configurationStore.boolean("smartDebugEnabled") { false }
     var smartSessionHealth by configurationStore.int("smartSessionHealth") { 0 }
     var smartLastDecision by configurationStore.string("smartLastDecision") { "idle" }
+    var smartAdaptiveTransportEnabled by configurationStore.boolean("smartAdaptiveTransportEnabled") { true }
+    var smartTransportPenaltyStep by configurationStore.int("smartTransportPenaltyStep") { 160 }
+    var smartTransportPenaltyDecay by configurationStore.int("smartTransportPenaltyDecay") { 90 }
+    var smartTransportPenaltyCeil by configurationStore.int("smartTransportPenaltyCeil") { 2400 }
+    var smartSpeedRefineEnabled by configurationStore.boolean("smartSpeedRefineEnabled") { true }
+    var smartSpeedRefineTopN by configurationStore.int("smartSpeedRefineTopN") { 4 }
+    var smartSpeedRefineTimeoutMs by configurationStore.int("smartSpeedRefineTimeoutMs") { 2600 }
+    var smartDisruptionHoldMinSec by configurationStore.int("smartDisruptionHoldMinSec") { 90 }
+    var smartDisruptionHoldMaxSec by configurationStore.int("smartDisruptionHoldMaxSec") { 300 }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
     var startupLocalSubHash by configurationStore.string(Key.STARTUP_LOCAL_SUB_HASH) { "" }
 
@@ -335,6 +344,31 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     fun setSmartPreferredProxyScoped(scope: String, groupId: Long, proxyId: Long) {
         configurationStore.putLong("smartPreferredScope.${scopeKey(scope)}.$groupId", proxyId)
+    }
+
+    private fun transportClassKey(raw: String): String {
+        return when (raw.lowercase()) {
+            "tls" -> "tls"
+            "plain" -> "plain"
+            else -> "mixed"
+        }
+    }
+
+    fun getSmartTransportPenalty(scope: String, groupId: Long, transportClass: String): Int {
+        val key = "smartTransportPenalty.${scopeKey(scope)}.$groupId.${transportClassKey(transportClass)}"
+        return configurationStore.getInt(key, 0).coerceAtLeast(0)
+    }
+
+    fun adjustSmartTransportPenalty(scope: String, groupId: Long, transportClass: String, delta: Int) {
+        val normalized = transportClassKey(transportClass)
+        val key = "smartTransportPenalty.${scopeKey(scope)}.$groupId.$normalized"
+        val ceil = smartTransportPenaltyCeil.coerceIn(500, 5000)
+        val current = configurationStore.getInt(key, 0).coerceAtLeast(0)
+        configurationStore.putInt(key, (current + delta).coerceIn(0, ceil))
+    }
+
+    fun decaySmartTransportPenalty(scope: String, groupId: Long, transportClass: String, amount: Int) {
+        adjustSmartTransportPenalty(scope, groupId, transportClass, -amount.coerceAtLeast(0))
     }
 
     private val smartPreferredOrderDirty = mutableSetOf<Long>()

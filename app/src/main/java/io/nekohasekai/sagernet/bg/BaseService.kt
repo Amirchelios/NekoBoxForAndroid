@@ -396,6 +396,10 @@ class BaseService {
                                 DataStore.smartSwitchExcellentScore.coerceIn(450, 1400)
                             val minThroughputGainPct =
                                 DataStore.smartSwitchMinThroughputGainPct.coerceIn(5, 80)
+                            val disruptionHoldMinMs =
+                                DataStore.smartDisruptionHoldMinSec.coerceIn(30, 900) * 1000L
+                            val disruptionHoldMaxMs =
+                                DataStore.smartDisruptionHoldMaxSec.coerceIn(60, 1800) * 1000L
                             var activeId = 0L
                             var activeSinceMs = System.currentTimeMillis()
                             var lastSwitchAtMs = 0L
@@ -487,6 +491,10 @@ class BaseService {
                                 val activeGood = activeScore in 1..excellentScore && activeStreak == 0
                                 val activeBw = bandwidth(activeId)
                                 val candidateBw = bandwidth(id)
+                                if (!warmup && !activeCritical && now < disruptionUntilMs) {
+                                    setDecision("hold:disruption_window")
+                                    return
+                                }
                                 if (!warmup && !activeCritical && now - lastSwitchAtMs < cooldownMs) return
                                 if (!activeCritical && now - activeSinceMs < minDwellMs) return
                                 if (!warmup && activeGood && now - activeSinceMs < stableLockMs) {
@@ -545,14 +553,14 @@ class BaseService {
                             } else if (preferredId > 0L) {
                                 selectOutboundById(preferredId)
                             }
-                            val fastTop = SmartSelector.selectTopFast(profile.groupId, 3)
+                            val fastTop = SmartSelector.selectTopFast(profile.groupId, 3, currentScope())
                             val fastId = fastTop.firstOrNull()
                             standbyId = fastTop.getOrNull(1) ?: 0L
                             if (fastId != null) {
                                 maybeSwitchTo(fastId, warmup = true)
                             }
                             SmartSelector.applyCachedOrder(profile.groupId)
-                            val best = SmartSelector.selectBest(profile.groupId)
+                            val best = SmartSelector.selectBest(profile.groupId, currentScope())
                             if (best != null) {
                                 maybeSwitchTo(best, warmup = true)
                             }
@@ -561,7 +569,7 @@ class BaseService {
                                 repeat(warmupRounds) {
                                     delay(badProbeMs)
                                     if (DataStore.serviceState != State.Connected) return@runOnDefaultDispatcher
-                                    val id = SmartSelector.selectBestFast(profile.groupId) ?: return@repeat
+                                    val id = SmartSelector.selectBestFast(profile.groupId, currentScope()) ?: return@repeat
                                     maybeSwitchTo(id, warmup = true)
                                 }
                                 while (DataStore.serviceState == State.Connected) {
@@ -613,14 +621,14 @@ class BaseService {
                                         if (now2 - lastRescueAtMs >= 120_000L) {
                                             lastRescueAtMs = now2
                                             runCatching { Libcore.resetAllConnections(true) }
-                                            val rescueId = SmartSelector.selectBest(profile.groupId)
+                                            val rescueId = SmartSelector.selectBest(profile.groupId, currentScope())
                                             if (rescueId != null) {
                                                 maybeSwitchTo(rescueId, warmup = false)
                                                 continue
                                             }
                                         }
                                     }
-                                    val top = SmartSelector.selectTopFast(profile.groupId, 3)
+                                    val top = SmartSelector.selectTopFast(profile.groupId, 3, currentScope())
                                     val id = top.firstOrNull()
                                     standbyId = top.getOrNull(1) ?: standbyId
                                     if (id == null) {
@@ -629,13 +637,17 @@ class BaseService {
                                         disruptionRecoveryWins = 0
                                         setDecision("hold:global_disruption_probe_null")
                                         if (disruptionNullStreak >= 2) {
-                                            val holdMs = (badProbeMs * 6).coerceIn(60_000L, 180_000L)
+                                            val holdMs = (badProbeMs * 6).coerceIn(disruptionHoldMinMs, disruptionHoldMaxMs)
                                             disruptionUntilMs = maxOf(disruptionUntilMs, System.currentTimeMillis() + holdMs)
                                         }
                                         if (nullProbeStreak >= 3) {
                                             nullProbeStreak = 0
-                                            val deepId = SmartSelector.selectBest(profile.groupId) ?: continue
-                                            maybeSwitchTo(deepId, warmup = false)
+                                            if (critical) {
+                                                val deepId = SmartSelector.selectBest(profile.groupId, currentScope()) ?: continue
+                                                maybeSwitchTo(deepId, warmup = false)
+                                            } else {
+                                                setDecision("hold:global_disruption_no_deep_switch")
+                                            }
                                         }
                                         continue
                                     }
