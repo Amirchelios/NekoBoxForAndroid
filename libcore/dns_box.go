@@ -4,7 +4,9 @@ package libcore
 
 import (
 	"context"
+	"net"
 	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 	"syscall"
@@ -154,16 +156,57 @@ func (c *ExchangeContext) Success(result string) {
 	})
 	addrs := make([]netip.Addr, 0, len(lines))
 	for _, line := range lines {
-		addr, err := netip.ParseAddr(strings.TrimSpace(line))
-		if err != nil {
-			continue
+		addr, ok := parseLookupAddress(line)
+		if ok {
+			addrs = append(addrs, addr)
 		}
-		addrs = append(addrs, addr)
 	}
 	c.addresses = addrs
 	if c.done != nil {
 		c.done()
 	}
+}
+
+func parseLookupAddress(raw string) (netip.Addr, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return netip.Addr{}, false
+	}
+
+	parseHost := func(host string) (netip.Addr, bool) {
+		host = strings.TrimSpace(strings.Trim(host, "[]"))
+		if host == "" {
+			return netip.Addr{}, false
+		}
+		// IPv6 zone suffix should not be passed to netip.ParseAddr.
+		if i := strings.IndexByte(host, '%'); i > 0 {
+			host = host[:i]
+		}
+		addr, err := netip.ParseAddr(host)
+		if err != nil {
+			return netip.Addr{}, false
+		}
+		return addr, true
+	}
+
+	if addr, ok := parseHost(s); ok {
+		return addr, true
+	}
+
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		if addr, ok := parseHost(host); ok {
+			return addr, true
+		}
+	}
+
+	if u, err := url.Parse(s); err == nil && u.Host != "" {
+		host := u.Hostname()
+		if addr, ok := parseHost(host); ok {
+			return addr, true
+		}
+	}
+
+	return netip.Addr{}, false
 }
 
 func (c *ExchangeContext) RawSuccess(result []byte) {

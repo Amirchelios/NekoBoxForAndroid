@@ -23,6 +23,9 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
     private lateinit var isProxyApps: SwitchPreference
 
     private lateinit var globalCustomConfig: EditConfigPreference
+    private lateinit var smartProfilePreset: SimpleMenuPreference
+    private lateinit var smartEnableNetworkLearning: SwitchPreference
+    private lateinit var smartDebugPanel: Preference
 
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -82,6 +85,9 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         val mtu = findPreference<MTUPreference>(Key.MTU)!!
         globalCustomConfig = findPreference(Key.GLOBAL_CUSTOM_CONFIG)!!
         globalCustomConfig.useConfigStore(Key.GLOBAL_CUSTOM_CONFIG)
+        smartProfilePreset = findPreference("smartProfilePreset")!!
+        smartEnableNetworkLearning = findPreference("smartEnableNetworkLearning")!!
+        smartDebugPanel = findPreference("smartDebugPanel")!!
 
         logLevel.dialogLayoutResource = R.layout.layout_loglevel_help
         logLevel.setOnPreferenceChangeListener { _, _ ->
@@ -168,6 +174,17 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         tunImplementation.onPreferenceChangeListener = reloadListener
         acquireWakeLock.onPreferenceChangeListener = reloadListener
         globalCustomConfig.onPreferenceChangeListener = reloadListener
+        smartEnableNetworkLearning.onPreferenceChangeListener = reloadListener
+
+        smartProfilePreset.setOnPreferenceChangeListener { _, newValue ->
+            applySmartProfilePreset(newValue?.toString().orEmpty())
+            needReload()
+            true
+        }
+        smartDebugPanel.setOnPreferenceClickListener {
+            smartDebugPanel.summary = buildSmartDebugSummary()
+            true
+        }
     }
 
     override fun onResume() {
@@ -179,6 +196,64 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         if (::globalCustomConfig.isInitialized) {
             globalCustomConfig.notifyChanged()
         }
+        if (::smartDebugPanel.isInitialized) {
+            smartDebugPanel.summary = buildSmartDebugSummary()
+        }
+    }
+
+    private fun applySmartProfilePreset(preset: String) {
+        when (preset) {
+            "stable" -> {
+                DataStore.smartSwitchCooldownSec = 180
+                DataStore.smartSwitchMinDwellSec = 240
+                DataStore.smartSwitchProbeIntervalSec = 45
+                DataStore.smartSwitchBadProbeIntervalSec = 12
+                DataStore.smartSwitchCandidateWins = 5
+                DataStore.smartSwitchCandidateWinsWarmup = 3
+                DataStore.smartSwitchMinImproveAbs = 320
+                DataStore.smartSwitchMinImprovePct = 24
+                DataStore.smartSwitchStableLockSec = 1200
+                DataStore.smartSwitchExcellentScore = 820
+                DataStore.smartSwitchMinThroughputGainPct = 24
+            }
+
+            "max_download" -> {
+                DataStore.parallelConcurrency = 28
+                DataStore.connectionTestConcurrent = 24
+                DataStore.smartSwitchCooldownSec = 90
+                DataStore.smartSwitchMinDwellSec = 90
+                DataStore.smartSwitchProbeIntervalSec = 22
+                DataStore.smartSwitchBadProbeIntervalSec = 8
+                DataStore.smartSwitchCandidateWins = 3
+                DataStore.smartSwitchCandidateWinsWarmup = 2
+                DataStore.smartSwitchMinImproveAbs = 180
+                DataStore.smartSwitchMinImprovePct = 14
+                DataStore.smartSwitchStableLockSec = 600
+                DataStore.smartSwitchExcellentScore = 680
+                DataStore.smartSwitchMinThroughputGainPct = 10
+            }
+
+            else -> {
+                DataStore.smartSwitchCooldownSec = 120
+                DataStore.smartSwitchMinDwellSec = 150
+                DataStore.smartSwitchProbeIntervalSec = 30
+                DataStore.smartSwitchBadProbeIntervalSec = 10
+                DataStore.smartSwitchCandidateWins = 4
+                DataStore.smartSwitchCandidateWinsWarmup = 2
+                DataStore.smartSwitchMinImproveAbs = 260
+                DataStore.smartSwitchMinImprovePct = 20
+                DataStore.smartSwitchStableLockSec = 900
+                DataStore.smartSwitchExcellentScore = 760
+                DataStore.smartSwitchMinThroughputGainPct = 18
+            }
+        }
+    }
+
+    private fun buildSmartDebugSummary(): String {
+        val health = DataStore.smartSessionHealth
+        val decision = DataStore.smartLastDecision.ifBlank { "idle" }
+        return getString(R.string.smart_debug_health) + ": " + health + "/100\n" +
+            getString(R.string.smart_debug_last_decision) + ": " + decision
     }
 
 }

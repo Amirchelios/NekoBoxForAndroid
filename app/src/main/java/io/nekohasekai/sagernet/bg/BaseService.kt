@@ -418,12 +418,28 @@ class BaseService {
                                 DataStore.smartSwitchCriticalScore.coerceIn(800, 5000)
                             val failTrigger =
                                 DataStore.smartSwitchFailStreakTrigger.coerceIn(1, 10)
+                            val stableLockMs =
+                                DataStore.smartSwitchStableLockSec.coerceIn(120, 3600) * 1000L
+                            val excellentScore =
+                                DataStore.smartSwitchExcellentScore.coerceIn(450, 1400)
+                            val minThroughputGainPct =
+                                DataStore.smartSwitchMinThroughputGainPct.coerceIn(5, 80)
 
                             var activeId = 0L
                             var activeSinceMs = System.currentTimeMillis()
                             var lastSwitchAtMs = 0L
                             var pendingCandidateId = 0L
                             var pendingWins = 0
+                            var nullProbeStreak = 0
+                            var stableRounds = 0
+                            var criticalRounds = 0
+                            var lastRescueAtMs = 0L
+                            var standbyId = 0L
+                            var disruptionNullStreak = 0
+                            var disruptionRecoveryWins = 0
+                            var disruptionUntilMs = 0L
+                            var lastAutoTuneAtMs = 0L
+                            val learningEnabled = DataStore.smartEnableNetworkLearning
 
                             fun activeStats(): Pair<Int, Int> {
                                 if (activeId <= 0L) return Pair(-1, 0)
@@ -431,6 +447,44 @@ class BaseService {
                                     DataStore.getSmartLastScore(activeId),
                                     DataStore.getSmartFailureStreak(activeId)
                                 )
+                            }
+
+                            fun bandwidth(profileId: Long): Int {
+                                if (profileId <= 0L) return -1
+                                return DataStore.getSmartLastBandwidthKbps(profileId)
+                            }
+
+                            fun currentScope(): String {
+                                if (!learningEnabled) return "default"
+                                return upstreamInterfaceName?.takeIf { it.isNotBlank() } ?: "default"
+                            }
+
+                            fun setDecision(reason: String) {
+                                if (!DataStore.smartDebugEnabled) return
+                                DataStore.smartLastDecision = reason
+                            }
+
+                            fun updateSessionHealth(score: Int, streak: Int, bw: Int) {
+                                val latencyPart = when {
+                                    score <= 0 -> 0
+                                    score <= 180 -> 45
+                                    score <= 350 -> 35
+                                    score <= 700 -> 25
+                                    score <= 1200 -> 14
+                                    else -> 6
+                                }
+                                val throughputPart = when {
+                                    bw >= 24_000 -> 35
+                                    bw >= 16_000 -> 30
+                                    bw >= 10_000 -> 24
+                                    bw >= 6_000 -> 18
+                                    bw >= 3_000 -> 12
+                                    bw > 0 -> 6
+                                    else -> 0
+                                }
+                                val streakPenalty = (streak.coerceAtLeast(0) * 6).coerceAtMost(40)
+                                DataStore.smartSessionHealth =
+                                    (latencyPart + throughputPart - streakPenalty).coerceIn(0, 100)
                             }
 
                             fun isCritical(score: Int, streak: Int): Boolean {
@@ -449,6 +503,9 @@ class BaseService {
                                 activeId = id
                                 activeSinceMs = System.currentTimeMillis()
                                 lastSwitchAtMs = activeSinceMs
+                                DataStore.setSmartPreferredProxy(profile.groupId, id)
+                                DataStore.setSmartPreferredProxyScoped(currentScope(), profile.groupId, id)
+                                setDecision("switch:$id")
                                 return true
                             }
 
@@ -466,27 +523,41 @@ class BaseService {
                                 val (activeScore, activeStreak) = activeStats()
                                 val activeCritical = isCritical(activeScore, activeStreak)
                                 val activeWeak = isWeak(activeScore, activeStreak)
+                                val activeGood = activeScore in 1..excellentScore && activeStreak == 0
+                                val activeBw = bandwidth(activeId)
+                                val candidateBw = bandwidth(id)
 
                                 if (!warmup && !activeCritical && now - lastSwitchAtMs < cooldownMs) return
                                 if (!activeCritical && now - activeSinceMs < minDwellMs) return
+                                if (!warmup && activeGood && now - activeSinceMs < stableLockMs) {
+                                    setDecision("hold:stable_lock")
+                                    return
+                                }
 
                                 val improveAbs = if (activeScore > 0) activeScore - candidateScore else Int.MAX_VALUE
                                 val improvePctEnough =
                                     activeScore <= 0 || candidateScore * 100 <= activeScore * (100 - minImprovePct)
                                 val improveAbsEnough = activeScore <= 0 || improveAbs >= minImproveAbs
-                                val activeExcellent = activeScore in 1..700 && activeStreak == 0
+                                val throughputGainEnough = if (activeBw > 0 && candidateBw > 0) {
+                                    candidateBw * 100 >= activeBw * (100 + minThroughputGainPct)
+                                } else {
+                                    false
+                                }
+                                val activeExcellent = activeGood
                                 val improveEnough = when {
                                     activeCritical -> true
                                     activeExcellent -> {
                                         val strictAbs = minImproveAbs + 180
                                         val strictPct = (minImprovePct + 8).coerceAtMost(70)
                                         improveAbs >= strictAbs ||
-                                            candidateScore * 100 <= activeScore * (100 - strictPct)
+                                            candidateScore * 100 <= activeScore * (100 - strictPct) ||
+                                            throughputGainEnough
                                     }
-                                    else -> improveAbsEnough || improvePctEnough
+                                    else -> improveAbsEnough || improvePctEnough || throughputGainEnough
                                 }
                                 if (!improveEnough) {
                                     if (pendingCandidateId == id) pendingWins = 0
+                                    setDecision("hold:no_significant_gain")
                                     return
                                 }
 
@@ -511,11 +582,17 @@ class BaseService {
                                 }
                             }
 
+                            val scopedPreferredId =
+                                DataStore.getSmartPreferredProxyScoped(currentScope(), profile.groupId)
                             val preferredId = DataStore.getSmartPreferredProxy(profile.groupId)
-                            if (preferredId > 0L) {
+                            if (scopedPreferredId > 0L) {
+                                selectOutboundById(scopedPreferredId)
+                            } else if (preferredId > 0L) {
                                 selectOutboundById(preferredId)
                             }
-                            val fastId = SmartSelector.selectBestFast(profile.groupId)
+                            val fastTop = SmartSelector.selectTopFast(profile.groupId, 3)
+                            val fastId = fastTop.firstOrNull()
+                            standbyId = fastTop.getOrNull(1) ?: 0L
                             if (fastId != null) {
                                 maybeSwitchTo(fastId, warmup = true)
                             }
@@ -534,10 +611,98 @@ class BaseService {
                                     maybeSwitchTo(id, warmup = true)
                                 }
                                 while (DataStore.serviceState == State.Connected) {
+                                    val now = System.currentTimeMillis()
                                     val (score, streak) = activeStats()
-                                    val delayMs = if (isWeak(score, streak)) badProbeMs else normalProbeMs
+                                    val weak = isWeak(score, streak)
+                                    val critical = isCritical(score, streak)
+                                    updateSessionHealth(score, streak, bandwidth(activeId))
+                                    if (now - lastAutoTuneAtMs >= 180_000L) {
+                                        lastAutoTuneAtMs = now
+                                        val health = DataStore.smartSessionHealth
+                                        if (health < 35 && DataStore.connectionTestConcurrent < 32) {
+                                            DataStore.connectionTestConcurrent =
+                                                (DataStore.connectionTestConcurrent + 2).coerceAtMost(32)
+                                            setDecision("tune:raise_probe_concurrency")
+                                        } else if (health > 85 && DataStore.connectionTestConcurrent > 14) {
+                                            DataStore.connectionTestConcurrent =
+                                                (DataStore.connectionTestConcurrent - 1).coerceAtLeast(14)
+                                            setDecision("tune:lower_probe_concurrency")
+                                        }
+                                    }
+                                    if (!weak && score in 1..excellentScore && streak == 0) {
+                                        stableRounds = (stableRounds + 1).coerceAtMost(120)
+                                    } else {
+                                        stableRounds = 0
+                                    }
+                                    criticalRounds = if (critical) {
+                                        (criticalRounds + 1).coerceAtMost(60)
+                                    } else {
+                                        0
+                                    }
+
+                                    val stabilityMultiplier = when {
+                                        stableRounds >= 24 -> 4L
+                                        stableRounds >= 12 -> 3L
+                                        stableRounds >= 6 -> 2L
+                                        else -> 1L
+                                    }
+                                    val delayMs = if (weak) {
+                                        badProbeMs
+                                    } else {
+                                        normalProbeMs * stabilityMultiplier
+                                    }
                                     delay(delayMs)
-                                    val id = SmartSelector.selectBestFast(profile.groupId) ?: continue
+
+                                    if (criticalRounds >= 4 && now >= disruptionUntilMs) {
+                                        if (standbyId > 0L) {
+                                            maybeSwitchTo(standbyId, warmup = false)
+                                        }
+                                        val now2 = System.currentTimeMillis()
+                                        if (now2 - lastRescueAtMs >= 120_000L) {
+                                            lastRescueAtMs = now2
+                                            runCatching { Libcore.resetAllConnections(true) }
+                                            val rescueId = SmartSelector.selectBest(profile.groupId)
+                                            if (rescueId != null) {
+                                                maybeSwitchTo(rescueId, warmup = false)
+                                                continue
+                                            }
+                                        }
+                                    }
+
+                                    val top = SmartSelector.selectTopFast(profile.groupId, 3)
+                                    val id = top.firstOrNull()
+                                    standbyId = top.getOrNull(1) ?: standbyId
+                                    if (id == null) {
+                                        nullProbeStreak++
+                                        disruptionNullStreak++
+                                        disruptionRecoveryWins = 0
+                                        setDecision("hold:global_disruption_probe_null")
+                                        if (disruptionNullStreak >= 2) {
+                                            val holdMs = (badProbeMs * 6).coerceIn(60_000L, 180_000L)
+                                            disruptionUntilMs = maxOf(disruptionUntilMs, System.currentTimeMillis() + holdMs)
+                                        }
+                                        if (nullProbeStreak >= 3) {
+                                            nullProbeStreak = 0
+                                            val deepId = SmartSelector.selectBest(profile.groupId) ?: continue
+                                            maybeSwitchTo(deepId, warmup = false)
+                                        }
+                                        continue
+                                    }
+                                    nullProbeStreak = 0
+
+                                    if (System.currentTimeMillis() < disruptionUntilMs && !critical) {
+                                        disruptionRecoveryWins++
+                                        setDecision("hold:global_disruption")
+                                        if (disruptionRecoveryWins >= 3) {
+                                            disruptionNullStreak = 0
+                                            disruptionRecoveryWins = 0
+                                            disruptionUntilMs = 0L
+                                            setDecision("recover:global_disruption_cleared")
+                                        }
+                                        continue
+                                    }
+                                    disruptionNullStreak = 0
+                                    disruptionRecoveryWins = 0
                                     maybeSwitchTo(id, warmup = false)
                                 }
                             }

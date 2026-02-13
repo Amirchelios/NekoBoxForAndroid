@@ -1137,7 +1137,7 @@ class MainActivity : ThemedActivity(),
 
     private fun applyConnectionPerformanceBaseline() {
         runOnDefaultDispatcher {
-            val key = "perfBaselineV4Done"
+            val key = "perfBaselineV5Done"
             if (DataStore.configurationStore.getBoolean(key, false)) return@runOnDefaultDispatcher
 
             if (DataStore.parallelConcurrency < 16) DataStore.parallelConcurrency = 24
@@ -1189,6 +1189,15 @@ class MainActivity : ThemedActivity(),
             }
             if (DataStore.smartSwitchFailStreakTrigger < 2 || DataStore.smartSwitchFailStreakTrigger > 8) {
                 DataStore.smartSwitchFailStreakTrigger = 3
+            }
+            if (DataStore.smartSwitchStableLockSec < 300 || DataStore.smartSwitchStableLockSec > 2400) {
+                DataStore.smartSwitchStableLockSec = 900
+            }
+            if (DataStore.smartSwitchExcellentScore < 500 || DataStore.smartSwitchExcellentScore > 1200) {
+                DataStore.smartSwitchExcellentScore = 760
+            }
+            if (DataStore.smartSwitchMinThroughputGainPct < 8 || DataStore.smartSwitchMinThroughputGainPct > 60) {
+                DataStore.smartSwitchMinThroughputGainPct = 18
             }
             DataStore.configurationStore.putBoolean(key, true)
         }

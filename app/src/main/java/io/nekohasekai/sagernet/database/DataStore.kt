@@ -193,6 +193,14 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartSwitchWeakScore by configurationStore.int("smartSwitchWeakScore") { 1100 }
     var smartSwitchCriticalScore by configurationStore.int("smartSwitchCriticalScore") { 1500 }
     var smartSwitchFailStreakTrigger by configurationStore.int("smartSwitchFailStreakTrigger") { 3 }
+    var smartSwitchStableLockSec by configurationStore.int("smartSwitchStableLockSec") { 900 }
+    var smartSwitchExcellentScore by configurationStore.int("smartSwitchExcellentScore") { 760 }
+    var smartSwitchMinThroughputGainPct by configurationStore.int("smartSwitchMinThroughputGainPct") { 18 }
+    var smartProfilePreset by configurationStore.string("smartProfilePreset") { "balanced" }
+    var smartEnableNetworkLearning by configurationStore.boolean("smartEnableNetworkLearning") { true }
+    var smartDebugEnabled by configurationStore.boolean("smartDebugEnabled") { false }
+    var smartSessionHealth by configurationStore.int("smartSessionHealth") { 0 }
+    var smartLastDecision by configurationStore.string("smartLastDecision") { "idle" }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
     var startupLocalSubHash by configurationStore.string(Key.STARTUP_LOCAL_SUB_HASH) { "" }
 
@@ -316,6 +324,19 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         configurationStore.putString("smartPreferredOrder.$groupId", raw)
     }
 
+    private fun scopeKey(scope: String): String {
+        val normalized = scope.trim().ifBlank { "default" }
+        return normalized.hashCode().toUInt().toString(16)
+    }
+
+    fun getSmartPreferredProxyScoped(scope: String, groupId: Long): Long {
+        return configurationStore.getLong("smartPreferredScope.${scopeKey(scope)}.$groupId", 0L)
+    }
+
+    fun setSmartPreferredProxyScoped(scope: String, groupId: Long, proxyId: Long) {
+        configurationStore.putLong("smartPreferredScope.${scopeKey(scope)}.$groupId", proxyId)
+    }
+
     private val smartPreferredOrderDirty = mutableSetOf<Long>()
 
     fun markSmartPreferredOrderDirty(groupId: Long) {
@@ -369,6 +390,14 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     fun setSmartLastScore(profileId: Long, score: Int) {
         configurationStore.putInt("smartLastScore.$profileId", score.coerceIn(-1, 20000))
+    }
+
+    fun getSmartLastBandwidthKbps(profileId: Long): Int {
+        return configurationStore.getInt("smartLastBandwidthKbps.$profileId", -1)
+    }
+
+    fun setSmartLastBandwidthKbps(profileId: Long, kbps: Int) {
+        configurationStore.putInt("smartLastBandwidthKbps.$profileId", kbps.coerceIn(-1, 5_000_000))
     }
 
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {

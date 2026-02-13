@@ -362,6 +362,17 @@
     <string name="parallel_interval_sec">Parallel test interval (sec)</string>
     <string name="parallel_idle_timeout_min">Parallel idle timeout (min)</string>
     <string name="parallel_tolerance">Parallel tolerance (ms)</string>
+    <string name="smart_profile">Smart Profile</string>
+    <string name="smart_profile_stable">Ultra Stable</string>
+    <string name="smart_profile_balanced">Balanced</string>
+    <string name="smart_profile_max_download">Max Download</string>
+    <string name="smart_network_learning">Per-Network Learning</string>
+    <string name="smart_network_learning_summary">Remember best proxy for each network interface/condition</string>
+    <string name="smart_debug_mode">Smart Debug Mode</string>
+    <string name="smart_debug_panel">Smart Debug Panel</string>
+    <string name="smart_debug_panel_summary">Health and switch decisions are shown here</string>
+    <string name="smart_debug_health">Session health</string>
+    <string name="smart_debug_last_decision">Last decision</string>
     <string name="clear_traffic_statistics">Clear traffic statistics</string>
     <string name="connection_test">Connection test</string>
     <string name="connection_test_clear_results">Clear test results</string>

@@ -15,8 +15,6 @@ import java.net.InetAddress
 import java.net.URLEncoder
 import java.util.Locale
 import io.nekohasekai.sagernet.bg.GuardedProcessPool
-import io.nekohasekai.sagernet.ktx.tryResume
-import io.nekohasekai.sagernet.ktx.tryResumeWithException
 import moe.matsuri.nb4a.utils.Util
 
 object SmartGeoTagger {
@@ -120,7 +118,7 @@ object SmartGeoTagger {
             return suspendCancellableCoroutine { c ->
                 processes = GuardedProcessPool {
                     Logs.w(it)
-                    c.tryResumeWithException(it)
+                    if (c.isActive) c.resumeWith(Result.failure(it))
                 }
                 c.invokeOnCancellation {
                     runCatching { close() }
@@ -136,9 +134,9 @@ object SmartGeoTagger {
                             val results = links.map { link ->
                                 Libcore.urlTest(box, link, timeout)
                             }
-                            c.tryResume(results)
+                            if (c.isActive) c.resumeWith(Result.success(results))
                         } catch (e: Exception) {
-                            c.tryResumeWithException(e)
+                            if (c.isActive) c.resumeWith(Result.failure(e))
                         }
                     }
                 }

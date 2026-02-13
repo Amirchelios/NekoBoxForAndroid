@@ -35,6 +35,7 @@ object SmartSelector {
         val successCount: Int,
         val jitter: Int,
         val worst: Int,
+        val bandwidthKbps: Int,
     )
 
     private data class ProfileEvaluation(
@@ -43,6 +44,7 @@ object SmartSelector {
         val successRatio: Double,
         val jitter: Int,
         val worst: Int,
+        val bandwidthKbps: Int,
     )
 
     fun applyCachedOrder(groupId: Long) {
@@ -112,9 +114,13 @@ object SmartSelector {
     }
 
     suspend fun selectBestFast(groupId: Long): Long? {
+        return selectTopFast(groupId, 1).firstOrNull()
+    }
+
+    suspend fun selectTopFast(groupId: Long, limit: Int): List<Long> {
         val profiles = SagerDatabase.proxyDao.getByGroup(groupId)
             .filterNot { it.type == TYPE_CONFIG }
-        if (profiles.isEmpty()) return null
+        if (profiles.isEmpty()) return emptyList()
 
         val cachedOrder = DataStore.getSmartPreferredOrder(groupId)
         val profileMap = profiles.associateBy { it.id }
@@ -123,21 +129,41 @@ object SmartSelector {
         } else {
             profiles
         }
-        val candidates = ordered.take(FAST_LIMIT)
+        val preCandidates = ordered.take((FAST_LIMIT * 2).coerceAtMost(ordered.size))
+        val candidates = preCandidates
+            .sortedByDescending { fastPriorityScore(it) }
+            .take(FAST_LIMIT)
 
         val evaluations = evaluateProfiles(candidates, FAST_TIMEOUT_MS, FAST_MAX_ATTEMPTS)
-        if (evaluations.isEmpty()) return null
+        if (evaluations.isEmpty()) return emptyList()
         evaluations.forEach { updateHealthState(it) }
 
         val sorted = evaluations.filter { it.score != null }.sortedBy { it.score }
-        val best = sorted.firstOrNull() ?: return null
+        if (sorted.isEmpty()) return emptyList()
         val orderedIds = sorted.map { it.profile.id } + evaluations
             .filterNot { it.score != null }
             .map { it.profile.id }
-        DataStore.setSmartPreferredProxy(groupId, best.profile.id)
+        DataStore.setSmartPreferredProxy(groupId, sorted.first().profile.id)
         DataStore.setSmartPreferredOrder(groupId, orderedIds)
         DataStore.markSmartPreferredOrderDirty(groupId)
-        return best.profile.id
+        return orderedIds.take(limit.coerceAtLeast(1))
+    }
+
+    private fun fastPriorityScore(profile: ProxyEntity): Long {
+        val lastScore = DataStore.getSmartLastScore(profile.id)
+        val bandwidth = DataStore.getSmartLastBandwidthKbps(profile.id).coerceAtLeast(0)
+        val failStreak = DataStore.getSmartFailureStreak(profile.id)
+        val healthPenalty = DataStore.getSmartHealthPenalty(profile.id)
+
+        val latencyScore = if (lastScore > 0) {
+            ((20_000 - lastScore.coerceAtMost(20_000)).toLong() * 5L)
+        } else {
+            0L
+        }
+        val throughputScore = bandwidth.coerceAtMost(80_000).toLong() * 2L
+        val failPenalty = failStreak.toLong() * 1_500L
+        val healthPenaltyScore = healthPenalty.toLong() * 4L
+        return latencyScore + throughputScore - failPenalty - healthPenaltyScore
     }
 
     private suspend fun evaluateProfiles(
@@ -174,8 +200,10 @@ object SmartSelector {
             val successRatio = successCount.toDouble() / totalProbes.toDouble()
             val jitter = snapshots.map { it.jitter }.average().toInt().coerceAtLeast(0)
             val worst = snapshots.maxOfOrNull { it.worst } ?: 0
+            val bandwidthKbps = snapshots.map { it.bandwidthKbps }.filter { it > 0 }
+                .average().toInt().coerceAtLeast(0)
             val baseScore = snapshots.minOfOrNull { it.score }
-            val rawPenalty = buildPenalty(successRatio, jitter, worst, baseScore)
+            val rawPenalty = buildPenalty(successRatio, jitter, worst, baseScore, bandwidthKbps)
             val healthPenalty = DataStore.getSmartHealthPenalty(profile.id)
             val failStreak = DataStore.getSmartFailureStreak(profile.id)
             val streakPenalty = failStreak * 45
@@ -190,6 +218,7 @@ object SmartSelector {
                 successRatio = successRatio,
                 jitter = jitter,
                 worst = worst,
+                bandwidthKbps = bandwidthKbps,
             )
         } catch (e: Exception) {
             Logs.w(e.readableMessage)
@@ -199,6 +228,7 @@ object SmartSelector {
 
     private suspend fun testOnce(profile: ProxyEntity, timeoutMs: Int): ProbeSnapshot? {
         val successes = mutableListOf<Int>()
+        val bandwidthSamples = mutableListOf<Int>()
         val minRequired = (testUrls.size / 2).coerceAtLeast(1)
         var remaining = testUrls.size
         for (url in testUrls) {
@@ -206,6 +236,7 @@ object SmartSelector {
             val elapsed = runCatching { TestInstance(profile, url, timeoutMs).doTest() }.getOrNull()
             if (elapsed != null && elapsed > 0) {
                 successes += elapsed
+                estimateBandwidthKbps(url, elapsed)?.let { bandwidthSamples += it }
             }
             if (successes.size + remaining < minRequired) {
                 return null
@@ -223,7 +254,20 @@ object SmartSelector {
             successCount = successes.size,
             jitter = jitter,
             worst = worst,
+            bandwidthKbps = bandwidthSamples.average().toInt().coerceAtLeast(0),
         )
+    }
+
+    private fun estimateBandwidthKbps(url: String, elapsedMs: Int): Int? {
+        if (elapsedMs <= 0) return null
+        val bytes = "__down?bytes=".let { key ->
+            val idx = url.indexOf(key)
+            if (idx < 0) return null
+            url.substring(idx + key.length).takeWhile { it.isDigit() }.toLongOrNull() ?: return null
+        }
+        if (bytes <= 0L) return null
+        val kbps = (bytes * 8L / elapsedMs.toLong()).coerceAtMost(5_000_000L)
+        return kbps.toInt().coerceAtLeast(1)
     }
 
     private fun buildPenalty(
@@ -231,6 +275,7 @@ object SmartSelector {
         jitter: Int,
         worst: Int,
         baseScore: Int?,
+        bandwidthKbps: Int,
     ): Int {
         val failPenalty = ((1.0 - successRatio).coerceIn(0.0, 1.0) * 900.0).toInt()
         val jitterPenalty = (jitter * 2).coerceAtMost(260)
@@ -239,7 +284,15 @@ object SmartSelector {
         } else {
             ((worst - baseScore) / 2).coerceIn(0, 260)
         }
-        return failPenalty + jitterPenalty + worstPenalty
+        val bandwidthBonus = when {
+            bandwidthKbps >= 24_000 -> 220
+            bandwidthKbps >= 16_000 -> 170
+            bandwidthKbps >= 10_000 -> 120
+            bandwidthKbps >= 6_000 -> 70
+            bandwidthKbps >= 3_000 -> 30
+            else -> 0
+        }
+        return (failPenalty + jitterPenalty + worstPenalty - bandwidthBonus).coerceAtLeast(0)
     }
 
     private fun updateHealthState(result: ProfileEvaluation) {
@@ -248,6 +301,7 @@ object SmartSelector {
         val oldStreak = DataStore.getSmartFailureStreak(profileId)
         if (result.score == null) {
             DataStore.setSmartLastScore(profileId, -1)
+            DataStore.setSmartLastBandwidthKbps(profileId, -1)
             val newStreak = (oldStreak + 1).coerceAtMost(20)
             val bump = (220 + newStreak * 30).coerceAtMost(700)
             DataStore.setSmartFailureStreak(profileId, newStreak)
@@ -256,6 +310,7 @@ object SmartSelector {
         }
 
         DataStore.setSmartLastScore(profileId, result.score)
+        DataStore.setSmartLastBandwidthKbps(profileId, result.bandwidthKbps)
         val stable = result.successRatio >= 0.80 && result.jitter <= 120
         val newStreak = (oldStreak - 2).coerceAtLeast(0)
         val baseDrop = if (stable) 220 else 120

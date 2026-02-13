@@ -111,6 +111,26 @@
             app:key="parallelStrategy"
             app:title="@string/parallel_strategy"
             app:useSimpleSummaryProvider="true" />
+        <moe.matsuri.nb4a.ui.SimpleMenuPreference
+            app:defaultValue="balanced"
+            app:entries="@array/smart_profile_entries"
+            app:entryValues="@array/smart_profile_values"
+            app:key="smartProfilePreset"
+            app:title="@string/smart_profile"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreference
+            app:defaultValue="true"
+            app:key="smartEnableNetworkLearning"
+            app:title="@string/smart_network_learning"
+            app:summary="@string/smart_network_learning_summary" />
+        <SwitchPreference
+            app:defaultValue="false"
+            app:key="smartDebugEnabled"
+            app:title="@string/smart_debug_mode" />
+        <Preference
+            app:key="smartDebugPanel"
+            app:title="@string/smart_debug_panel"
+            app:summary="@string/smart_debug_panel_summary" />
         <EditTextPreference
             app:defaultValue="24"
             app:key="parallelConcurrency"

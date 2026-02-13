@@ -548,4 +548,16 @@
         <item>@string/sniff_override</item>
     </string-array>
 
+    <string-array name="smart_profile_entries">
+        <item>@string/smart_profile_stable</item>
+        <item>@string/smart_profile_balanced</item>
+        <item>@string/smart_profile_max_download</item>
+    </string-array>
+
+    <string-array name="smart_profile_values">
+        <item>stable</item>
+        <item>balanced</item>
+        <item>max_download</item>
+    </string-array>
+
 </resources>
