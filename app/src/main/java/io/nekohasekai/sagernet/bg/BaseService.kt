@@ -1,5 +1,4 @@
 package io.nekohasekai.sagernet.bg
-
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -31,9 +30,7 @@ import libcore.Libcore
 import moe.matsuri.nb4a.Protocols
 import moe.matsuri.nb4a.utils.Util
 import java.net.UnknownHostException
-
 class BaseService {
-
     enum class State(
         val canStop: Boolean = false,
         val started: Boolean = false,
@@ -44,14 +41,11 @@ class BaseService {
          */
         Idle, Connecting(true, true, false), Connected(true, true, true), Stopping, Stopped,
     }
-
     interface ExpectedException
-
     class Data internal constructor(private val service: Interface) {
         var state = State.Stopped
         var proxy: ProxyInstance? = null
         var notification: ServiceNotification? = null
-
         val receiver = broadcastReceiver { ctx, intent ->
             when (intent.action) {
                 Intent.ACTION_SHUTDOWN -> service.persistStats()
@@ -69,7 +63,6 @@ class BaseService {
                         }
                     }
                 }
-
                 Action.RESET_UPSTREAM_CONNECTIONS -> runOnDefaultDispatcher {
                     Libcore.resetAllConnections(true)
                     runOnMainDispatcher {
@@ -78,16 +71,13 @@ class BaseService {
                             .show()
                     }
                 }
-
                 else -> service.stopRunner()
             }
         }
         var closeReceiverRegistered = false
-
         val binder = Binder(this)
         var connectingJob: Job? = null
         var smartSwitchJob: Job? = null
-
         fun changeState(s: State, msg: String? = null) {
             if (state == s && msg == null) return
             state = s
@@ -95,7 +85,6 @@ class BaseService {
             binder.stateChanged(s, msg)
         }
     }
-
     class Binder(private var data: Data? = null) : ISagerNetService.Stub(), CoroutineScope,
         AutoCloseable {
         private val callbacks = object : RemoteCallbackList<ISagerNetServiceCallback>() {
@@ -103,14 +92,10 @@ class BaseService {
                 super.onCallbackDied(callback, cookie)
             }
         }
-
         val callbackIdMap = mutableMapOf<ISagerNetServiceCallback, Int>()
-
         override val coroutineContext = Dispatchers.Main.immediate + Job()
-
         override fun getState(): Int = (data?.state ?: State.Idle).ordinal
         override fun getProfileName(): String = data?.proxy?.displayProfileName ?: "Idle"
-
         override fun registerCallback(cb: ISagerNetServiceCallback, id: Int) {
             if (id == SagerConnection.CONNECTION_ID_RESTART_BG) {
                 Runtime.getRuntime().exit(0)
@@ -121,9 +106,7 @@ class BaseService {
             }
             callbackIdMap[cb] = id
         }
-
         private val broadcastMutex = Mutex()
-
         suspend fun broadcast(work: (ISagerNetServiceCallback) -> Unit) {
             broadcastMutex.withLock {
                 val count = callbacks.beginBroadcast()
@@ -140,12 +123,10 @@ class BaseService {
                 }
             }
         }
-
         override fun unregisterCallback(cb: ISagerNetServiceCallback) {
             callbackIdMap.remove(cb)
             callbacks.unregister(cb)
         }
-
         override fun urlTest(): Int {
             if (data?.proxy?.box == null) {
                 error("core not started")
@@ -158,32 +139,26 @@ class BaseService {
                 error(Protocols.genFriendlyMsg(e.readableMessage))
             }
         }
-
         fun stateChanged(s: State, msg: String?) = launch {
             val profileName = profileName
             broadcast { it.stateChanged(s.ordinal, profileName, msg) }
         }
-
         fun missingPlugin(pluginName: String) = launch {
             val profileName = profileName
             broadcast { it.missingPlugin(profileName, pluginName) }
         }
-
         override fun close() {
             callbacks.kill()
             cancel()
             data = null
         }
     }
-
     interface Interface {
         val data: Data
         val tag: String
         fun createNotification(profileName: String): ServiceNotification
-
         fun onBind(intent: Intent): IBinder? =
             if (intent.action == Action.SERVICE) data.binder else null
-
         fun reload() {
             val selected = DataStore.selectedProxy
             val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
@@ -218,7 +193,6 @@ class BaseService {
                 else -> Logs.w("Illegal state $s when invoking use")
             }
         }
-
         fun canReloadSelector(): Boolean {
             if ((data.proxy?.config?.selectorGroupId ?: -1L) < 0) return false
             val ent = SagerDatabase.proxyDao.getById(DataStore.selectedProxy) ?: return false
@@ -230,17 +204,14 @@ class BaseService {
             }
             return false
         }
-
         suspend fun startProcesses() {
             data.proxy!!.launch()
         }
-
         fun startRunner() {
             this as Context
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(Intent(this, javaClass))
             else startService(Intent(this, javaClass))
         }
-
         fun killProcesses() {
             data.proxy?.close()
             wakeLock?.apply {
@@ -251,33 +222,48 @@ class BaseService {
                 DefaultNetworkListener.stop(this)
             }
         }
-
         fun stopRunner(restart: Boolean = false, msg: String? = null) {
             DataStore.baseService = null
             DataStore.vpnService = null
-
             if (data.state == State.Stopping) return
             data.notification?.destroy()
             data.notification = null
             this as Service
-
             data.changeState(State.Stopping)
-
             runOnMainDispatcher {
-                data.connectingJob?.cancelAndJoin() // ensure stop connecting first
-                data.smartSwitchJob?.cancelAndJoin()
-                // we use a coroutineScope here to allow clean-up in parallel
-                coroutineScope {
-                    killProcesses()
-                    val data = data
-                    if (data.closeReceiverRegistered) {
-                        unregisterReceiver(data.receiver)
-                        data.closeReceiverRegistered = false
-                    }
-                    data.proxy = null
-                    data.smartSwitchJob = null
+                suspend fun cancelJobBounded(name: String, job: Job?) {
+                    if (job == null) return
+                    job.cancel()
+                    val joined = withTimeoutOrNull(1500L) {
+                        job.join()
+                        true
+                    } ?: false
+                    if (!joined) Logs.w("Timed out while stopping $name job, forcing shutdown")
                 }
-
+                runCatching {
+                    cancelJobBounded("connecting", data.connectingJob) // ensure stop connecting first
+                    cancelJobBounded("smart-switch", data.smartSwitchJob)
+                }.onFailure {
+                    Logs.w("Failed while cancelling jobs during stop: ${it.readableMessage}")
+                }
+                try {
+                    killProcesses()
+                } catch (e: Exception) {
+                    Logs.w("Failed while killing processes during stop: ${e.readableMessage}")
+                } finally {
+                    val stopData = data
+                    if (stopData.closeReceiverRegistered) {
+                        runCatching {
+                            unregisterReceiver(stopData.receiver)
+                        }.onFailure {
+                            Logs.w("Failed to unregister close receiver: ${it.readableMessage}")
+                        }
+                        stopData.closeReceiverRegistered = false
+                    }
+                    stopData.proxy = null
+                    stopData.connectingJob = null
+                    stopData.smartSwitchJob = null
+                }
                 // change the state
                 data.changeState(State.Stopped, msg)
                 // stop the service if nothing has bound to it
@@ -286,14 +272,11 @@ class BaseService {
                 }
             }
         }
-
         fun persistStats() {
             // TODO NEW save app stats?
         }
-
         // networks
         var upstreamInterfaceName: String?
-
         suspend fun preInit() {
             DefaultNetworkListener.start(this) {
                 SagerNet.connectivity.getLinkProperties(it)?.also { link ->
@@ -313,16 +296,13 @@ class BaseService {
                 }
             }
         }
-
         var wakeLock: PowerManager.WakeLock?
         fun acquireWakeLock()
-
         suspend fun lateInit() {
             wakeLock?.apply {
                 release()
                 wakeLock = null
             }
-
             if (DataStore.acquireWakeLock) {
                 acquireWakeLock()
                 data.notification?.postNotificationWakeLockStatus(true)
@@ -330,10 +310,8 @@ class BaseService {
                 data.notification?.postNotificationWakeLockStatus(false)
             }
         }
-
         fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
             DataStore.baseService = this
-
             val data = data
             if (data.state != State.Stopped) return Service.START_NOT_STICKY
             val profile = SagerDatabase.proxyDao.getById(DataStore.selectedProxy)
@@ -343,7 +321,6 @@ class BaseService {
                 stopRunner(false, getString(R.string.profile_empty))
                 return Service.START_NOT_STICKY
             }
-
             val proxy = ProxyInstance(profile, this)
             data.proxy = proxy
             BootReceiver.enabled = DataStore.persistAcrossReboot
@@ -376,25 +353,20 @@ class BaseService {
                 }
                 data.closeReceiverRegistered = true
             }
-
             data.changeState(State.Connecting)
             runOnMainDispatcher {
                 try {
                     data.notification = createNotification(ServiceNotification.genTitle(profile))
-
                     Executable.killAll()    // clean up old processes
                     preInit()
                     proxy.init()
                     DataStore.currentProfile = profile.id
-
                     proxy.processes = GuardedProcessPool {
                         Logs.w(it)
                         stopRunner(false, it.readableMessage)
                     }
-
                     startProcesses()
                     data.changeState(State.Connected)
-
                     if (GroupManager.isAutoSelectAggregate(profile)) {
                         runOnDefaultDispatcher {
                             val cooldownMs =
@@ -424,7 +396,6 @@ class BaseService {
                                 DataStore.smartSwitchExcellentScore.coerceIn(450, 1400)
                             val minThroughputGainPct =
                                 DataStore.smartSwitchMinThroughputGainPct.coerceIn(5, 80)
-
                             var activeId = 0L
                             var activeSinceMs = System.currentTimeMillis()
                             var lastSwitchAtMs = 0L
@@ -440,7 +411,6 @@ class BaseService {
                             var disruptionUntilMs = 0L
                             var lastAutoTuneAtMs = 0L
                             val learningEnabled = DataStore.smartEnableNetworkLearning
-
                             fun activeStats(): Pair<Int, Int> {
                                 if (activeId <= 0L) return Pair(-1, 0)
                                 return Pair(
@@ -448,22 +418,18 @@ class BaseService {
                                     DataStore.getSmartFailureStreak(activeId)
                                 )
                             }
-
                             fun bandwidth(profileId: Long): Int {
                                 if (profileId <= 0L) return -1
                                 return DataStore.getSmartLastBandwidthKbps(profileId)
                             }
-
                             fun currentScope(): String {
                                 if (!learningEnabled) return "default"
                                 return upstreamInterfaceName?.takeIf { it.isNotBlank() } ?: "default"
                             }
-
                             fun setDecision(reason: String) {
                                 if (!DataStore.smartDebugEnabled) return
                                 DataStore.smartLastDecision = reason
                             }
-
                             fun updateSessionHealth(score: Int, streak: Int, bw: Int) {
                                 val latencyPart = when {
                                     score <= 0 -> 0
@@ -486,15 +452,12 @@ class BaseService {
                                 DataStore.smartSessionHealth =
                                     (latencyPart + throughputPart - streakPenalty).coerceIn(0, 100)
                             }
-
                             fun isCritical(score: Int, streak: Int): Boolean {
                                 return score <= 0 || score >= criticalScore || streak >= failTrigger + 1
                             }
-
                             fun isWeak(score: Int, streak: Int): Boolean {
                                 return isCritical(score, streak) || score >= weakScore || streak >= failTrigger
                             }
-
                             fun selectOutboundById(id: Long): Boolean {
                                 if (id <= 0L) return false
                                 val tag = data.proxy?.config?.profileTagMap?.get(id).orEmpty()
@@ -508,7 +471,6 @@ class BaseService {
                                 setDecision("switch:$id")
                                 return true
                             }
-
                             fun maybeSwitchTo(id: Long, warmup: Boolean) {
                                 if (id <= 0L) return
                                 if (id == activeId) {
@@ -518,7 +480,6 @@ class BaseService {
                                 }
                                 val candidateScore = DataStore.getSmartLastScore(id)
                                 if (candidateScore <= 0) return
-
                                 val now = System.currentTimeMillis()
                                 val (activeScore, activeStreak) = activeStats()
                                 val activeCritical = isCritical(activeScore, activeStreak)
@@ -526,14 +487,12 @@ class BaseService {
                                 val activeGood = activeScore in 1..excellentScore && activeStreak == 0
                                 val activeBw = bandwidth(activeId)
                                 val candidateBw = bandwidth(id)
-
                                 if (!warmup && !activeCritical && now - lastSwitchAtMs < cooldownMs) return
                                 if (!activeCritical && now - activeSinceMs < minDwellMs) return
                                 if (!warmup && activeGood && now - activeSinceMs < stableLockMs) {
                                     setDecision("hold:stable_lock")
                                     return
                                 }
-
                                 val improveAbs = if (activeScore > 0) activeScore - candidateScore else Int.MAX_VALUE
                                 val improvePctEnough =
                                     activeScore <= 0 || candidateScore * 100 <= activeScore * (100 - minImprovePct)
@@ -560,14 +519,12 @@ class BaseService {
                                     setDecision("hold:no_significant_gain")
                                     return
                                 }
-
                                 if (pendingCandidateId == id) {
                                     pendingWins++
                                 } else {
                                     pendingCandidateId = id
                                     pendingWins = 1
                                 }
-
                                 val requiredWins = when {
                                     activeCritical -> 1
                                     warmup -> warmupWins + if (activeExcellent) 1 else 0
@@ -575,13 +532,11 @@ class BaseService {
                                     else -> baseWins + 1
                                 }.coerceAtLeast(1)
                                 if (pendingWins < requiredWins) return
-
                                 if (selectOutboundById(id)) {
                                     pendingCandidateId = 0L
                                     pendingWins = 0
                                 }
                             }
-
                             val scopedPreferredId =
                                 DataStore.getSmartPreferredProxyScoped(currentScope(), profile.groupId)
                             val preferredId = DataStore.getSmartPreferredProxy(profile.groupId)
@@ -601,7 +556,6 @@ class BaseService {
                             if (best != null) {
                                 maybeSwitchTo(best, warmup = true)
                             }
-
                             data.smartSwitchJob?.cancel()
                             data.smartSwitchJob = runOnDefaultDispatcher {
                                 repeat(warmupRounds) {
@@ -639,7 +593,6 @@ class BaseService {
                                     } else {
                                         0
                                     }
-
                                     val stabilityMultiplier = when {
                                         stableRounds >= 24 -> 4L
                                         stableRounds >= 12 -> 3L
@@ -652,7 +605,6 @@ class BaseService {
                                         normalProbeMs * stabilityMultiplier
                                     }
                                     delay(delayMs)
-
                                     if (criticalRounds >= 4 && now >= disruptionUntilMs) {
                                         if (standbyId > 0L) {
                                             maybeSwitchTo(standbyId, warmup = false)
@@ -668,7 +620,6 @@ class BaseService {
                                             }
                                         }
                                     }
-
                                     val top = SmartSelector.selectTopFast(profile.groupId, 3)
                                     val id = top.firstOrNull()
                                     standbyId = top.getOrNull(1) ?: standbyId
@@ -689,7 +640,6 @@ class BaseService {
                                         continue
                                     }
                                     nullProbeStreak = 0
-
                                     if (System.currentTimeMillis() < disruptionUntilMs && !critical) {
                                         disruptionRecoveryWins++
                                         setDecision("hold:global_disruption")
@@ -708,7 +658,6 @@ class BaseService {
                             }
                         }
                     }
-
                     lateInit()
                 } catch (_: CancellationException) { // if the job was cancelled, it is canceller's responsibility to call stopRunner
                 } catch (_: UnknownHostException) {
@@ -735,5 +684,4 @@ class BaseService {
             return Service.START_NOT_STICKY
         }
     }
-
 }

@@ -57,8 +57,13 @@ class ProxyInstance(profile: ProxyEntity, var service: BaseService.Interface? = 
 
     override fun close() {
         super.close()
-        runBlocking {
-            looper?.stop()
+        runCatching {
+            runBlocking {
+                looper?.stop()
+                looper = null
+            }
+        }.onFailure {
+            Logs.w(it)
             looper = null
         }
     }

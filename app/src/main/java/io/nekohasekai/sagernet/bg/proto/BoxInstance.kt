@@ -212,10 +212,12 @@ abstract class BoxInstance(
 
         cacheFiles.removeAll { it.delete(); true }
 
-        if (::processes.isInitialized) processes.close()
+        if (::processes.isInitialized) {
+            runCatching { processes.close() }.onFailure { Logs.w(it) }
+        }
 
         if (::box.isInitialized) {
-            box.close()
+            runCatching { box.close() }.onFailure { Logs.w(it) }
         }
     }
 

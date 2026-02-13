@@ -52,9 +52,18 @@ class VpnService : BaseVpnService(),
 
     @Suppress("EXPERIMENTAL_API_USAGE")
     override fun killProcesses() {
-        conn?.close()
+        val localConn = conn
         conn = null
-        super.killProcesses()
+        runCatching {
+            super.killProcesses()
+        }.onFailure {
+            Logs.w("Failed to stop proxy core cleanly: ${it.readableMessage}")
+        }
+        runCatching {
+            localConn?.close()
+        }.onFailure {
+            Logs.w("Failed to close VPN tunnel fd: ${it.readableMessage}")
+        }
     }
 
     override fun onBind(intent: Intent) = when (intent.action) {
