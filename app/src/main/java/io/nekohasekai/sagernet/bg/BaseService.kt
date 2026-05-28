@@ -396,10 +396,33 @@ class BaseService {
                                 DataStore.smartSwitchExcellentScore.coerceIn(450, 1400)
                             val minThroughputGainPct =
                                 DataStore.smartSwitchMinThroughputGainPct.coerceIn(5, 80)
+                            val conservativeSwitch = DataStore.smartConservativeSwitchEnabled
+                            val conservativeMaxSwitches10Min =
+                                DataStore.smartConservativeMaxSwitches10Min.coerceIn(1, 8)
                             val disruptionHoldMinMs =
                                 DataStore.smartDisruptionHoldMinSec.coerceIn(30, 900) * 1000L
                             val disruptionHoldMaxMs =
                                 DataStore.smartDisruptionHoldMaxSec.coerceIn(60, 1800) * 1000L
+                            val effectiveCooldownMs = if (conservativeSwitch) {
+                                (cooldownMs * 3L / 2L).coerceAtMost(1_800_000L)
+                            } else {
+                                cooldownMs
+                            }
+                            val effectiveStableLockMs = if (conservativeSwitch) {
+                                (stableLockMs * 3L / 2L).coerceAtMost(4_200_000L)
+                            } else {
+                                stableLockMs
+                            }
+                            val effectiveMinImproveAbs = if (conservativeSwitch) {
+                                (minImproveAbs + 140).coerceAtMost(2000)
+                            } else {
+                                minImproveAbs
+                            }
+                            val effectiveMinImprovePct = if (conservativeSwitch) {
+                                (minImprovePct + 6).coerceAtMost(75)
+                            } else {
+                                minImprovePct
+                            }
                             var activeId = 0L
                             var activeSinceMs = System.currentTimeMillis()
                             var lastSwitchAtMs = 0L
@@ -414,6 +437,7 @@ class BaseService {
                             var disruptionRecoveryWins = 0
                             var disruptionUntilMs = 0L
                             var lastAutoTuneAtMs = 0L
+                            val recentSwitchesMs = ArrayDeque<Long>()
                             val learningEnabled = DataStore.smartEnableNetworkLearning
                             fun activeStats(): Pair<Int, Int> {
                                 if (activeId <= 0L) return Pair(-1, 0)
@@ -470,6 +494,11 @@ class BaseService {
                                 activeId = id
                                 activeSinceMs = System.currentTimeMillis()
                                 lastSwitchAtMs = activeSinceMs
+                                recentSwitchesMs.addLast(activeSinceMs)
+                                val keepFrom = activeSinceMs - 600_000L
+                                while (recentSwitchesMs.isNotEmpty() && recentSwitchesMs.first() < keepFrom) {
+                                    recentSwitchesMs.removeFirst()
+                                }
                                 DataStore.setSmartPreferredProxy(profile.groupId, id)
                                 DataStore.setSmartPreferredProxyScoped(currentScope(), profile.groupId, id)
                                 setDecision("switch:$id")
@@ -495,16 +524,26 @@ class BaseService {
                                     setDecision("hold:disruption_window")
                                     return
                                 }
-                                if (!warmup && !activeCritical && now - lastSwitchAtMs < cooldownMs) return
+                                if (!warmup && !activeCritical && now - lastSwitchAtMs < effectiveCooldownMs) return
                                 if (!activeCritical && now - activeSinceMs < minDwellMs) return
-                                if (!warmup && activeGood && now - activeSinceMs < stableLockMs) {
+                                if (!warmup && activeGood && now - activeSinceMs < effectiveStableLockMs) {
                                     setDecision("hold:stable_lock")
                                     return
                                 }
+                                if (!warmup && !activeCritical && conservativeSwitch) {
+                                    val keepFrom = now - 600_000L
+                                    while (recentSwitchesMs.isNotEmpty() && recentSwitchesMs.first() < keepFrom) {
+                                        recentSwitchesMs.removeFirst()
+                                    }
+                                    if (recentSwitchesMs.size >= conservativeMaxSwitches10Min) {
+                                        setDecision("hold:conservative_switch_budget")
+                                        return
+                                    }
+                                }
                                 val improveAbs = if (activeScore > 0) activeScore - candidateScore else Int.MAX_VALUE
                                 val improvePctEnough =
-                                    activeScore <= 0 || candidateScore * 100 <= activeScore * (100 - minImprovePct)
-                                val improveAbsEnough = activeScore <= 0 || improveAbs >= minImproveAbs
+                                    activeScore <= 0 || candidateScore * 100 <= activeScore * (100 - effectiveMinImprovePct)
+                                val improveAbsEnough = activeScore <= 0 || improveAbs >= effectiveMinImproveAbs
                                 val throughputGainEnough = if (activeBw > 0 && candidateBw > 0) {
                                     candidateBw * 100 >= activeBw * (100 + minThroughputGainPct)
                                 } else {
@@ -514,8 +553,8 @@ class BaseService {
                                 val improveEnough = when {
                                     activeCritical -> true
                                     activeExcellent -> {
-                                        val strictAbs = minImproveAbs + 180
-                                        val strictPct = (minImprovePct + 8).coerceAtMost(70)
+                                        val strictAbs = effectiveMinImproveAbs + 180
+                                        val strictPct = (effectiveMinImprovePct + 8).coerceAtMost(78)
                                         improveAbs >= strictAbs ||
                                             candidateScore * 100 <= activeScore * (100 - strictPct) ||
                                             throughputGainEnough
@@ -538,6 +577,8 @@ class BaseService {
                                     warmup -> warmupWins + if (activeExcellent) 1 else 0
                                     activeWeak -> baseWins
                                     else -> baseWins + 1
+                                }.let { base ->
+                                    if (conservativeSwitch && !activeCritical) base + 1 else base
                                 }.coerceAtLeast(1)
                                 if (pendingWins < requiredWins) return
                                 if (selectOutboundById(id)) {

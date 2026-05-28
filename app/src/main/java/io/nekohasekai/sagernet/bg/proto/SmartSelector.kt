@@ -86,9 +86,7 @@ object SmartSelector {
         if (evaluations.isEmpty()) return null
         evaluations.forEach { updateHealthState(groupId, scope, it) }
 
-        val valid = refineWithThroughput(evaluations.filter { it.score != null })
-            .sortedWith(compareBy<ProfileEvaluation> { it.score ?: Int.MAX_VALUE }
-                .thenByDescending { it.bandwidthKbps })
+        val valid = orderEvaluations(refineWithThroughput(evaluations.filter { it.score != null }))
         if (valid.isEmpty()) return null
 
         val best = valid.first()
@@ -147,9 +145,7 @@ object SmartSelector {
         if (evaluations.isEmpty()) return emptyList()
         evaluations.forEach { updateHealthState(groupId, scope, it) }
 
-        val sorted = refineWithThroughput(evaluations.filter { it.score != null })
-            .sortedWith(compareBy<ProfileEvaluation> { it.score ?: Int.MAX_VALUE }
-                .thenByDescending { it.bandwidthKbps })
+        val sorted = orderEvaluations(refineWithThroughput(evaluations.filter { it.score != null }))
         if (sorted.isEmpty()) return emptyList()
         val orderedIds = sorted.map { it.profile.id } + evaluations
             .filterNot { it.score != null }
@@ -165,6 +161,7 @@ object SmartSelector {
         val bandwidth = DataStore.getSmartLastBandwidthKbps(profile.id).coerceAtLeast(0)
         val failStreak = DataStore.getSmartFailureStreak(profile.id)
         val healthPenalty = DataStore.getSmartHealthPenalty(profile.id)
+        val transportClass = detectTransportClass(profile)
 
         val latencyScore = if (lastScore > 0) {
             ((20_000 - lastScore.coerceAtMost(20_000)).toLong() * 5L)
@@ -174,7 +171,8 @@ object SmartSelector {
         val throughputScore = bandwidth.coerceAtMost(80_000).toLong() * 2L
         val failPenalty = failStreak.toLong() * 1_500L
         val healthPenaltyScore = healthPenalty.toLong() * 4L
-        return latencyScore + throughputScore - failPenalty - healthPenaltyScore
+        val transportPenaltyScore = transportStaticBias(transportClass).toLong() * 18L
+        return latencyScore + throughputScore - failPenalty - healthPenaltyScore - transportPenaltyScore
     }
 
     private suspend fun evaluateProfiles(
@@ -290,6 +288,19 @@ object SmartSelector {
             kbps >= 3_000 -> 30
             else -> 0
         }
+    }
+
+    private fun orderEvaluations(valid: List<ProfileEvaluation>): List<ProfileEvaluation> {
+        if (valid.isEmpty()) return valid
+        val preferPlain = DataStore.smartNonTlsFirstEnabled &&
+            valid.any { it.transportClass == TransportClass.PLAIN }
+        return valid.sortedWith(
+            compareBy<ProfileEvaluation> {
+                val base = it.score ?: Int.MAX_VALUE
+                val nonTlsBoost = if (preferPlain && it.transportClass != TransportClass.PLAIN) 180 else 0
+                base + nonTlsBoost
+            }.thenByDescending { it.bandwidthKbps }
+        )
     }
 
     private suspend fun testOnce(profile: ProxyEntity, timeoutMs: Int): ProbeSnapshot? {
@@ -424,6 +435,17 @@ object SmartSelector {
             ProxyEntity.TYPE_WG -> TransportClass.PLAIN
 
             else -> TransportClass.MIXED
+        }
+    }
+
+    private fun transportStaticBias(transportClass: TransportClass): Int {
+        if (!DataStore.smartNonTlsFirstEnabled) return 0
+        val tlsPenalty = DataStore.smartNonTlsTlsPenalty.coerceIn(80, 1600)
+        val plainBonus = DataStore.smartNonTlsPlainBonus.coerceIn(20, 800)
+        return when (transportClass) {
+            TransportClass.TLS -> tlsPenalty
+            TransportClass.PLAIN -> -plainBonus
+            TransportClass.MIXED -> tlsPenalty / 3
         }
     }
 }

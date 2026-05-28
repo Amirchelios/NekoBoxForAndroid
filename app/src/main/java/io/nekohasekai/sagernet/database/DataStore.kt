@@ -210,6 +210,11 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartSpeedRefineTimeoutMs by configurationStore.int("smartSpeedRefineTimeoutMs") { 2600 }
     var smartDisruptionHoldMinSec by configurationStore.int("smartDisruptionHoldMinSec") { 90 }
     var smartDisruptionHoldMaxSec by configurationStore.int("smartDisruptionHoldMaxSec") { 300 }
+    var smartNonTlsFirstEnabled by configurationStore.boolean("smartNonTlsFirstEnabled") { true }
+    var smartNonTlsTlsPenalty by configurationStore.int("smartNonTlsTlsPenalty") { 360 }
+    var smartNonTlsPlainBonus by configurationStore.int("smartNonTlsPlainBonus") { 120 }
+    var smartConservativeSwitchEnabled by configurationStore.boolean("smartConservativeSwitchEnabled") { true }
+    var smartConservativeMaxSwitches10Min by configurationStore.int("smartConservativeMaxSwitches10Min") { 2 }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
     var startupLocalSubHash by configurationStore.string(Key.STARTUP_LOCAL_SUB_HASH) { "" }
 
