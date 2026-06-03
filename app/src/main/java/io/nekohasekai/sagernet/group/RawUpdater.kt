@@ -56,7 +56,7 @@ object RawUpdater : GroupUpdater() {
             rawText = app.contentResolver.openInputStream(link.toUri())
                 ?.bufferedReader()
                 ?.readText()
-                .orEmpty()
+                .orEmpty()  
 
             proxies = rawText.let { parseRaw(it) }
                 ?: error(app.getString(R.string.no_proxies_found_in_subscription))
@@ -67,42 +67,52 @@ object RawUpdater : GroupUpdater() {
                 subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
             ).execute()
             rawText = Util.getStringBox(response.contentString)
-            val subscriptionLinks = extractSubscriptionLinks(rawText)
-            if (subscriptionLinks.isNotEmpty()) {
-                val aggregated = mutableListOf<AbstractBean>()
-                val rawTexts = mutableListOf<String>()
-                val userAgent = subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
-                val batches = coroutineScope {
-                    subscriptionLinks.take(8).map { subLink ->
-                        async {
-                            val subText = runCatching {
-                                Util.getStringBox(
-                                    buildSubscriptionRequest(subLink, userAgent)
-                                        .execute().contentString
-                                )
-                            }.getOrDefault("")
-                            if (subText.isBlank()) return@async Pair("", emptyList<AbstractBean>())
-                            val parsed = runCatching { parseRaw(subText).orEmpty() }.getOrElse { emptyList() }
-                            Pair(subText, parsed)
-                        }
-                    }.awaitAll()
-                }
-                for ((subText, subProxies) in batches) {
-                    if (subText.isBlank()) continue
-                    rawTexts.add(subText)
-                    if (subProxies.isNotEmpty()) {
-                        aggregated.addAll(subProxies)
-                    }
-                }
-                proxies = aggregated.takeIf { it.isNotEmpty() }
-                    ?: error(app.getString(R.string.no_proxies_found))
-                aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(rawTexts))
-            } else {
-                proxies = parseRaw(rawText)
-                    ?: error(app.getString(R.string.no_proxies_found))
+            val directProxies = parseRaw(rawText).orEmpty()
+            if (directProxies.isNotEmpty()) {
+                proxies = directProxies
                 aggregateConfig = sanitizeAggregateConfig(
                     ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
                 )
+            } else {
+                val subscriptionLinks = extractSubscriptionLinks(rawText)
+                if (subscriptionLinks.isNotEmpty()) {
+                    val aggregated = mutableListOf<AbstractBean>()
+                    val rawTexts = mutableListOf<String>()
+                    val userAgent = subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
+                    val batches = coroutineScope {
+                        subscriptionLinks.take(8).map { subLink ->
+                            async {
+                                val subText = runCatching {
+                                    Util.getStringBox(
+                                        buildSubscriptionRequest(subLink, userAgent)
+                                            .execute().contentString
+                                    )
+                                }.getOrDefault("")
+                                if (subText.isBlank()) return@async Pair("", emptyList<AbstractBean>())
+                                val parsed = runCatching { parseRaw(subText).orEmpty() }.getOrElse { emptyList() }
+                                Pair(subText, parsed)
+                            }
+                        }.awaitAll()
+                    }
+                    for ((subText, subProxies) in batches) {
+                        if (subText.isBlank()) continue
+                        rawTexts.add(subText)
+                        if (subProxies.isNotEmpty()) {
+                            aggregated.addAll(subProxies)
+                        }
+                    }
+                    proxies = aggregated.takeIf { it.isNotEmpty() }
+                        ?: error(app.getString(R.string.no_proxies_found))
+                    aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(rawTexts))
+                } else {
+                    aggregateConfig = sanitizeAggregateConfig(
+                        ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
+                    )
+                    if (aggregateConfig.isBlank()) {
+                        error(app.getString(R.string.no_proxies_found))
+                    }
+                    proxies = emptyList()
+                }
             }
 
             subscription.subscriptionUserinfo =
@@ -1044,7 +1054,14 @@ object RawUpdater : GroupUpdater() {
         }
 
     private fun extractSubscriptionLinks(rawText: String): List<String> {
-        return rawText.lineSequence()
+        val texts = mutableListOf(rawText)
+        runCatching { rawText.decodeBase64UrlSafe() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() && it != rawText }
+            ?.let { texts.add(it) }
+
+        return texts.asSequence()
+            .flatMap { it.lineSequence() }
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
             .filter { it.startsWith("http://") || it.startsWith("https://") }
@@ -1074,7 +1091,7 @@ object RawUpdater : GroupUpdater() {
                 val outbound = list.optJSONObject(i) ?: continue
                 val type = outbound.optString("type")
                 if (type == "selector" || type == "urltest" || type == "parallel" || type == "direct" ||
-                    type == "block" || type == "dns" || type == "shadowsocks"
+                    type == "block" || type == "dns"
                 ) {
                     continue
                 }

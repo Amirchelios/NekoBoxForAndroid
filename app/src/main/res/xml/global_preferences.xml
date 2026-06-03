@@ -152,7 +152,7 @@
             app:title="@string/parallel_url"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
-            app:defaultValue="20"
+            app:defaultValue="30"
             app:key="parallelIntervalSec"
             app:title="@string/parallel_interval_sec"
             app:useSimpleSummaryProvider="true" />

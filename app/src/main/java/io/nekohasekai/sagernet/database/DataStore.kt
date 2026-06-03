@@ -178,7 +178,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var parallelUrl by configurationStore.string(Key.PARALLEL_URL) {
         "https://speed.cloudflare.com/__down?bytes=1000000"
     }
-    var parallelIntervalSec by configurationStore.int(Key.PARALLEL_INTERVAL) { 20 }
+    var parallelIntervalSec by configurationStore.int(Key.PARALLEL_INTERVAL) { 30 }
     var parallelIdleTimeoutMin by configurationStore.int(Key.PARALLEL_IDLE_TIMEOUT) { 30 }
     var parallelTolerance by configurationStore.int(Key.PARALLEL_TOLERANCE) { 20 }
     var autoSelectPrimary by configurationStore.string(Key.AUTO_SELECT_PRIMARY) { "parallel" }
@@ -212,7 +212,6 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartDisruptionHoldMinSec by configurationStore.int("smartDisruptionHoldMinSec") { 90 }
     var smartDisruptionHoldMaxSec by configurationStore.int("smartDisruptionHoldMaxSec") { 300 }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
-    var startupLocalSubHash by configurationStore.string(Key.STARTUP_LOCAL_SUB_HASH) { "" }
 
     var tunImplementation by configurationStore.stringToInt(Key.TUN_IMPLEMENTATION) { TunImplementation.GVISOR }
     var profileTrafficStatistics by configurationStore.boolean(Key.PROFILE_TRAFFIC_STATISTICS) { true }

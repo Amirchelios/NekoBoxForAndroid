@@ -2,8 +2,8 @@ package io.nekohasekai.sagernet
 
 const val CONNECTION_TEST_URL = "https://cp.cloudflare.com/generate_204"
 const val DEFAULT_SUBSCRIPTION_LINK =
-    "https://drive.usercontent.google.com/u/0/uc?id=17yqD90RrHQkL4VXL2Nk22xW0AqNVT2pv&export=download"
-const val DEFAULT_SUBSCRIPTION_GROUP_NAME = "NG LINK"
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-1.txt"
+const val DEFAULT_SUBSCRIPTION_GROUP_NAME = "GitHub Public VPN"
 
 object Key {
 
@@ -159,7 +159,6 @@ object Key {
     const val SUBSCRIPTION_USER_AGENT = "subscriptionUserAgent"
     const val SUBSCRIPTION_AUTO_UPDATE = "subscriptionAutoUpdate"
     const val SUBSCRIPTION_AUTO_UPDATE_DELAY = "subscriptionAutoUpdateDelay"
-    const val STARTUP_LOCAL_SUB_HASH = "startupLocalSubHash"
 
     //
 

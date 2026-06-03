@@ -19,6 +19,10 @@ object GroupManager {
         "https://raw.githubusercontent.com/Amirchelios/NG_manager_app/refs/heads/main/ml.txt?token=GHSAT0AAAAAADT4P36OTRU6MU7F7LDIVHJO2MAOJAA"
     private const val LEGACY_DEDICATED_SUBSCRIPTION_LINK =
         "https://drive.usercontent.google.com/u/0/uc?id=1JHaY3RHNHR2sYd_zu9CvNH6IdFv2ggec&export=download"
+    private const val LEGACY_DEFAULT_SUBSCRIPTION_LINK =
+        "https://drive.usercontent.google.com/u/0/uc?id=17yqD90RrHQkL4VXL2Nk22xW0AqNVT2pv&export=download"
+    private const val LEGACY_INTERNAL_SUBSCRIPTION_LINK = "ng://github-public-subscriptions"
+    private const val LEGACY_DEFAULT_SUBSCRIPTION_GROUP_NAME = "NG LINK"
     private const val LEGACY_DEDICATED_CONFIG_NAME = "کانفیگ اختصاصی"
     private val ensureDefaultGroupMutex = Mutex()
 
@@ -133,7 +137,7 @@ object GroupManager {
 
     suspend fun ensureDefaultSubscriptionGroup(): ProxyGroup? = ensureDefaultGroupMutex.withLock {
         val groups = SagerDatabase.groupDao.allGroups()
-        var existing = groups.firstOrNull { isProtectedGroup(it) }
+        var existing = groups.firstOrNull { isProtectedGroup(it) || isLegacyDefaultSubscriptionGroup(it) }
             ?: groups.firstOrNull { it.type == GroupType.SUBSCRIPTION && it.name == DEFAULT_SUBSCRIPTION_GROUP_NAME }
         if (existing != null) {
             var changed = false
@@ -153,6 +157,14 @@ object GroupManager {
                 existing.subscription!!.link = DEFAULT_SUBSCRIPTION_LINK
                 changed = true
             }
+            if (existing.subscription!!.autoUpdateDelay != 360) {
+                existing.subscription!!.autoUpdateDelay = 360
+                changed = true
+            }
+            if (!existing.subscription!!.autoUpdate) {
+                existing.subscription!!.autoUpdate = true
+                changed = true
+            }
             if (changed) {
                 SagerDatabase.groupDao.updateGroup(existing)
                 iterator { groupUpdated(existing) }
@@ -168,6 +180,8 @@ object GroupManager {
             name = DEFAULT_SUBSCRIPTION_GROUP_NAME
             subscription = SubscriptionBean().applyDefaultValues().also {
                 it.link = DEFAULT_SUBSCRIPTION_LINK
+                it.autoUpdate = true
+                it.autoUpdateDelay = 360
             }
         }
         return@withLock createGroup(group).also {
@@ -188,6 +202,14 @@ object GroupManager {
         if (group.type != GroupType.SUBSCRIPTION) return false
         val link = group.subscription?.link?.trim().orEmpty()
         return link.equals(DEFAULT_SUBSCRIPTION_LINK, ignoreCase = true)
+    }
+
+    private fun isLegacyDefaultSubscriptionGroup(group: ProxyGroup): Boolean {
+        if (group.type != GroupType.SUBSCRIPTION) return false
+        val link = group.subscription?.link?.trim().orEmpty()
+        return link.equals(LEGACY_DEFAULT_SUBSCRIPTION_LINK, true) ||
+            link.equals(LEGACY_INTERNAL_SUBSCRIPTION_LINK, true) ||
+            group.name == LEGACY_DEFAULT_SUBSCRIPTION_GROUP_NAME
     }
 
     private suspend fun cleanupLegacyArtifacts() {
