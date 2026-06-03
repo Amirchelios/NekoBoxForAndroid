@@ -116,10 +116,37 @@ class MainActivity : ThemedActivity(),
 
         binding = LayoutMainBinding.inflate(layoutInflater)
         binding.fab.initProgress(binding.fabProgress)
-        if (themeResId !in intArrayOf(
-                R.style.Theme_SagerNet_Black
-            )
-        ) {
+        setupNavigationView()
+
+        if (savedInstanceState == null) {
+            displayFragmentWithId(R.id.nav_configuration)
+        }
+        setupBackNavigation()
+        setupQuickActions()
+
+        setContentView(binding.root)
+        setupStartupUi()
+        changeState(BaseService.State.Idle)
+        setupRuntime()
+
+        if (intent?.action == Intent.ACTION_VIEW) {
+            onNewIntent(intent)
+        }
+
+        refreshNavMenu(DataStore.enableClashAPI)
+        requestNotificationPermissionIfNeeded()
+
+        if (isPreview) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(BuildConfig.PRE_VERSION_NAME)
+                .setMessage(R.string.preview_version_hint)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+    }
+
+    private fun setupNavigationView() {
+        if (themeResId !in intArrayOf(R.style.Theme_SagerNet_Black)) {
             navigation = binding.navView
             binding.drawerLayout.removeView(binding.navViewBlack)
         } else {
@@ -127,10 +154,9 @@ class MainActivity : ThemedActivity(),
             binding.drawerLayout.removeView(binding.navView)
         }
         navigation.setNavigationItemSelectedListener(this)
+    }
 
-        if (savedInstanceState == null) {
-            displayFragmentWithId(R.id.nav_configuration)
-        }
+    private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback {
             if (supportFragmentManager.findFragmentById(R.id.fragment_holder) is ConfigurationFragment) {
                 moveTaskToBack(true)
@@ -138,7 +164,9 @@ class MainActivity : ThemedActivity(),
                 displayFragmentWithId(R.id.nav_configuration)
             }
         }
+    }
 
+    private fun setupQuickActions() {
         binding.fab.setOnClickListener {
             if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
                 val restoreId = DataStore.internalProxyUserSelected
@@ -184,15 +212,18 @@ class MainActivity : ThemedActivity(),
             displayFragment(WebviewFragment(), true)
             navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isChecked = true
         }
+    }
 
-        setContentView(binding.root)
+    private fun setupStartupUi() {
         setupConnectEffectAlignment()
         if (!BuildConfig.DEBUG && DataStore.clientMode) {
             DataStore.clientMode = false
         }
         applyClientModeUi()
         animateEntrance()
-        changeState(BaseService.State.Idle)
+    }
+
+    private fun setupRuntime() {
         connection.connect(this, this)
         DataStore.configurationStore.registerChangeListener(this)
         GroupManager.userInterface = GroupInterfaceAdapter(this)
@@ -203,31 +234,16 @@ class MainActivity : ThemedActivity(),
         }
         ensureDefaultAutoSelectOnFirstRun()
         runStartupServerCheck()
+    }
 
-        if (intent?.action == Intent.ACTION_VIEW) {
-            onNewIntent(intent)
-        }
-
-        refreshNavMenu(DataStore.enableClashAPI)
-
-        // sdk 33 notification
-        if (Build.VERSION.SDK_INT >= 33) {
-            val checkPermission =
-                ContextCompat.checkSelfPermission(this@MainActivity, POST_NOTIFICATIONS)
-            if (checkPermission != PackageManager.PERMISSION_GRANTED) {
-                //动态申请
-                ActivityCompat.requestPermissions(
-                    this@MainActivity, arrayOf(POST_NOTIFICATIONS), 0
-                )
-            }
-        }
-
-        if (isPreview) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(BuildConfig.PRE_VERSION_NAME)
-                .setMessage(R.string.preview_version_hint)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < 33) return
+        val checkPermission =
+            ContextCompat.checkSelfPermission(this@MainActivity, POST_NOTIFICATIONS)
+        if (checkPermission != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this@MainActivity, arrayOf(POST_NOTIFICATIONS), 0
+            )
         }
     }
 
