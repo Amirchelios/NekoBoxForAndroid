@@ -14,6 +14,9 @@ class ProxyService : Service(), BaseService.Interface {
 
     override var wakeLock: PowerManager.WakeLock? = null
     override var upstreamInterfaceName: String? = null
+    override fun smartSwitchScope(): String {
+        return upstreamInterfaceName?.takeIf { it.isNotBlank() } ?: "default"
+    }
 
     @SuppressLint("WakelockTimeout")
     override fun acquireWakeLock() {

@@ -36,6 +36,9 @@ class VpnService : BaseVpnService(),
     private var metered = false
 
     override var upstreamInterfaceName: String? = null
+    override fun smartSwitchScope(): String {
+        return upstreamInterfaceName?.takeIf { it.isNotBlank() } ?: "default"
+    }
 
     override suspend fun startProcesses() {
         DataStore.vpnService = this

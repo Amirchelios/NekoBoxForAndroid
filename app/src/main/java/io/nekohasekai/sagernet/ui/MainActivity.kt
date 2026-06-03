@@ -110,6 +110,8 @@ class MainActivity : ThemedActivity(),
     private val startupMinVisibleMs = 650L
     private val startupUpdateTimeoutMs = 12_000L
     private val startupUpdateIntervalSec = 7_200
+    private val importHandler by lazy { MainActivityImportHandler(this) }
+    private val connectionAnimator by lazy { MainActivityConnectionAnimator(this, binding) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -263,107 +265,16 @@ class MainActivity : ThemedActivity(),
         val uri = intent.data ?: return
 
         runOnDefaultDispatcher {
-            if (uri.scheme == "sn" && uri.host == "subscription" || uri.scheme == "clash") {
-                importSubscription(uri)
-            } else {
-                importProfile(uri)
-            }
+            importHandler.handleIntent(uri)
         }
     }
-
 
     suspend fun importSubscription(uri: Uri) {
-        val group: ProxyGroup
-
-        val url = uri.getQueryParameter("url")
-        if (!url.isNullOrBlank()) {
-            group = ProxyGroup(type = GroupType.SUBSCRIPTION)
-            val subscription = SubscriptionBean()
-            group.subscription = subscription
-
-            // cleartext format
-            subscription.link = url
-            group.name = uri.getQueryParameter("name")
-        } else {
-            val data = uri.encodedQuery.takeIf { !it.isNullOrBlank() } ?: return
-            try {
-                group = KryoConverters.deserialize(
-                    ProxyGroup().apply { export = true }, Util.zlibDecompress(Util.b64Decode(data))
-                ).apply {
-                    export = false
-                }
-            } catch (e: Exception) {
-                onMainDispatcher {
-                    alert(e.readableMessage).show()
-                }
-                return
-            }
-        }
-
-        val name = group.name.takeIf { !it.isNullOrBlank() } ?: group.subscription?.link
-        ?: group.subscription?.token
-        if (name.isNullOrBlank()) return
-
-        group.name = group.name.takeIf { !it.isNullOrBlank() }
-            ?: ("Subscription #" + System.currentTimeMillis())
-
-        onMainDispatcher {
-
-            displayFragmentWithId(R.id.nav_group)
-
-            MaterialAlertDialogBuilder(this@MainActivity).setTitle(R.string.subscription_import)
-                .setMessage(getString(R.string.subscription_import_message, name))
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    runOnDefaultDispatcher {
-                        finishImportSubscription(group)
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-
-        }
-
-    }
-
-    private suspend fun finishImportSubscription(subscription: ProxyGroup) {
-        GroupManager.createGroup(subscription)
-        GroupUpdater.startUpdate(subscription, true)
+        importHandler.importSubscription(uri)
     }
 
     suspend fun importProfile(uri: Uri) {
-        val profile = try {
-            parseProxies(uri.toString()).getOrNull(0) ?: error(getString(R.string.no_proxies_found))
-        } catch (e: Exception) {
-            onMainDispatcher {
-                alert(e.readableMessage).show()
-            }
-            return
-        }
-
-        onMainDispatcher {
-            MaterialAlertDialogBuilder(this@MainActivity).setTitle(R.string.profile_import)
-                .setMessage(getString(R.string.profile_import_message, profile.displayName()))
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    runOnDefaultDispatcher {
-                        finishImportProfile(profile)
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
-
-    }
-
-    private suspend fun finishImportProfile(profile: AbstractBean) {
-        val targetId = DataStore.selectedGroupForImport()
-
-        ProfileManager.createProfile(targetId, profile)
-
-        onMainDispatcher {
-            displayFragmentWithId(R.id.nav_configuration)
-
-            snackbar(resources.getQuantityString(R.plurals.added, 1, 1)).show()
-        }
+        importHandler.importProfile(uri)
     }
 
     override fun missingPlugin(profileName: String, pluginName: String) {
@@ -600,9 +511,9 @@ class MainActivity : ThemedActivity(),
         }
         binding.fab.changeState(uiState, DataStore.serviceState, animate)
         binding.stats.changeState(uiState)
-        updateGlow(uiState)
-        updateConnectAnimation(uiState)
-        updateStateAnimation(uiState)
+        connectionAnimator.updateGlow(uiState)
+        connectionAnimator.updateConnectAnimation(uiState)
+        connectionAnimator.updateStateAnimation(uiState)
         updateStatsAnimation(uiState)
         if (uiState == BaseService.State.Connected) {
             startLocationPolling()
