@@ -237,17 +237,25 @@ object ProxyToSingboxConverter {
             val tag = buildTag(displayName, "vless", usedTags, flagCounters)
 
             val transport = mutableMapOf<String, Any?>()
-            if (params["type"] == "ws") {
+            val tls = mutableMapOf<String, Any?>("enabled" to false)
+            val security = params["security"]
+            val normalizedType = normalizeTransportType(params["type"])
+            val normalizedFlow = normalizeVlessFlow(params["flow"])
+            val tlsEnabled = security == "tls" || security == "reality" ||
+                port in listOf(443, 2053, 2083, 2087, 2096, 8443)
+            if (normalizedType == "ws") {
                 transport["type"] = "ws"
                 transport["path"] = params["path"] ?: "/"
                 val host = params["host"] ?: server
                 transport["headers"] = mapOf("Host" to host)
+            } else if (normalizedType == "grpc") {
+                transport["type"] = "grpc"
+                params["serviceName"]?.let { transport["service_name"] = it }
+            } else if (normalizedType == "httpupgrade") {
+                transport["type"] = "httpupgrade"
+                transport["path"] = params["path"] ?: "/"
+                params["host"]?.let { transport["host"] = it }
             }
-
-            val tls = mutableMapOf<String, Any?>("enabled" to false)
-            val security = params["security"]
-            val tlsEnabled = security == "tls" || security == "reality" ||
-                port in listOf(443, 2053, 2083, 2087, 2096, 8443)
             if (tlsEnabled) {
                 tls["enabled"] = true
                 tls["server_name"] = params["sni"] ?: server
@@ -268,7 +276,7 @@ object ProxyToSingboxConverter {
                 "server" to server,
                 "server_port" to port,
                 "uuid" to uuid,
-                "flow" to (params["flow"] ?: ""),
+                "flow" to normalizedFlow,
                 "transport" to transport,
                 "tls" to tls
             )
@@ -489,6 +497,22 @@ object ProxyToSingboxConverter {
 
     private fun decodeBase64(str: String): String? {
         return runCatching { String(Util.b64Decode(str.trim())) }.getOrNull()
+    }
+
+    private fun normalizeVlessFlow(flow: String?): String {
+        val normalized = flow?.trim().orEmpty().removeSuffix("-udp443")
+        return if (normalized == "xtls-rprx-vision") normalized else ""
+    }
+
+    private fun normalizeTransportType(type: String?): String {
+        return when (type?.trim()?.lowercase(Locale.US)) {
+            "raw", "none", "tcp", "" -> "tcp"
+            "h2" -> "http"
+            "httpupgrade" -> "httpupgrade"
+            "ws" -> "ws"
+            "grpc" -> "grpc"
+            else -> "tcp"
+        }
     }
 
     private fun parseQuery(query: String?): Map<String, String> {

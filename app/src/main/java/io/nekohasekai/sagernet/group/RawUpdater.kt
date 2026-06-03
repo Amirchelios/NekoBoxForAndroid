@@ -56,7 +56,7 @@ object RawUpdater : GroupUpdater() {
             rawText = app.contentResolver.openInputStream(link.toUri())
                 ?.bufferedReader()
                 ?.readText()
-                .orEmpty()  
+                .orEmpty()
 
             proxies = rawText.let { parseRaw(it) }
                 ?: error(app.getString(R.string.no_proxies_found_in_subscription))
@@ -925,6 +925,9 @@ object RawUpdater : GroupUpdater() {
                     outbound.put("security", "auto")
                 }
             }
+            if (type == "vless") {
+                normalizeVlessOutbound(outbound)
+            }
             if (type == "urltest") {
                 outbound.remove("timeout")
                 outbound.remove("timeoout")
@@ -968,6 +971,19 @@ object RawUpdater : GroupUpdater() {
         val normalized = type?.trim().orEmpty()
         if (normalized.isBlank()) return false
         return Regex("^[a-z0-9_\\-]+$").matches(normalized)
+    }
+
+    private fun normalizeVlessOutbound(outbound: JSONObject) {
+        val flow = outbound.optString("flow", "").trim().removeSuffix("-udp443")
+        if (flow == "xtls-rprx-vision") {
+            outbound.put("flow", flow)
+        } else {
+            outbound.remove("flow")
+        }
+        val transport = outbound.optJSONObject("transport") ?: return
+        when (transport.optString("type").trim()) {
+            "raw", "none", "tcp" -> outbound.remove("transport")
+        }
     }
 
     private fun removeParallelOutbounds(root: JSONObject) {
