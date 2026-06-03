@@ -203,7 +203,23 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
 
     private fun applySmartProfilePreset(preset: String) {
         when (preset) {
-            "stable" -> {
+            "gaming" -> {
+                DataStore.parallelConcurrency = 24
+                DataStore.connectionTestConcurrent = 24
+                DataStore.smartSwitchCooldownSec = 45
+                DataStore.smartSwitchMinDwellSec = 45
+                DataStore.smartSwitchProbeIntervalSec = 16
+                DataStore.smartSwitchBadProbeIntervalSec = 5
+                DataStore.smartSwitchCandidateWins = 2
+                DataStore.smartSwitchCandidateWinsWarmup = 1
+                DataStore.smartSwitchMinImproveAbs = 140
+                DataStore.smartSwitchMinImprovePct = 12
+                DataStore.smartSwitchStableLockSec = 300
+                DataStore.smartSwitchExcellentScore = 620
+                DataStore.smartSwitchMinThroughputGainPct = 28
+            }
+
+            "streaming", "stable" -> {
                 DataStore.smartSwitchCooldownSec = 180
                 DataStore.smartSwitchMinDwellSec = 240
                 DataStore.smartSwitchProbeIntervalSec = 45
@@ -217,7 +233,7 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
                 DataStore.smartSwitchMinThroughputGainPct = 24
             }
 
-            "max_download" -> {
+            "download", "max_download" -> {
                 DataStore.parallelConcurrency = 28
                 DataStore.connectionTestConcurrent = 24
                 DataStore.smartSwitchCooldownSec = 90
@@ -231,6 +247,20 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
                 DataStore.smartSwitchStableLockSec = 600
                 DataStore.smartSwitchExcellentScore = 680
                 DataStore.smartSwitchMinThroughputGainPct = 10
+            }
+
+            "manual" -> {
+                DataStore.smartSwitchCooldownSec = 300
+                DataStore.smartSwitchMinDwellSec = 600
+                DataStore.smartSwitchProbeIntervalSec = 60
+                DataStore.smartSwitchBadProbeIntervalSec = 20
+                DataStore.smartSwitchCandidateWins = 5
+                DataStore.smartSwitchCandidateWinsWarmup = 3
+                DataStore.smartSwitchMinImproveAbs = 400
+                DataStore.smartSwitchMinImprovePct = 30
+                DataStore.smartSwitchStableLockSec = 1800
+                DataStore.smartSwitchExcellentScore = 900
+                DataStore.smartSwitchMinThroughputGainPct = 30
             }
 
             else -> {

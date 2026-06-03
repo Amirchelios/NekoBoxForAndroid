@@ -8,8 +8,13 @@ import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.http.HttpBean
 import io.nekohasekai.sagernet.fmt.hysteria.HysteriaBean
 import io.nekohasekai.sagernet.fmt.hysteria.parseHysteria1Json
+import io.nekohasekai.sagernet.fmt.mieru.MieruBean
+import io.nekohasekai.sagernet.fmt.naive.NaiveBean
+import io.nekohasekai.sagernet.fmt.shadowsocks.ShadowsocksBean
 import io.nekohasekai.sagernet.fmt.socks.SOCKSBean
+import io.nekohasekai.sagernet.fmt.ssh.SSHBean
 import io.nekohasekai.sagernet.fmt.trojan.TrojanBean
+import io.nekohasekai.sagernet.fmt.trojan_go.TrojanGoBean
 import io.nekohasekai.sagernet.fmt.trojan_go.parseTrojanGo
 import io.nekohasekai.sagernet.fmt.tuic.TuicBean
 import io.nekohasekai.sagernet.fmt.v2ray.StandardV2RayBean
@@ -1123,8 +1128,99 @@ object RawUpdater : GroupUpdater() {
         if (!GroupManager.isDefaultSubscriptionGroup(proxyGroup)) return proxies
         val seen = HashSet<String>()
         return proxies.filter { bean ->
-            seen.add(bean.toString())
+            seen.add(proxyFingerprint(bean))
         }
+    }
+
+    private fun proxyFingerprint(bean: AbstractBean): String {
+        fun norm(value: Any?): String = value?.toString()
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
+        fun exact(value: Any?): String = value?.toString()?.trim().orEmpty()
+        fun endpoint(portOverride: Any? = null): String {
+            return "${norm(bean.serverAddress)}:${portOverride ?: bean.serverPort ?: ""}"
+        }
+        val parts = mutableListOf(bean.javaClass.name, endpoint())
+        when (bean) {
+            is StandardV2RayBean -> {
+                parts += listOf(
+                    exact(bean.uuid),
+                    norm(bean.type),
+                    norm(bean.security),
+                    norm(bean.sni),
+                    norm(bean.host),
+                    exact(bean.path),
+                    exact(bean.encryption),
+                    exact(bean.realityPubKey),
+                    exact(bean.realityShortId),
+                )
+                if (bean is TrojanBean) parts += exact(bean.password)
+                if (bean is HttpBean) parts += listOf(exact(bean.username), exact(bean.password))
+            }
+            is ShadowsocksBean -> parts += listOf(
+                norm(bean.method),
+                exact(bean.password),
+                exact(bean.plugin),
+            )
+            is SOCKSBean -> parts += listOf(
+                exact(bean.protocol),
+                exact(bean.username),
+                exact(bean.password),
+            )
+            is HysteriaBean -> {
+                parts[1] = endpoint(bean.serverPorts)
+                parts += listOf(
+                    exact(bean.protocolVersion),
+                    exact(bean.authPayload),
+                    exact(bean.obfuscation),
+                    norm(bean.sni),
+                    exact(bean.alpn),
+                )
+            }
+            is TuicBean -> parts += listOf(
+                exact(bean.uuid),
+                exact(bean.token),
+                norm(bean.sni),
+                exact(bean.protocolVersion),
+                norm(bean.congestionController),
+            )
+            is TrojanGoBean -> parts += listOf(
+                exact(bean.password),
+                norm(bean.sni),
+                norm(bean.host),
+                exact(bean.path),
+            )
+            is NaiveBean -> parts += listOf(
+                exact(bean.username),
+                exact(bean.password),
+                norm(bean.sni),
+            )
+            is MieruBean -> parts += listOf(
+                exact(bean.username),
+                exact(bean.password),
+                exact(bean.protocol),
+            )
+            is SSHBean -> parts += listOf(
+                exact(bean.username),
+                exact(bean.authType),
+                exact(bean.password),
+                exact(bean.privateKey),
+                exact(bean.publicKey),
+            )
+            is WireGuardBean -> parts += listOf(
+                exact(bean.localAddress),
+                exact(bean.privateKey),
+                exact(bean.peerPublicKey),
+                exact(bean.peerPreSharedKey),
+            )
+            is AnyTLSBean -> parts += listOf(
+                exact(bean.password),
+                norm(bean.sni),
+            )
+            else -> parts += exact(bean.displayAddress())
+        }
+        return parts.joinToString("|")
     }
 
     private fun buildAggregateConfig(rawTexts: List<String>): String {

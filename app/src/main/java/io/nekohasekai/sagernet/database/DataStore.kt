@@ -211,6 +211,10 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartSpeedRefineTimeoutMs by configurationStore.int("smartSpeedRefineTimeoutMs") { 2600 }
     var smartDisruptionHoldMinSec by configurationStore.int("smartDisruptionHoldMinSec") { 90 }
     var smartDisruptionHoldMaxSec by configurationStore.int("smartDisruptionHoldMaxSec") { 300 }
+    var smartQuarantineEnabled by configurationStore.boolean("smartQuarantineEnabled") { true }
+    var smartQuarantineShortMin by configurationStore.int("smartQuarantineShortMin") { 10 }
+    var smartQuarantineMediumMin by configurationStore.int("smartQuarantineMediumMin") { 60 }
+    var smartQuarantineLongMin by configurationStore.int("smartQuarantineLongMin") { 360 }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
 
     @Volatile
@@ -438,6 +442,102 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     fun setSmartLastBandwidthKbps(profileId: Long, kbps: Int) {
         configurationStore.putInt("smartLastBandwidthKbps.$profileId", kbps.coerceIn(-1, 5_000_000))
+    }
+
+    fun normalizedSmartProfilePreset(): String {
+        return when (smartProfilePreset.trim().lowercase()) {
+            "gaming", "game", "minrtt", "latency" -> "gaming"
+            "streaming", "stream", "video", "stable" -> "streaming"
+            "download", "leastload", "throughput", "max_download" -> "download"
+            "manual" -> "manual"
+            else -> "balanced"
+        }
+    }
+
+    fun getSmartSuccessCount(profileId: Long): Int {
+        return configurationStore.getInt("smartSuccessCount.$profileId", 0).coerceAtLeast(0)
+    }
+
+    fun setSmartSuccessCount(profileId: Long, count: Int) {
+        configurationStore.putInt("smartSuccessCount.$profileId", count.coerceIn(0, 1_000_000))
+    }
+
+    fun getSmartFailureCount(profileId: Long): Int {
+        return configurationStore.getInt("smartFailureCount.$profileId", 0).coerceAtLeast(0)
+    }
+
+    fun setSmartFailureCount(profileId: Long, count: Int) {
+        configurationStore.putInt("smartFailureCount.$profileId", count.coerceIn(0, 1_000_000))
+    }
+
+    fun getSmartLastSuccessAt(profileId: Long): Long {
+        return configurationStore.getLong("smartLastSuccessAt.$profileId", 0L).coerceAtLeast(0L)
+    }
+
+    fun setSmartLastSuccessAt(profileId: Long, timestamp: Long) {
+        configurationStore.putLong("smartLastSuccessAt.$profileId", timestamp.coerceAtLeast(0L))
+    }
+
+    fun getSmartLastFailureAt(profileId: Long): Long {
+        return configurationStore.getLong("smartLastFailureAt.$profileId", 0L).coerceAtLeast(0L)
+    }
+
+    fun setSmartLastFailureAt(profileId: Long, timestamp: Long) {
+        configurationStore.putLong("smartLastFailureAt.$profileId", timestamp.coerceAtLeast(0L))
+    }
+
+    fun getSmartQuarantineUntil(profileId: Long): Long {
+        return configurationStore.getLong("smartQuarantineUntil.$profileId", 0L).coerceAtLeast(0L)
+    }
+
+    fun setSmartQuarantineUntil(profileId: Long, timestamp: Long) {
+        configurationStore.putLong("smartQuarantineUntil.$profileId", timestamp.coerceAtLeast(0L))
+    }
+
+    fun clearSmartQuarantine(profileId: Long) {
+        setSmartQuarantineUntil(profileId, 0L)
+    }
+
+    fun isSmartQuarantined(profileId: Long, now: Long = System.currentTimeMillis()): Boolean {
+        if (!smartQuarantineEnabled) return false
+        return getSmartQuarantineUntil(profileId) > now
+    }
+
+    fun quarantineSmartProfile(profileId: Long, minutes: Int) {
+        if (!smartQuarantineEnabled) return
+        val durationMs = minutes.coerceIn(1, 24 * 60) * 60_000L
+        setSmartQuarantineUntil(profileId, System.currentTimeMillis() + durationMs)
+    }
+
+    fun getSmartQualityScore(profileId: Long): Int {
+        val latency = getSmartLastScore(profileId)
+        val bandwidth = getSmartLastBandwidthKbps(profileId)
+        val success = getSmartSuccessCount(profileId)
+        val failure = getSmartFailureCount(profileId)
+        val streak = getSmartFailureStreak(profileId)
+        val penalty = getSmartHealthPenalty(profileId)
+        val successRatio = if (success + failure > 0) {
+            success.toDouble() / (success + failure).toDouble()
+        } else {
+            0.5
+        }
+        val latencyPart = when {
+            latency in 1..180 -> 35
+            latency in 181..350 -> 28
+            latency in 351..700 -> 20
+            latency in 701..1200 -> 10
+            else -> 0
+        }
+        val bandwidthPart = when {
+            bandwidth >= 30_000 -> 30
+            bandwidth >= 16_000 -> 24
+            bandwidth >= 8_000 -> 16
+            bandwidth >= 3_000 -> 8
+            else -> 0
+        }
+        val reliabilityPart = (successRatio * 35.0).toInt()
+        val penaltyPart = (penalty / 90 + streak * 4).coerceAtMost(45)
+        return (latencyPart + bandwidthPart + reliabilityPart - penaltyPart).coerceIn(0, 100)
     }
 
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {

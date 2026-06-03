@@ -549,15 +549,19 @@
     </string-array>
 
     <string-array name="smart_profile_entries">
+        <item>@string/smart_profile_gaming</item>
         <item>@string/smart_profile_stable</item>
         <item>@string/smart_profile_balanced</item>
         <item>@string/smart_profile_max_download</item>
+        <item>@string/smart_profile_manual</item>
     </string-array>
 
     <string-array name="smart_profile_values">
+        <item>gaming</item>
         <item>stable</item>
         <item>balanced</item>
         <item>max_download</item>
+        <item>manual</item>
     </string-array>
 
 </resources>

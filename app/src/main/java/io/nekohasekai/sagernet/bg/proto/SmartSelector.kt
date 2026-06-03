@@ -54,6 +54,14 @@ object SmartSelector {
         MIXED("mixed"),
     }
 
+    private enum class SmartMode {
+        GAMING,
+        STREAMING,
+        DOWNLOAD,
+        BALANCED,
+        MANUAL,
+    }
+
     fun applyCachedOrder(groupId: Long) {
         val group = SagerDatabase.groupDao.getById(groupId) ?: return
         val cachedOrder = DataStore.getSmartPreferredOrder(groupId)
@@ -82,12 +90,13 @@ object SmartSelector {
             .filterNot { it.type == TYPE_CONFIG }
         if (profiles.isEmpty()) return null
 
-        val evaluations = evaluateProfiles(profiles, groupId, scope, TIMEOUT_MS, MAX_ATTEMPTS)
+        val candidates = filterQuarantined(profiles)
+        val evaluations = evaluateProfiles(candidates, groupId, scope, TIMEOUT_MS, MAX_ATTEMPTS)
         if (evaluations.isEmpty()) return null
         evaluations.forEach { updateHealthState(groupId, scope, it) }
 
         val valid = refineWithThroughput(evaluations.filter { it.score != null })
-            .sortedWith(compareBy<ProfileEvaluation> { it.score ?: Int.MAX_VALUE }
+            .sortedWith(compareBy<ProfileEvaluation> { modeAdjustedScore(it) }
                 .thenByDescending { it.bandwidthKbps })
         if (valid.isEmpty()) return null
 
@@ -138,8 +147,8 @@ object SmartSelector {
         } else {
             profiles
         }
-        val preCandidates = ordered.take((FAST_LIMIT * 2).coerceAtMost(ordered.size))
-        val candidates = preCandidates
+        val available = filterQuarantined(ordered)
+        val candidates = available.take((FAST_LIMIT * 2).coerceAtMost(available.size))
             .sortedByDescending { fastPriorityScore(it) }
             .take(FAST_LIMIT)
 
@@ -148,7 +157,7 @@ object SmartSelector {
         evaluations.forEach { updateHealthState(groupId, scope, it) }
 
         val sorted = refineWithThroughput(evaluations.filter { it.score != null })
-            .sortedWith(compareBy<ProfileEvaluation> { it.score ?: Int.MAX_VALUE }
+            .sortedWith(compareBy<ProfileEvaluation> { modeAdjustedScore(it) }
                 .thenByDescending { it.bandwidthKbps })
         if (sorted.isEmpty()) return emptyList()
         val orderedIds = sorted.map { it.profile.id } + evaluations
@@ -165,6 +174,8 @@ object SmartSelector {
         val bandwidth = DataStore.getSmartLastBandwidthKbps(profile.id).coerceAtLeast(0)
         val failStreak = DataStore.getSmartFailureStreak(profile.id)
         val healthPenalty = DataStore.getSmartHealthPenalty(profile.id)
+        val quality = DataStore.getSmartQualityScore(profile.id)
+        val quarantinePenalty = if (DataStore.isSmartQuarantined(profile.id)) 12_000L else 0L
 
         val latencyScore = if (lastScore > 0) {
             ((20_000 - lastScore.coerceAtMost(20_000)).toLong() * 5L)
@@ -174,7 +185,55 @@ object SmartSelector {
         val throughputScore = bandwidth.coerceAtMost(80_000).toLong() * 2L
         val failPenalty = failStreak.toLong() * 1_500L
         val healthPenaltyScore = healthPenalty.toLong() * 4L
-        return latencyScore + throughputScore - failPenalty - healthPenaltyScore
+        return latencyScore + throughputScore + quality.toLong() * 600L -
+            failPenalty - healthPenaltyScore - quarantinePenalty
+    }
+
+    private fun smartMode(): SmartMode {
+        return when (DataStore.normalizedSmartProfilePreset()) {
+            "gaming" -> SmartMode.GAMING
+            "streaming" -> SmartMode.STREAMING
+            "download" -> SmartMode.DOWNLOAD
+            "manual" -> SmartMode.MANUAL
+            else -> SmartMode.BALANCED
+        }
+    }
+
+    private fun filterQuarantined(profiles: List<ProxyEntity>): List<ProxyEntity> {
+        if (!DataStore.smartQuarantineEnabled) return profiles
+        val active = profiles.filterNot { DataStore.isSmartQuarantined(it.id) }
+        return active.ifEmpty { profiles }
+    }
+
+    private fun modeAdjustedScore(ev: ProfileEvaluation): Int {
+        val base = ev.score ?: Int.MAX_VALUE
+        if (base == Int.MAX_VALUE) return base
+        val qualityPenalty = (100 - DataStore.getSmartQualityScore(ev.profile.id)).coerceIn(0, 100) * 3
+        return when (smartMode()) {
+            SmartMode.GAMING -> {
+                base + ev.jitter.coerceAtMost(500) * 2 +
+                    ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 700.0).toInt() +
+                    qualityPenalty
+            }
+            SmartMode.STREAMING -> {
+                base + ev.jitter.coerceAtMost(500) +
+                    ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 1000.0).toInt() -
+                    bandwidthScoreBonus(ev.bandwidthKbps) * 2 +
+                    qualityPenalty
+            }
+            SmartMode.DOWNLOAD -> {
+                base - bandwidthScoreBonus(ev.bandwidthKbps) * 3 +
+                    ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 450.0).toInt() +
+                    qualityPenalty / 2
+            }
+            SmartMode.MANUAL,
+            SmartMode.BALANCED -> {
+                base + ev.jitter.coerceAtMost(350) +
+                    ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 650.0).toInt() -
+                    bandwidthScoreBonus(ev.bandwidthKbps) +
+                    qualityPenalty
+            }
+        }.coerceAtLeast(1)
     }
 
     private suspend fun evaluateProfiles(
@@ -366,12 +425,28 @@ object SmartSelector {
         val oldPenalty = DataStore.getSmartHealthPenalty(profileId)
         val oldStreak = DataStore.getSmartFailureStreak(profileId)
         if (result.score == null) {
+            DataStore.setSmartFailureCount(profileId, DataStore.getSmartFailureCount(profileId) + 1)
+            DataStore.setSmartLastFailureAt(profileId, System.currentTimeMillis())
             DataStore.setSmartLastScore(profileId, -1)
             DataStore.setSmartLastBandwidthKbps(profileId, -1)
             val newStreak = (oldStreak + 1).coerceAtMost(20)
             val bump = (220 + newStreak * 30).coerceAtMost(700)
             DataStore.setSmartFailureStreak(profileId, newStreak)
             DataStore.setSmartHealthPenalty(profileId, oldPenalty + bump)
+            when {
+                newStreak >= 6 -> DataStore.quarantineSmartProfile(
+                    profileId,
+                    DataStore.smartQuarantineLongMin
+                )
+                newStreak >= 4 -> DataStore.quarantineSmartProfile(
+                    profileId,
+                    DataStore.smartQuarantineMediumMin
+                )
+                newStreak >= 2 -> DataStore.quarantineSmartProfile(
+                    profileId,
+                    DataStore.smartQuarantineShortMin
+                )
+            }
             if (DataStore.smartAdaptiveTransportEnabled) {
                 val step = DataStore.smartTransportPenaltyStep.coerceIn(20, 600)
                 DataStore.adjustSmartTransportPenalty(scope, groupId, result.transportClass.key, step)
@@ -379,6 +454,8 @@ object SmartSelector {
             return
         }
 
+        DataStore.setSmartSuccessCount(profileId, DataStore.getSmartSuccessCount(profileId) + 1)
+        DataStore.setSmartLastSuccessAt(profileId, System.currentTimeMillis())
         DataStore.setSmartLastScore(profileId, result.score)
         DataStore.setSmartLastBandwidthKbps(profileId, result.bandwidthKbps)
         val stable = result.successRatio >= 0.80 && result.jitter <= 120
@@ -387,6 +464,9 @@ object SmartSelector {
         val softness = if (result.successRatio < 0.65) 60 else 0
         DataStore.setSmartFailureStreak(profileId, newStreak)
         DataStore.setSmartHealthPenalty(profileId, oldPenalty - baseDrop + softness)
+        if (stable || newStreak == 0) {
+            DataStore.clearSmartQuarantine(profileId)
+        }
         if (DataStore.smartAdaptiveTransportEnabled) {
             val decay = DataStore.smartTransportPenaltyDecay.coerceIn(10, 400)
             DataStore.decaySmartTransportPenalty(scope, groupId, result.transportClass.key, decay)

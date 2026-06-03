@@ -16,8 +16,25 @@ class SmartSwitchController(
     fun start() {
         data.smartSwitchJob?.cancel()
         data.smartSwitchJob = runOnDefaultDispatcher {
-            val cooldownMs = DataStore.smartSwitchCooldownSec.coerceIn(30, 900) * 1000L
-            val minDwellMs = DataStore.smartSwitchMinDwellSec.coerceIn(30, 1200) * 1000L
+            val mode = DataStore.normalizedSmartProfilePreset()
+            if (mode == "manual") {
+                DataStore.smartLastDecision = "manual:auto_switch_disabled"
+                return@runOnDefaultDispatcher
+            }
+            val cooldownFactor = when (mode) {
+                "gaming" -> 0.65
+                "streaming" -> 1.15
+                "download" -> 1.35
+                else -> 1.0
+            }
+            val dwellFactor = when (mode) {
+                "gaming" -> 0.70
+                "streaming" -> 1.20
+                "download" -> 1.40
+                else -> 1.0
+            }
+            val cooldownMs = (DataStore.smartSwitchCooldownSec.coerceIn(30, 900) * cooldownFactor).toLong() * 1000L
+            val minDwellMs = (DataStore.smartSwitchMinDwellSec.coerceIn(30, 1200) * dwellFactor).toLong() * 1000L
             val normalProbeMs = DataStore.smartSwitchProbeIntervalSec.coerceIn(10, 120) * 1000L
             val badProbeMs = DataStore.smartSwitchBadProbeIntervalSec.coerceIn(5, 60) * 1000L
             val warmupRounds = DataStore.smartSwitchWarmupRounds.coerceIn(1, 8)
@@ -25,8 +42,20 @@ class SmartSwitchController(
             val warmupWins = DataStore.smartSwitchCandidateWinsWarmup.coerceIn(1, 5)
             val minImproveAbs = DataStore.smartSwitchMinImproveAbs.coerceIn(80, 1200)
             val minImprovePct = DataStore.smartSwitchMinImprovePct.coerceIn(8, 60)
-            val weakScore = DataStore.smartSwitchWeakScore.coerceIn(600, 3000)
-            val criticalScore = DataStore.smartSwitchCriticalScore.coerceIn(800, 5000)
+            val weakScoreBase = DataStore.smartSwitchWeakScore.coerceIn(600, 3000)
+            val criticalScoreBase = DataStore.smartSwitchCriticalScore.coerceIn(800, 5000)
+            val weakScore = when (mode) {
+                "gaming" -> (weakScoreBase * 0.78).toInt()
+                "streaming" -> (weakScoreBase * 1.10).toInt()
+                "download" -> (weakScoreBase * 1.20).toInt()
+                else -> weakScoreBase
+            }.coerceIn(450, 3500)
+            val criticalScore = when (mode) {
+                "gaming" -> (criticalScoreBase * 0.82).toInt()
+                "streaming" -> (criticalScoreBase * 1.10).toInt()
+                "download" -> (criticalScoreBase * 1.20).toInt()
+                else -> criticalScoreBase
+            }.coerceIn(700, 6000)
             val failTrigger = DataStore.smartSwitchFailStreakTrigger.coerceIn(1, 10)
             val stableLockMs = DataStore.smartSwitchStableLockSec.coerceIn(120, 3600) * 1000L
             val excellentScore = DataStore.smartSwitchExcellentScore.coerceIn(450, 1400)
@@ -217,8 +246,20 @@ class SmartSwitchController(
                 val txRate = DataStore.smartMainTxRate
                 val rxRate = DataStore.smartMainRxRate
                 val requestWithoutResponse = txRate >= 900L && rxRate <= 800L
-                val poorInteractiveDownload = txRate >= 500L && rxRate in 1L..48_000L
-                val poorStreamingDownload = rxRate in 1L..32_000L && score >= weakScore
+                val interactiveLimit = when (mode) {
+                    "gaming" -> 96_000L
+                    "streaming" -> 40_000L
+                    "download" -> 24_000L
+                    else -> 48_000L
+                }
+                val streamingLimit = when (mode) {
+                    "streaming" -> 96_000L
+                    "download" -> 48_000L
+                    "gaming" -> 40_000L
+                    else -> 64_000L
+                }
+                val poorInteractiveDownload = txRate >= 500L && rxRate in 1L..interactiveLimit
+                val poorStreamingDownload = rxRate in 1L..streamingLimit && score >= weakScore
                 val trafficDegraded = requestWithoutResponse || poorInteractiveDownload || poorStreamingDownload
                 trafficStallRounds = if (trafficDegraded) {
                     (trafficStallRounds + 1).coerceAtMost(20)
