@@ -90,7 +90,8 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         val current = currentGroup()
         if (current.type == GroupType.BASIC) return current.id
         val groups = SagerDatabase.groupDao.allGroups()
-        return groups.find { it.type == GroupType.BASIC }!!.id
+        return groups.firstOrNull { it.type == GroupType.BASIC }?.id
+            ?: current.id
     }
 
     var appTLSVersion by configurationStore.string(Key.APP_TLS_VERSION)

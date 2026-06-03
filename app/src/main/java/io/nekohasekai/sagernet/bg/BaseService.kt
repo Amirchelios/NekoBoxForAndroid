@@ -78,6 +78,53 @@ class BaseService {
         val binder = Binder(this)
         var connectingJob: Job? = null
         var smartSwitchJob: Job? = null
+        fun registerCloseReceiver(service: Service) {
+            if (closeReceiverRegistered) return
+            val filter = IntentFilter().apply {
+                addAction(Action.RELOAD)
+                addAction(Intent.ACTION_SHUTDOWN)
+                addAction(Action.CLOSE)
+                // addAction(Action.SWITCH_WAKE_LOCK)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+                }
+                addAction(Action.RESET_UPSTREAM_CONNECTIONS)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                service.registerReceiver(
+                    receiver,
+                    filter,
+                    "${service.packageName}.SERVICE",
+                    null,
+                    Context.RECEIVER_EXPORTED
+                )
+            } else {
+                service.registerReceiver(
+                    receiver,
+                    filter,
+                    "${service.packageName}.SERVICE",
+                    null
+                )
+            }
+            closeReceiverRegistered = true
+        }
+
+        fun unregisterCloseReceiver(service: Service) {
+            if (!closeReceiverRegistered) return
+            runCatching {
+                service.unregisterReceiver(receiver)
+            }.onFailure {
+                Logs.w("Failed to unregister close receiver: ${it.readableMessage}")
+            }
+            closeReceiverRegistered = false
+        }
+
+        fun clearRuntimeState() {
+            proxy = null
+            connectingJob = null
+            smartSwitchJob = null
+        }
+
         fun changeState(s: State, msg: String? = null) {
             if (state == s && msg == null) return
             state = s
@@ -228,7 +275,7 @@ class BaseService {
             if (data.state == State.Stopping) return
             data.notification?.destroy()
             data.notification = null
-            this as Service
+            val service = this as Service
             data.changeState(State.Stopping)
             runOnMainDispatcher {
                 suspend fun cancelJobBounded(name: String, job: Job?) {
@@ -251,18 +298,8 @@ class BaseService {
                 } catch (e: Exception) {
                     Logs.w("Failed while killing processes during stop: ${e.readableMessage}")
                 } finally {
-                    val stopData = data
-                    if (stopData.closeReceiverRegistered) {
-                        runCatching {
-                            unregisterReceiver(stopData.receiver)
-                        }.onFailure {
-                            Logs.w("Failed to unregister close receiver: ${it.readableMessage}")
-                        }
-                        stopData.closeReceiverRegistered = false
-                    }
-                    stopData.proxy = null
-                    stopData.connectingJob = null
-                    stopData.smartSwitchJob = null
+                    data.unregisterCloseReceiver(service)
+                    data.clearRuntimeState()
                 }
                 // change the state
                 data.changeState(State.Stopped, msg)
@@ -316,6 +353,7 @@ class BaseService {
             if (data.state != State.Stopped) return Service.START_NOT_STICKY
             val profile = SagerDatabase.proxyDao.getById(DataStore.selectedProxy)
             this as Context
+            val service = this as Service
             if (profile == null) { // gracefully shutdown: https://stackoverflow.com/q/47337857/2245107
                 data.notification = createNotification("")
                 stopRunner(false, getString(R.string.profile_empty))
@@ -324,35 +362,7 @@ class BaseService {
             val proxy = ProxyInstance(profile, this)
             data.proxy = proxy
             BootReceiver.enabled = DataStore.persistAcrossReboot
-            if (!data.closeReceiverRegistered) {
-                val filter = IntentFilter().apply {
-                    addAction(Action.RELOAD)
-                    addAction(Intent.ACTION_SHUTDOWN)
-                    addAction(Action.CLOSE)
-                    // addAction(Action.SWITCH_WAKE_LOCK)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
-                    }
-                    addAction(Action.RESET_UPSTREAM_CONNECTIONS)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    registerReceiver(
-                        data.receiver,
-                        filter,
-                        "$packageName.SERVICE",
-                        null,
-                        Context.RECEIVER_EXPORTED
-                    )
-                } else {
-                    registerReceiver(
-                        data.receiver,
-                        filter,
-                        "$packageName.SERVICE",
-                        null
-                    )
-                }
-                data.closeReceiverRegistered = true
-            }
+            data.registerCloseReceiver(service)
             data.changeState(State.Connecting)
             runOnMainDispatcher {
                 try {
