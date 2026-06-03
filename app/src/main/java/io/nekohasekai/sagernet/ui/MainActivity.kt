@@ -37,7 +37,6 @@ import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
 import io.nekohasekai.sagernet.database.ProxyGroup
-import io.nekohasekai.sagernet.database.SubscriptionBean
 import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.database.preference.OnPreferenceDataStoreChangeListener
 import io.nekohasekai.sagernet.databinding.LayoutMainBinding
@@ -78,6 +77,7 @@ class MainActivity : ThemedActivity(),
     }
     private var internalProxyRestartJob: Job? = null
     private var pendingVpnStartJob: Job? = null
+    private var quickServerUpdateJob: Job? = null
     private val importHandler by lazy { MainActivityImportHandler(this) }
     private val connectionAnimator by lazy { MainActivityConnectionAnimator(this, binding) }
     private val locationController by lazy { MainActivityLocationController(this, binding) }
@@ -179,6 +179,9 @@ class MainActivity : ThemedActivity(),
             }
         }
         binding.stats.setOnClickListener(null)
+        binding.quickServerUpdate.setOnClickListener {
+            updateDefaultServersByUser()
+        }
         binding.locationCard.setOnClickListener {
             displayFragment(WebviewFragment(), true)
             navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isChecked = true
@@ -201,9 +204,10 @@ class MainActivity : ThemedActivity(),
         GroupUpdater.listeners.add(updateProgressListener)
         applyConnectionPerformanceBaseline()
         runOnDefaultDispatcher {
-            GroupManager.ensureDefaultSubscriptionGroup()
+            val defaultGroup = GroupManager.ensureDefaultSubscriptionGroup()
+            runFirstRunUpdate(defaultGroup)
+            ensureDefaultAutoSelectOnFirstRun()
         }
-        ensureDefaultAutoSelectOnFirstRun()
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -745,34 +749,63 @@ class MainActivity : ThemedActivity(),
     private suspend fun runFirstRunUpdate(defaultGroup: ProxyGroup?) {
         if (DataStore.firstRunDone) return
         if (defaultGroup == null) return
-        val needsDefault = isGroupEmptyForFirstRun(defaultGroup)
-        if (!needsDefault) return
 
         DataStore.firstRunSilentUpdateActive = true
         try {
+            onMainDispatcher {
+                binding.startupLoading.visibility = View.VISIBLE
+                binding.startupLoadingText.visibility = View.VISIBLE
+                binding.startupLoadingText.setText(R.string.startup_updating_servers)
+            }
             val okDefault = GroupUpdater.executeUpdate(defaultGroup, false)
             if (okDefault) {
                 DataStore.firstRunDone = true
                 onMainDispatcher {
+                    binding.startupLoading.visibility = View.GONE
                     snackbar(getString(R.string.first_run_update_success)).show()
+                }
+            } else {
+                onMainDispatcher {
+                    binding.startupLoading.visibility = View.GONE
+                    snackbar(R.string.update_failed).show()
                 }
             }
         } finally {
             DataStore.firstRunSilentUpdateActive = false
+            onMainDispatcher {
+                binding.startupLoading.visibility = View.GONE
+            }
         }
     }
 
-    private fun isGroupEmptyForFirstRun(group: ProxyGroup): Boolean {
-        val subscription = group.subscription ?: return false
-        if (subscription.lastUpdated > 0) return false
-        val proxies = SagerDatabase.proxyDao.getByGroup(group.id)
-        val hasRealProxy = proxies.any { proxy ->
-            when {
-                GroupManager.isAutoSelectAggregate(proxy) -> false
-                else -> true
+    private fun updateDefaultServersByUser() {
+        if (quickServerUpdateJob?.isActive == true) return
+        quickServerUpdateJob = runOnDefaultDispatcher {
+            val defaultGroup = GroupManager.ensureDefaultSubscriptionGroup() ?: return@runOnDefaultDispatcher
+            setQuickServerUpdateBusy(true)
+            val ok = try {
+                GroupUpdater.markForceUpdate(defaultGroup.id)
+                GroupUpdater.executeUpdate(defaultGroup, true)
+            } finally {
+                setQuickServerUpdateBusy(false)
+            }
+            if (ok) {
+                ensureDefaultAutoSelectOnFirstRun()
+                onMainDispatcher {
+                    snackbar(R.string.update_success).show()
+                }
+            } else {
+                onMainDispatcher {
+                    snackbar(R.string.update_failed).show()
+                }
             }
         }
-        return !hasRealProxy
+    }
+
+    private suspend fun setQuickServerUpdateBusy(busy: Boolean) = onMainDispatcher {
+        binding.quickServerUpdate.isEnabled = !busy
+        binding.quickServerUpdateIcon.visibility = if (busy) View.GONE else View.VISIBLE
+        binding.quickServerUpdateProgress.visibility = if (busy) View.VISIBLE else View.GONE
     }
 
     override fun snackbarInternal(text: CharSequence): Snackbar {
