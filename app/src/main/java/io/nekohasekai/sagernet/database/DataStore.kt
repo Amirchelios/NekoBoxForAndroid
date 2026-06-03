@@ -182,19 +182,19 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var parallelIdleTimeoutMin by configurationStore.int(Key.PARALLEL_IDLE_TIMEOUT) { 30 }
     var parallelTolerance by configurationStore.int(Key.PARALLEL_TOLERANCE) { 20 }
     var autoSelectPrimary by configurationStore.string(Key.AUTO_SELECT_PRIMARY) { "parallel" }
-    var smartSwitchCooldownSec by configurationStore.int("smartSwitchCooldownSec") { 120 }
-    var smartSwitchMinDwellSec by configurationStore.int("smartSwitchMinDwellSec") { 150 }
-    var smartSwitchProbeIntervalSec by configurationStore.int("smartSwitchProbeIntervalSec") { 30 }
-    var smartSwitchBadProbeIntervalSec by configurationStore.int("smartSwitchBadProbeIntervalSec") { 10 }
+    var smartSwitchCooldownSec by configurationStore.int("smartSwitchCooldownSec") { 45 }
+    var smartSwitchMinDwellSec by configurationStore.int("smartSwitchMinDwellSec") { 45 }
+    var smartSwitchProbeIntervalSec by configurationStore.int("smartSwitchProbeIntervalSec") { 20 }
+    var smartSwitchBadProbeIntervalSec by configurationStore.int("smartSwitchBadProbeIntervalSec") { 6 }
     var smartSwitchWarmupRounds by configurationStore.int("smartSwitchWarmupRounds") { 3 }
-    var smartSwitchCandidateWins by configurationStore.int("smartSwitchCandidateWins") { 4 }
+    var smartSwitchCandidateWins by configurationStore.int("smartSwitchCandidateWins") { 2 }
     var smartSwitchCandidateWinsWarmup by configurationStore.int("smartSwitchCandidateWinsWarmup") { 2 }
     var smartSwitchMinImproveAbs by configurationStore.int("smartSwitchMinImproveAbs") { 260 }
     var smartSwitchMinImprovePct by configurationStore.int("smartSwitchMinImprovePct") { 20 }
     var smartSwitchWeakScore by configurationStore.int("smartSwitchWeakScore") { 1100 }
     var smartSwitchCriticalScore by configurationStore.int("smartSwitchCriticalScore") { 1500 }
-    var smartSwitchFailStreakTrigger by configurationStore.int("smartSwitchFailStreakTrigger") { 3 }
-    var smartSwitchStableLockSec by configurationStore.int("smartSwitchStableLockSec") { 900 }
+    var smartSwitchFailStreakTrigger by configurationStore.int("smartSwitchFailStreakTrigger") { 2 }
+    var smartSwitchStableLockSec by configurationStore.int("smartSwitchStableLockSec") { 300 }
     var smartSwitchExcellentScore by configurationStore.int("smartSwitchExcellentScore") { 760 }
     var smartSwitchMinThroughputGainPct by configurationStore.int("smartSwitchMinThroughputGainPct") { 18 }
     var smartProfilePreset by configurationStore.string("smartProfilePreset") { "balanced" }
@@ -212,6 +212,12 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartDisruptionHoldMinSec by configurationStore.int("smartDisruptionHoldMinSec") { 90 }
     var smartDisruptionHoldMaxSec by configurationStore.int("smartDisruptionHoldMaxSec") { 300 }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
+
+    @Volatile
+    var smartMainTxRate: Long = 0L
+
+    @Volatile
+    var smartMainRxRate: Long = 0L
 
     var tunImplementation by configurationStore.stringToInt(Key.TUN_IMPLEMENTATION) { TunImplementation.GVISOR }
     var profileTrafficStatistics by configurationStore.boolean(Key.PROFILE_TRAFFIC_STATISTICS) { true }

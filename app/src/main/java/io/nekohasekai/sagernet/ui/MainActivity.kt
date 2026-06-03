@@ -1046,7 +1046,7 @@ class MainActivity : ThemedActivity(),
 
     private fun applyConnectionPerformanceBaseline() {
         runOnDefaultDispatcher {
-            val key = "perfBaselineV5Done"
+            val key = "perfBaselineV6Done"
             if (DataStore.configurationStore.getBoolean(key, false)) return@runOnDefaultDispatcher
 
             if (DataStore.parallelConcurrency < 16) DataStore.parallelConcurrency = 24
@@ -1067,19 +1067,23 @@ class MainActivity : ThemedActivity(),
                 DataStore.parallelUrl = "https://speed.cloudflare.com/__down?bytes=1000000"
             }
             DataStore.autoSelectPrimary = "parallel"
-            if (DataStore.smartSwitchCooldownSec < 90) DataStore.smartSwitchCooldownSec = 120
-            if (DataStore.smartSwitchMinDwellSec < 90) DataStore.smartSwitchMinDwellSec = 150
-            if (DataStore.smartSwitchProbeIntervalSec < 20 || DataStore.smartSwitchProbeIntervalSec > 60) {
-                DataStore.smartSwitchProbeIntervalSec = 30
+            if (DataStore.smartSwitchCooldownSec < 30 || DataStore.smartSwitchCooldownSec > 90) {
+                DataStore.smartSwitchCooldownSec = 45
             }
-            if (DataStore.smartSwitchBadProbeIntervalSec < 6 || DataStore.smartSwitchBadProbeIntervalSec > 20) {
-                DataStore.smartSwitchBadProbeIntervalSec = 10
+            if (DataStore.smartSwitchMinDwellSec < 30 || DataStore.smartSwitchMinDwellSec > 90) {
+                DataStore.smartSwitchMinDwellSec = 45
+            }
+            if (DataStore.smartSwitchProbeIntervalSec < 12 || DataStore.smartSwitchProbeIntervalSec > 40) {
+                DataStore.smartSwitchProbeIntervalSec = 20
+            }
+            if (DataStore.smartSwitchBadProbeIntervalSec < 4 || DataStore.smartSwitchBadProbeIntervalSec > 12) {
+                DataStore.smartSwitchBadProbeIntervalSec = 6
             }
             if (DataStore.smartSwitchWarmupRounds < 2 || DataStore.smartSwitchWarmupRounds > 6) {
                 DataStore.smartSwitchWarmupRounds = 3
             }
-            if (DataStore.smartSwitchCandidateWins < 3 || DataStore.smartSwitchCandidateWins > 8) {
-                DataStore.smartSwitchCandidateWins = 4
+            if (DataStore.smartSwitchCandidateWins < 2 || DataStore.smartSwitchCandidateWins > 5) {
+                DataStore.smartSwitchCandidateWins = 2
             }
             if (DataStore.smartSwitchCandidateWinsWarmup < 1 || DataStore.smartSwitchCandidateWinsWarmup > 4) {
                 DataStore.smartSwitchCandidateWinsWarmup = 2
@@ -1096,11 +1100,11 @@ class MainActivity : ThemedActivity(),
             if (DataStore.smartSwitchCriticalScore < 1000 || DataStore.smartSwitchCriticalScore > 2600) {
                 DataStore.smartSwitchCriticalScore = 1500
             }
-            if (DataStore.smartSwitchFailStreakTrigger < 2 || DataStore.smartSwitchFailStreakTrigger > 8) {
-                DataStore.smartSwitchFailStreakTrigger = 3
+            if (DataStore.smartSwitchFailStreakTrigger < 1 || DataStore.smartSwitchFailStreakTrigger > 5) {
+                DataStore.smartSwitchFailStreakTrigger = 2
             }
-            if (DataStore.smartSwitchStableLockSec < 300 || DataStore.smartSwitchStableLockSec > 2400) {
-                DataStore.smartSwitchStableLockSec = 900
+            if (DataStore.smartSwitchStableLockSec < 180 || DataStore.smartSwitchStableLockSec > 1200) {
+                DataStore.smartSwitchStableLockSec = 300
             }
             if (DataStore.smartSwitchExcellentScore < 500 || DataStore.smartSwitchExcellentScore > 1200) {
                 DataStore.smartSwitchExcellentScore = 760

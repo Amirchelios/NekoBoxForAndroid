@@ -4,6 +4,11 @@ const val CONNECTION_TEST_URL = "https://cp.cloudflare.com/generate_204"
 const val DEFAULT_SUBSCRIPTION_LINK =
     "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-1.txt"
 const val DEFAULT_SUBSCRIPTION_GROUP_NAME = "GitHub Public VPN"
+val DEFAULT_SUBSCRIPTION_SOURCES = listOf(
+    DEFAULT_SUBSCRIPTION_LINK,
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-2.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-3.txt",
+)
 
 object Key {
 

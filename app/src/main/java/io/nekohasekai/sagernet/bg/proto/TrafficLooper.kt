@@ -147,6 +147,8 @@ class TrafficLooper
                 mainTx += it.tx - it.txBase
                 mainRx += it.rx - it.rxBase
             }
+            DataStore.smartMainTxRate = mainTxRate
+            DataStore.smartMainRxRate = mainRxRate
 
             // speed
             val speed = SpeedDisplayData(

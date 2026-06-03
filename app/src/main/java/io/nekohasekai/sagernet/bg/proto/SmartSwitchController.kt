@@ -47,6 +47,8 @@ class SmartSwitchController(
             var disruptionRecoveryWins = 0
             var disruptionUntilMs = 0L
             var lastAutoTuneAtMs = 0L
+            var trafficStallRounds = 0
+            var lastTrafficRescueAtMs = 0L
             val learningEnabled = DataStore.smartEnableNetworkLearning
 
             fun activeStats(): Pair<Int, Int> {
@@ -124,8 +126,9 @@ class SmartSwitchController(
                 if (candidateScore <= 0) return
                 val now = System.currentTimeMillis()
                 val (activeScore, activeStreak) = activeStats()
-                val activeCritical = isCritical(activeScore, activeStreak)
-                val activeWeak = isWeak(activeScore, activeStreak)
+                val trafficEmergency = trafficStallRounds >= 2
+                val activeCritical = isCritical(activeScore, activeStreak) || trafficEmergency
+                val activeWeak = isWeak(activeScore, activeStreak) || trafficStallRounds >= 1
                 val activeGood = activeScore in 1..excellentScore && activeStreak == 0
                 val activeBw = bandwidth(activeId)
                 val candidateBw = bandwidth(id)
@@ -211,9 +214,27 @@ class SmartSwitchController(
             while (DataStore.serviceState == BaseService.State.Connected) {
                 val now = System.currentTimeMillis()
                 val (score, streak) = activeStats()
-                val weak = isWeak(score, streak)
-                val critical = isCritical(score, streak)
+                val txRate = DataStore.smartMainTxRate
+                val rxRate = DataStore.smartMainRxRate
+                val requestWithoutResponse = txRate >= 900L && rxRate <= 800L
+                val poorInteractiveDownload = txRate >= 500L && rxRate in 1L..48_000L
+                val poorStreamingDownload = rxRate in 1L..32_000L && score >= weakScore
+                val trafficDegraded = requestWithoutResponse || poorInteractiveDownload || poorStreamingDownload
+                trafficStallRounds = if (trafficDegraded) {
+                    (trafficStallRounds + 1).coerceAtMost(20)
+                } else {
+                    0
+                }
+                val stallCritical = trafficStallRounds >= 2 && (requestWithoutResponse || score >= weakScore)
+                val degradedCritical = trafficStallRounds >= 3
+                val trafficCritical = stallCritical || degradedCritical
+                val weak = isWeak(score, streak) || trafficStallRounds >= 1
+                val critical = isCritical(score, streak) || trafficCritical
                 updateSessionHealth(score, streak, bandwidth(activeId))
+                if (trafficCritical) {
+                    DataStore.smartSessionHealth = DataStore.smartSessionHealth.coerceAtMost(25)
+                    setDecision("critical:traffic_degraded tx=$txRate rx=$rxRate score=$score")
+                }
                 if (now - lastAutoTuneAtMs >= 180_000L) {
                     lastAutoTuneAtMs = now
                     val health = DataStore.smartSessionHealth
@@ -239,6 +260,18 @@ class SmartSwitchController(
                 }
                 val delayMs = if (weak) badProbeMs else normalProbeMs * stabilityMultiplier
                 delay(delayMs)
+                if (trafficCritical) {
+                    val stallNow = System.currentTimeMillis()
+                    if (stallNow - lastTrafficRescueAtMs >= 20_000L) {
+                        lastTrafficRescueAtMs = stallNow
+                        runCatching { Libcore.resetAllConnections(true) }
+                    }
+                    val stallRescueId = SmartSelector.selectBestFast(profile.groupId, currentScope())
+                        ?: SmartSelector.selectBest(profile.groupId, currentScope())
+                    if (stallRescueId != null) {
+                        maybeSwitchTo(stallRescueId, warmup = false)
+                    }
+                }
                 if (criticalRounds >= 4 && now >= disruptionUntilMs) {
                     if (standbyId > 0L) {
                         maybeSwitchTo(standbyId, warmup = false)

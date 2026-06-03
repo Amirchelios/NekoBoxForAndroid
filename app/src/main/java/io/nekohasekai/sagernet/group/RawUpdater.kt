@@ -1,6 +1,7 @@
 package io.nekohasekai.sagernet.group
 
 import android.annotation.SuppressLint
+import io.nekohasekai.sagernet.DEFAULT_SUBSCRIPTION_SOURCES
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.database.*
 import io.nekohasekai.sagernet.fmt.AbstractBean
@@ -67,12 +68,19 @@ object RawUpdater : GroupUpdater() {
                 subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
             ).execute()
             rawText = Util.getStringBox(response.contentString)
-            val directProxies = parseRaw(rawText).orEmpty()
+            val defaultSources = if (GroupManager.isDefaultSubscriptionGroup(proxyGroup)) {
+                fetchDefaultSubscriptionTexts(
+                    subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT,
+                    rawText
+                )
+            } else {
+                listOf(rawText)
+            }
+            val directProxies = defaultSources.flatMap { parseRaw(it).orEmpty() }
             if (directProxies.isNotEmpty()) {
                 proxies = directProxies
-                aggregateConfig = sanitizeAggregateConfig(
-                    ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
-                )
+                rawText = defaultSources.joinToString("\n")
+                aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(defaultSources))
             } else {
                 val subscriptionLinks = extractSubscriptionLinks(rawText)
                 if (subscriptionLinks.isNotEmpty()) {
@@ -994,7 +1002,7 @@ object RawUpdater : GroupUpdater() {
             val outbound = outbounds.optJSONObject(i) ?: continue
             val type = outbound.optString("type")
             val tag = outbound.optString("tag")
-            if (type == "parallel" || tag == "auto_parallel") {
+            if (type == "parallel" || isInternalParallelTag(tag)) {
                 if (tag.isNotBlank()) removedTags.add(tag)
                 continue
             }
@@ -1009,7 +1017,7 @@ object RawUpdater : GroupUpdater() {
                     val filtered = JSONArray()
                     for (j in 0 until list.length()) {
                         val tag = list.optString(j)
-                        if (tag != "auto_parallel" && !removedTags.contains(tag)) {
+                        if (!isInternalParallelTag(tag) && !removedTags.contains(tag)) {
                             filtered.put(tag)
                         }
                     }
@@ -1026,6 +1034,11 @@ object RawUpdater : GroupUpdater() {
             }
         }
         root.put("outbounds", newOutbounds)
+    }
+
+    private fun isInternalParallelTag(tag: String): Boolean {
+        return tag == "auto_parallel" || tag == "bond_min_rtt" ||
+            tag == "bond_download" || tag == "bond_race"
     }
 
     private fun fixSelectorDefault(selector: JSONObject, outbounds: JSONArray) {
@@ -1069,6 +1082,24 @@ object RawUpdater : GroupUpdater() {
             setUserAgent(userAgent)
         }
 
+    private suspend fun fetchDefaultSubscriptionTexts(
+        userAgent: String,
+        alreadyFetchedDefault: String
+    ): List<String> = coroutineScope {
+        val remaining = DEFAULT_SUBSCRIPTION_SOURCES.drop(1)
+        val extraTexts = remaining.map { subLink ->
+            async {
+                runCatching {
+                    Util.getStringBox(
+                        buildSubscriptionRequest(subLink, userAgent)
+                            .execute().contentString
+                    )
+                }.getOrDefault("")
+            }
+        }.awaitAll().filter { it.isNotBlank() }
+        listOf(alreadyFetchedDefault) + extraTexts
+    }
+
     private fun extractSubscriptionLinks(rawText: String): List<String> {
         val texts = mutableListOf(rawText)
         runCatching { rawText.decodeBase64UrlSafe() }
@@ -1096,8 +1127,7 @@ object RawUpdater : GroupUpdater() {
         val parallelTimeoutMs = DataStore.parallelTimeoutMs.coerceIn(1500, 15000)
         val parallelIntervalSec = DataStore.parallelIntervalSec.coerceIn(5, 600)
         val parallelTolerance = DataStore.parallelTolerance.coerceIn(10, 300)
-        val parallelStrategy = DataStore.parallelStrategy.ifBlank { "race" }
-        val primaryTag = if (DataStore.autoSelectPrimary == "urltest") "auto" else "auto_parallel"
+        val primaryTag = if (DataStore.autoSelectPrimary == "urltest") "auto" else "bond_min_rtt"
         for (raw in rawTexts) {
             val jsonText = ProxyToSingboxConverter.convertToSingBoxJson(raw).orEmpty()
             if (jsonText.isBlank()) continue
@@ -1137,7 +1167,9 @@ object RawUpdater : GroupUpdater() {
             put("tag", "proxy")
             put("default", primaryTag)
             val list = JSONArray()
-            list.put("auto_parallel")
+            list.put("bond_min_rtt")
+            list.put("bond_download")
+            list.put("bond_race")
             list.put("auto")
             validTags.forEach { list.put(it) }
             list.put("direct")
@@ -1149,11 +1181,33 @@ object RawUpdater : GroupUpdater() {
         })
         merged.put(JSONObject().apply {
             put("type", "parallel")
-            put("tag", "auto_parallel")
+            put("tag", "bond_min_rtt")
             val list = JSONArray()
             validTags.forEach { list.put(it) }
             put("outbounds", list)
-            put("strategy", parallelStrategy)
+            put("strategy", "least_rtt")
+            put("concurrency", parallelConcurrency)
+            put("delay", "${parallelDelayMs}ms")
+            put("timeout", "${parallelTimeoutMs}ms")
+        })
+        merged.put(JSONObject().apply {
+            put("type", "parallel")
+            put("tag", "bond_download")
+            val list = JSONArray()
+            validTags.forEach { list.put(it) }
+            put("outbounds", list)
+            put("strategy", "round_robin")
+            put("concurrency", parallelConcurrency)
+            put("delay", "${parallelDelayMs}ms")
+            put("timeout", "${parallelTimeoutMs}ms")
+        })
+        merged.put(JSONObject().apply {
+            put("type", "parallel")
+            put("tag", "bond_race")
+            val list = JSONArray()
+            validTags.forEach { list.put(it) }
+            put("outbounds", list)
+            put("strategy", "race")
             put("concurrency", parallelConcurrency)
             put("delay", "${parallelDelayMs}ms")
             put("timeout", "${parallelTimeoutMs}ms")
