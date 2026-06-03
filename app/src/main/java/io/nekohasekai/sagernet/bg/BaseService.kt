@@ -358,53 +358,14 @@ class BaseService {
             val data = data
             if (data.state != State.Stopped) return Service.START_NOT_STICKY
             val profile = SagerDatabase.proxyDao.getById(DataStore.selectedProxy)
-            this as Context
-            val service = this as Service
             if (profile == null) { // gracefully shutdown: https://stackoverflow.com/q/47337857/2245107
                 data.notification = createNotification("")
-                stopRunner(false, getString(R.string.profile_empty))
+                stopRunner(false, (this as Context).getString(R.string.profile_empty))
                 return Service.START_NOT_STICKY
             }
-            val proxy = ProxyInstance(profile, this)
-            data.proxy = proxy
-            BootReceiver.enabled = DataStore.persistAcrossReboot
-            data.registerCloseReceiver(service)
-            data.changeState(State.Connecting)
             runOnMainDispatcher {
                 try {
-                    data.notification = createNotification(ServiceNotification.genTitle(profile))
-                    Executable.killAll()    // clean up old processes
-                    preInit()
-                    proxy.init()
-                    DataStore.currentProfile = profile.id
-                    proxy.processes = GuardedProcessPool {
-                        Logs.w(it)
-                        stopRunner(false, it.readableMessage)
-                    }
-                    startProcesses()
-                    data.changeState(State.Connected)
-                    if (GroupManager.isAutoSelectAggregate(profile)) {
-                        startSmartSwitch(profile)
-                    }
-                    lateInit()
-                } catch (_: CancellationException) { // if the job was cancelled, it is canceller's responsibility to call stopRunner
-                } catch (_: UnknownHostException) {
-                    stopRunner(false, getString(R.string.invalid_server))
-                } catch (e: PluginManager.PluginNotFoundException) {
-                    Toast.makeText(this@Interface, e.readableMessage, Toast.LENGTH_SHORT).show()
-                    Logs.w(e)
-                    data.binder.missingPlugin(e.plugin)
-                    stopRunner(false, null)
-                } catch (exc: Throwable) {
-                    if (exc.javaClass.name.endsWith("proxyerror")) {
-                        // error from golang
-                        Logs.w(exc.readableMessage)
-                    } else {
-                        Logs.w(exc)
-                    }
-                    stopRunner(
-                        false, "${getString(R.string.service_failed)}: ${exc.readableMessage}"
-                    )
+                    BaseServiceStartController(this@Interface, data).start(profile)
                 } finally {
                     data.connectingJob = null
                 }
