@@ -39,7 +39,7 @@ class ServiceButton @JvmOverloads constructor(
         override fun onAnimationEnd(drawable: Drawable) {
             super.onAnimationEnd(drawable)
             var next = animationQueue.peek() ?: return
-            if (next.icon.current == drawable) {
+            if (next.currentDrawable == drawable) {
                 animationQueue.pop()
                 next = animationQueue.peek() ?: return
             }
@@ -54,23 +54,35 @@ class ServiceButton @JvmOverloads constructor(
     }
 
     private inner class AnimatedState(
-        @DrawableRes resId: Int,
+        @DrawableRes private val resId: Int,
         private val onStart: BaseProgressIndicator<*>.() -> Unit = { hideProgress() }
     ) : StateIcon {
-        val icon: AnimatedVectorDrawableCompat =
-            AnimatedVectorDrawableCompat.create(context, resId)!!.apply {
+        private var icon: AnimatedVectorDrawableCompat? = null
+        val currentDrawable: Drawable?
+            get() = icon?.current
+
+        private fun newIcon(): AnimatedVectorDrawableCompat {
+            icon?.unregisterAnimationCallback(this@ServiceButton.callback)
+            return AnimatedVectorDrawableCompat.create(context, resId)!!.apply {
                 registerAnimationCallback(this@ServiceButton.callback)
             }
+        }
 
         override val isAnimated: Boolean = true
 
         override fun start() {
-            setImageDrawable(icon)
-            icon.start()
+            val drawable = newIcon()
+            icon = drawable
+            setImageDrawable(drawable)
+            drawable.start()
             progress.onStart()
         }
 
-        override fun stop() = icon.stop()
+        override fun stop() {
+            icon?.stop()
+            icon?.unregisterAnimationCallback(this@ServiceButton.callback)
+            icon = null
+        }
     }
 
     private inner class StaticState(@DrawableRes resId: Int) : StateIcon {
@@ -218,6 +230,18 @@ class ServiceButton @JvmOverloads constructor(
         scaleY = 1f
         alpha = 1f
         rotation = 0f
+    }
+
+    override fun onDetachedFromWindow() {
+        delayedAnimation?.cancel()
+        delayedAnimation = null
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        connectedAnimator?.cancel()
+        connectedAnimator = null
+        animationQueue.peekFirst()?.stop()
+        animationQueue.clear()
+        super.onDetachedFromWindow()
     }
 
     private fun changeState(icon: StateIcon, animate: Boolean) {

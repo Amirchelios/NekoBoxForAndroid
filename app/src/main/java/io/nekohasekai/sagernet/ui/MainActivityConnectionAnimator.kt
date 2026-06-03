@@ -23,6 +23,9 @@ class MainActivityConnectionAnimator(
     private var fabColorAnimator: ValueAnimator? = null
     private var ringSoftAnimator: AnimatorSet? = null
     private var ambientAnimator: ObjectAnimator? = null
+    private var disconnectCollapseAnimator: AnimatorSet? = null
+    private var currentState: BaseService.State? = null
+    private var stateVersion = 0L
     var disconnectAnimating = false
         private set
 
@@ -43,6 +46,9 @@ class MainActivityConnectionAnimator(
                 repeatCount = ValueAnimator.INFINITE
                 start()
             }
+        } else if (state == BaseService.State.Connecting) {
+            glowAnimator?.cancel()
+            glowAnimator = null
         } else {
             glowAnimator?.cancel()
             glowAnimator = null
@@ -54,16 +60,12 @@ class MainActivityConnectionAnimator(
     }
 
     fun updateConnectAnimation(state: BaseService.State) {
-        connectAnimator?.cancel()
-        connectAnimator = null
-        ringAnimator?.cancel()
-        ringAnimator = null
-        ringSoftAnimator?.cancel()
-        ringSoftAnimator = null
-        ambientAnimator?.cancel()
-        ambientAnimator = null
-        fabColorAnimator?.cancel()
-        fabColorAnimator = null
+        stateVersion++
+        val version = stateVersion
+        cancelLoopingAnimators()
+        if (state != BaseService.State.Stopping) {
+            cancelDisconnectCollapse()
+        }
 
         if (state == BaseService.State.Connecting) {
             val density = activity.resources.displayMetrics.density
@@ -72,7 +74,8 @@ class MainActivityConnectionAnimator(
             val ring = binding.connectRing
             val ringSoft = binding.connectRingSoft
             val ambient = binding.connectAmbient
-            val baseFabY = fab.translationY
+            fab.translationY = 0f
+            val baseFabY = 0f
 
             glow.visibility = View.VISIBLE
             glow.alpha = 0.2f
@@ -125,6 +128,7 @@ class MainActivityConnectionAnimator(
                 duration = 1200L
                 repeatMode = ValueAnimator.REVERSE
                 repeatCount = ValueAnimator.INFINITE
+                addUpdateListener { activity.updateConnectEffectOffsets() }
             }
 
             connectAnimator = AnimatorSet().apply {
@@ -269,6 +273,8 @@ class MainActivityConnectionAnimator(
             }
             binding.fab.scaleX = 1f
             binding.fab.scaleY = 1f
+            binding.fab.translationY = 0f
+            activity.updateConnectEffectOffsets()
 
             when (state) {
                 BaseService.State.Stopping -> animateFabColor(
@@ -283,7 +289,7 @@ class MainActivityConnectionAnimator(
             }
 
             when (state) {
-                BaseService.State.Stopping -> playDisconnectCollapse()
+                BaseService.State.Stopping -> playDisconnectCollapse(version)
                 else -> {
                     if (!disconnectAnimating) {
                         ambient.visibility = View.INVISIBLE
@@ -292,6 +298,22 @@ class MainActivityConnectionAnimator(
                 }
             }
         }
+    }
+
+    private fun cancelLoopingAnimators() {
+        connectAnimator?.cancel()
+        connectAnimator = null
+        ringAnimator?.cancel()
+        ringAnimator = null
+        ringSoftAnimator?.cancel()
+        ringSoftAnimator = null
+        ambientAnimator?.cancel()
+        ambientAnimator = null
+        fabColorAnimator?.cancel()
+        fabColorAnimator = null
+        glowAnimator?.cancel()
+        glowAnimator = null
+        binding.fab.animate().cancel()
     }
 
     private fun animateFabColor(fromColor: Int, toColor: Int, durationMs: Long = 420L) {
@@ -307,7 +329,13 @@ class MainActivityConnectionAnimator(
         }
     }
 
-    private fun playDisconnectCollapse() {
+    private fun cancelDisconnectCollapse() {
+        disconnectCollapseAnimator?.cancel()
+        disconnectCollapseAnimator = null
+        disconnectAnimating = false
+    }
+
+    private fun playDisconnectCollapse(version: Long) {
         if (disconnectAnimating) return
         disconnectAnimating = true
         val ring = binding.connectRing
@@ -347,14 +375,20 @@ class MainActivityConnectionAnimator(
             duration = 3000L
         }
 
-        AnimatorSet().apply {
+        disconnectCollapseAnimator = AnimatorSet().apply {
             playTogether(ringOut, ringSoftOut, ambientFade)
             addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationCancel(animation: android.animation.Animator) {
+                    disconnectAnimating = false
+                }
+
                 override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (version != stateVersion) return
                     ring.visibility = View.INVISIBLE
                     ringSoft.visibility = View.INVISIBLE
                     ambient.visibility = View.INVISIBLE
                     disconnectAnimating = false
+                    disconnectCollapseAnimator = null
                 }
             })
             start()
@@ -372,8 +406,17 @@ class MainActivityConnectionAnimator(
     }
 
     fun updateStateAnimation(state: BaseService.State) {
+        if (currentState == state && state != BaseService.State.Connecting) return
+        currentState = state
         stateAnimator?.cancel()
         stateAnimator = null
+        if (state != BaseService.State.Connecting) {
+            binding.fragmentHolder.scaleX = 1f
+            binding.fragmentHolder.scaleY = 1f
+        }
+        if (state != BaseService.State.Stopping) {
+            binding.fragmentHolder.alpha = 1f
+        }
         when (state) {
             BaseService.State.Connecting -> {
                 stateAnimator = ObjectAnimator.ofPropertyValuesHolder(
@@ -404,5 +447,16 @@ class MainActivityConnectionAnimator(
         }
         updateConnectAnimation(state)
         updateGlow(state)
+    }
+
+    fun release() {
+        currentState = null
+        stateVersion++
+        cancelLoopingAnimators()
+        cancelDisconnectCollapse()
+        glowAnimator?.cancel()
+        glowAnimator = null
+        stateAnimator?.cancel()
+        stateAnimator = null
     }
 }
