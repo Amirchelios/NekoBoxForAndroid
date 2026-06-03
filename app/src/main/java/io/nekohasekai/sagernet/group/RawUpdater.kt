@@ -78,7 +78,7 @@ object RawUpdater : GroupUpdater() {
             }
             val directProxies = defaultSources.flatMap { parseRaw(it).orEmpty() }
             if (directProxies.isNotEmpty()) {
-                proxies = directProxies
+                proxies = dedupeDefaultGroupProxies(proxyGroup, directProxies)
                 rawText = defaultSources.joinToString("\n")
                 aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(defaultSources))
             } else {
@@ -88,7 +88,7 @@ object RawUpdater : GroupUpdater() {
                     val rawTexts = mutableListOf<String>()
                     val userAgent = subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
                     val batches = coroutineScope {
-                        subscriptionLinks.take(8).map { subLink ->
+                        subscriptionLinks.map { subLink ->
                             async {
                                 val subText = runCatching {
                                     Util.getStringBox(
@@ -109,7 +109,7 @@ object RawUpdater : GroupUpdater() {
                             aggregated.addAll(subProxies)
                         }
                     }
-                    proxies = aggregated.takeIf { it.isNotEmpty() }
+                    proxies = dedupeDefaultGroupProxies(proxyGroup, aggregated).takeIf { it.isNotEmpty() }
                         ?: error(app.getString(R.string.no_proxies_found))
                     aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(rawTexts))
                 } else {
@@ -1114,6 +1114,17 @@ object RawUpdater : GroupUpdater() {
             .filter { it.startsWith("http://") || it.startsWith("https://") }
             .distinct()
             .toList()
+    }
+
+    private fun dedupeDefaultGroupProxies(
+        proxyGroup: ProxyGroup,
+        proxies: List<AbstractBean>
+    ): List<AbstractBean> {
+        if (!GroupManager.isDefaultSubscriptionGroup(proxyGroup)) return proxies
+        val seen = HashSet<String>()
+        return proxies.filter { bean ->
+            seen.add(bean.toString())
+        }
     }
 
     private fun buildAggregateConfig(rawTexts: List<String>): String {

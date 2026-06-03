@@ -8,6 +8,13 @@ val DEFAULT_SUBSCRIPTION_SOURCES = listOf(
     DEFAULT_SUBSCRIPTION_LINK,
     "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-2.txt",
     "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-3.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-4.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-5.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-6.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-7.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-8.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-9.txt",
+    "https://raw.githubusercontent.com/Amirchelios/clc-main/refs/heads/main/githubmirror/bypass/bypass-10.txt",
 )
 
 object Key {

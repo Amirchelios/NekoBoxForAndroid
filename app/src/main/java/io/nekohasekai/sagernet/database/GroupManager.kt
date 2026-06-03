@@ -165,6 +165,10 @@ object GroupManager {
                 existing.subscription!!.autoUpdate = true
                 changed = true
             }
+            if (!existing.subscription!!.deduplication) {
+                existing.subscription!!.deduplication = true
+                changed = true
+            }
             if (changed) {
                 SagerDatabase.groupDao.updateGroup(existing)
                 iterator { groupUpdated(existing) }
@@ -182,6 +186,7 @@ object GroupManager {
                 it.link = DEFAULT_SUBSCRIPTION_LINK
                 it.autoUpdate = true
                 it.autoUpdateDelay = 360
+                it.deduplication = true
             }
         }
         return@withLock createGroup(group).also {
