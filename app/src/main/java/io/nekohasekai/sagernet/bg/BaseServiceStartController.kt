@@ -35,6 +35,7 @@ class BaseServiceStartController(
             service.preInit()
             proxy.init()
             DataStore.currentProfile = profile.id
+            DataStore.lastConnectedProfile = profile.id
             proxy.processes = GuardedProcessPool {
                 Logs.w(it)
                 service.stopRunner(false, it.readableMessage)

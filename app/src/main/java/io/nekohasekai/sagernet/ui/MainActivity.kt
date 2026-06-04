@@ -734,15 +734,30 @@ class MainActivity : ThemedActivity(),
     }
 
     private fun ensureSelectedProxyForConnect(): Boolean {
-        val selected = DataStore.selectedProxy
-        val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
-        if (selectedExists) return true
+        fun resolve(profileId: Long): Long? {
+            if (profileId <= 0L) return null
+            return SagerDatabase.proxyDao.getById(profileId)?.id
+        }
+
+        val candidates = listOf(
+            DataStore.selectedProxy,
+            DataStore.currentProfile,
+            DataStore.lastConnectedProfile,
+        )
+        for (candidate in candidates) {
+            val resolved = resolve(candidate) ?: continue
+            DataStore.selectedProxy = resolved
+            DataStore.currentProfile = resolved
+            DataStore.lastConnectedProfile = resolved
+            return true
+        }
 
         val all = SagerDatabase.proxyDao.getAll()
         val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
         val fallback = auto ?: all.firstOrNull() ?: return false
         DataStore.selectedProxy = fallback.id
         DataStore.currentProfile = fallback.id
+        DataStore.lastConnectedProfile = fallback.id
         return true
     }
 

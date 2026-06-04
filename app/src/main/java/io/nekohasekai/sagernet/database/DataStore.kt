@@ -41,6 +41,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     // last used, but may not be running
     var currentProfile by configurationStore.long(Key.PROFILE_CURRENT)
+    var lastConnectedProfile by configurationStore.long(Key.PROFILE_LAST_CONNECTED)
 
     var selectedProxy by configurationStore.long(Key.PROFILE_ID)
     var selectedGroup by configurationStore.long(Key.PROFILE_GROUP) { currentGroupId() } // "ungrouped" group id = 1

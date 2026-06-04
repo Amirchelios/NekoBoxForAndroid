@@ -214,13 +214,27 @@ class BaseService {
             val selected = DataStore.selectedProxy
             val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
             if (!selectedExists) {
+                val current = DataStore.currentProfile
+                val currentExists = current > 0L && SagerDatabase.proxyDao.getById(current) != null
+                if (currentExists) {
+                    DataStore.selectedProxy = current
+                    DataStore.lastConnectedProfile = current
+                    return
+                }
+                val lastConnected = DataStore.lastConnectedProfile
+                val lastExists = lastConnected > 0L && SagerDatabase.proxyDao.getById(lastConnected) != null
+                if (lastExists) {
+                    DataStore.selectedProxy = lastConnected
+                    DataStore.currentProfile = lastConnected
+                    return
+                }
                 val all = SagerDatabase.proxyDao.getAll()
-                val auto = all
-                    .firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
+                val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
                 val fallback = auto ?: all.firstOrNull()
                 if (fallback != null) {
                     DataStore.selectedProxy = fallback.id
                     DataStore.currentProfile = fallback.id
+                    DataStore.lastConnectedProfile = fallback.id
                 } else {
                     stopRunner(false, (this as Context).getString(R.string.profile_empty))
                     return
