@@ -17,6 +17,7 @@ class SmartSwitchController(
         data.smartSwitchJob?.cancel()
         data.smartSwitchJob = runOnDefaultDispatcher {
             val mode = DataStore.normalizedSmartProfilePreset()
+            val policy = DataStore.smartAdaptivePolicy()
             if (mode == "manual") {
                 DataStore.smartLastDecision = "manual:auto_switch_disabled"
                 return@runOnDefaultDispatcher
@@ -33,17 +34,17 @@ class SmartSwitchController(
                 "download" -> 1.40
                 else -> 1.0
             }
-            val cooldownMs = (DataStore.smartSwitchCooldownSec.coerceIn(30, 900) * cooldownFactor).toLong() * 1000L
-            val minDwellMs = (DataStore.smartSwitchMinDwellSec.coerceIn(30, 1200) * dwellFactor).toLong() * 1000L
-            val normalProbeMs = DataStore.smartSwitchProbeIntervalSec.coerceIn(10, 120) * 1000L
-            val badProbeMs = DataStore.smartSwitchBadProbeIntervalSec.coerceIn(5, 60) * 1000L
-            val warmupRounds = DataStore.smartSwitchWarmupRounds.coerceIn(1, 8)
-            val baseWins = DataStore.smartSwitchCandidateWins.coerceIn(2, 10)
-            val warmupWins = DataStore.smartSwitchCandidateWinsWarmup.coerceIn(1, 5)
-            val minImproveAbs = DataStore.smartSwitchMinImproveAbs.coerceIn(80, 1200)
-            val minImprovePct = DataStore.smartSwitchMinImprovePct.coerceIn(8, 60)
-            val weakScoreBase = DataStore.smartSwitchWeakScore.coerceIn(600, 3000)
-            val criticalScoreBase = DataStore.smartSwitchCriticalScore.coerceIn(800, 5000)
+            val cooldownMs = (policy.cooldownSec.coerceIn(30, 900) * cooldownFactor).toLong() * 1000L
+            val minDwellMs = (policy.minDwellSec.coerceIn(30, 1200) * dwellFactor).toLong() * 1000L
+            val normalProbeMs = policy.probeIntervalSec.coerceIn(10, 120) * 1000L
+            val badProbeMs = policy.badProbeIntervalSec.coerceIn(5, 60) * 1000L
+            val warmupRounds = policy.warmupRounds.coerceIn(1, 8)
+            val baseWins = policy.candidateWins.coerceIn(2, 10)
+            val warmupWins = policy.candidateWinsWarmup.coerceIn(1, 5)
+            val minImproveAbs = policy.minImproveAbs.coerceIn(80, 1200)
+            val minImprovePct = policy.minImprovePct.coerceIn(8, 60)
+            val weakScoreBase = policy.weakScore.coerceIn(600, 3000)
+            val criticalScoreBase = policy.criticalScore.coerceIn(800, 5000)
             val weakScore = when (mode) {
                 "gaming" -> (weakScoreBase * 0.78).toInt()
                 "streaming" -> (weakScoreBase * 1.10).toInt()
@@ -56,12 +57,12 @@ class SmartSwitchController(
                 "download" -> (criticalScoreBase * 1.20).toInt()
                 else -> criticalScoreBase
             }.coerceIn(700, 6000)
-            val failTrigger = DataStore.smartSwitchFailStreakTrigger.coerceIn(1, 10)
-            val stableLockMs = DataStore.smartSwitchStableLockSec.coerceIn(120, 3600) * 1000L
-            val excellentScore = DataStore.smartSwitchExcellentScore.coerceIn(450, 1400)
-            val minThroughputGainPct = DataStore.smartSwitchMinThroughputGainPct.coerceIn(5, 80)
-            val disruptionHoldMinMs = DataStore.smartDisruptionHoldMinSec.coerceIn(30, 900) * 1000L
-            val disruptionHoldMaxMs = DataStore.smartDisruptionHoldMaxSec.coerceIn(60, 1800) * 1000L
+            val failTrigger = policy.failStreakTrigger.coerceIn(1, 10)
+            val stableLockMs = policy.stableLockSec.coerceIn(120, 3600) * 1000L
+            val excellentScore = policy.excellentScore.coerceIn(450, 1400)
+            val minThroughputGainPct = policy.minThroughputGainPct.coerceIn(5, 80)
+            val disruptionHoldMinMs = policy.disruptionHoldMinSec.coerceIn(30, 900) * 1000L
+            val disruptionHoldMaxMs = policy.disruptionHoldMaxSec.coerceIn(60, 1800) * 1000L
             var activeId = 0L
             var activeSinceMs = System.currentTimeMillis()
             var lastSwitchAtMs = 0L
@@ -205,25 +206,30 @@ class SmartSwitchController(
                 if (id <= 0L) return false
                 val tag = data.proxy?.config?.profileTagMap?.get(id).orEmpty()
                 if (tag.isBlank()) return false
+                val previousId = activeId
                 data.proxy?.box?.selectOutbound(tag)
                 activeId = id
                 activeSinceMs = System.currentTimeMillis()
                 lastSwitchAtMs = activeSinceMs
+                if (previousId > 0L && previousId != id) {
+                    DataStore.bumpSmartRecentSwitchCount(previousId)
+                }
                 DataStore.setSmartPreferredProxy(profile.groupId, id)
                 DataStore.setSmartPreferredProxyScoped(currentScope(), profile.groupId, id)
+                DataStore.bumpSmartRecentSwitchCount(id)
                 setDecision("switch:$id")
                 return true
             }
 
-            fun maybeSwitchTo(id: Long, warmup: Boolean) {
-                if (id <= 0L) return
+            fun maybeSwitchTo(id: Long, warmup: Boolean): Boolean {
+                if (id <= 0L) return false
                 if (id == activeId) {
                     pendingCandidateId = 0L
                     pendingWins = 0
-                    return
+                    return false
                 }
                 val candidateScore = DataStore.getSmartLastScore(id)
-                if (candidateScore <= 0) return
+                if (candidateScore <= 0) return false
                 val now = System.currentTimeMillis()
                 val (activeScore, activeStreak) = activeStats()
                 val trafficEmergency = trafficStallRounds >= 2
@@ -234,13 +240,13 @@ class SmartSwitchController(
                 val candidateBw = bandwidth(id)
                 if (!warmup && !activeCritical && now < disruptionUntilMs) {
                     setDecision("hold:disruption_window")
-                    return
+                    return false
                 }
-                if (!warmup && !activeCritical && now - lastSwitchAtMs < cooldownMs) return
-                if (!activeCritical && now - activeSinceMs < minDwellMs) return
+                if (!warmup && !activeCritical && now - lastSwitchAtMs < cooldownMs) return false
+                if (!activeCritical && now - activeSinceMs < minDwellMs) return false
                 if (!warmup && activeGood && now - activeSinceMs < stableLockMs) {
                     setDecision("hold:stable_lock")
-                    return
+                    return false
                 }
                 val improveAbs = if (activeScore > 0) activeScore - candidateScore else Int.MAX_VALUE
                 val improvePctEnough =
@@ -266,7 +272,7 @@ class SmartSwitchController(
                 if (!improveEnough) {
                     if (pendingCandidateId == id) pendingWins = 0
                     setDecision("hold:no_significant_gain")
-                    return
+                    return false
                 }
                 if (pendingCandidateId == id) {
                     pendingWins++
@@ -280,11 +286,13 @@ class SmartSwitchController(
                     activeWeak -> baseWins
                     else -> baseWins + 1
                 }.coerceAtLeast(1)
-                if (pendingWins < requiredWins) return
+                if (pendingWins < requiredWins) return false
                 if (selectOutboundById(id)) {
                     pendingCandidateId = 0L
                     pendingWins = 0
+                    return true
                 }
+                return false
             }
 
             val scopedPreferredId = DataStore.getSmartPreferredProxyScoped(currentScope(), profile.groupId)

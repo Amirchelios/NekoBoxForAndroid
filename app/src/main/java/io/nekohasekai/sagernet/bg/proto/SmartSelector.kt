@@ -62,6 +62,63 @@ object SmartSelector {
         MANUAL,
     }
 
+    private data class ModePolicy(
+        val topCount: Int,
+        val verifyAttempts: Int,
+        val verifyTimeoutMs: Int,
+        val minSuccessRatio: Double,
+        val preferBandwidth: Boolean,
+        val probeBiasMs: Int,
+        val quarantineBoost: Int,
+        val hysteresisBonus: Int,
+    )
+
+    private fun modePolicy(): ModePolicy {
+        return when (smartMode()) {
+            SmartMode.GAMING -> ModePolicy(
+                topCount = 3,
+                verifyAttempts = 3,
+                verifyTimeoutMs = 2400,
+                minSuccessRatio = 0.55,
+                preferBandwidth = false,
+                probeBiasMs = -200,
+                quarantineBoost = 12,
+                hysteresisBonus = 260,
+            )
+            SmartMode.STREAMING -> ModePolicy(
+                topCount = 4,
+                verifyAttempts = 3,
+                verifyTimeoutMs = 2600,
+                minSuccessRatio = 0.60,
+                preferBandwidth = true,
+                probeBiasMs = 0,
+                quarantineBoost = 18,
+                hysteresisBonus = 300,
+            )
+            SmartMode.DOWNLOAD -> ModePolicy(
+                topCount = 5,
+                verifyAttempts = 2,
+                verifyTimeoutMs = 3000,
+                minSuccessRatio = 0.45,
+                preferBandwidth = true,
+                probeBiasMs = 150,
+                quarantineBoost = 20,
+                hysteresisBonus = 220,
+            )
+            SmartMode.MANUAL,
+            SmartMode.BALANCED -> ModePolicy(
+                topCount = 3,
+                verifyAttempts = 3,
+                verifyTimeoutMs = 2800,
+                minSuccessRatio = 0.50,
+                preferBandwidth = true,
+                probeBiasMs = 0,
+                quarantineBoost = 16,
+                hysteresisBonus = 280,
+            )
+        }
+    }
+
     fun applyCachedOrder(groupId: Long) {
         val group = SagerDatabase.groupDao.getById(groupId) ?: return
         val cachedOrder = DataStore.getSmartPreferredOrder(groupId)
@@ -90,23 +147,25 @@ object SmartSelector {
             .filterNot { it.type == TYPE_CONFIG }
         if (profiles.isEmpty()) return null
 
+        val policy = modePolicy()
         val candidates = filterQuarantined(profiles)
-        val evaluations = evaluateProfiles(candidates, groupId, scope, TIMEOUT_MS, MAX_ATTEMPTS)
+        val timeoutMs = (TIMEOUT_MS + policy.probeBiasMs).coerceIn(1_500, 6_000)
+        val evaluations = evaluateProfiles(candidates, groupId, scope, timeoutMs, MAX_ATTEMPTS)
         if (evaluations.isEmpty()) return null
         evaluations.forEach { updateHealthState(groupId, scope, it) }
 
         val valid = refineWithThroughput(evaluations.filter { it.score != null })
-            .sortedWith(compareBy<ProfileEvaluation> { modeAdjustedScore(it) }
+            .sortedWith(compareBy<ProfileEvaluation> {
+                stabilityAdjustedScore(it, DataStore.getSmartPreferredProxy(groupId))
+            }.thenBy { modeAdjustedScore(it) }
                 .thenByDescending { it.bandwidthKbps })
         if (valid.isEmpty()) return null
 
-        val best = valid.first()
-        val orderedIds = valid.map { it.profile.id } + evaluations
-            .filterNot { it.score != null }
-            .map { it.profile.id }
-        DataStore.setSmartPreferredProxy(groupId, best.profile.id)
-        DataStore.setSmartPreferredOrder(groupId, orderedIds)
-        DataStore.markSmartPreferredOrderDirty(groupId)
+        val shortlist = valid.take(policy.topCount.coerceAtLeast(1))
+        val verified = pickVerifiedCandidate(shortlist, scope, policy) ?: shortlist.first()
+        if (verified.score == null || verified.successRatio < policy.minSuccessRatio) {
+            return shortlist.firstOrNull()?.profile?.id
+        }
 
         evaluations.forEach { ev ->
             if (ev.score != null) {
@@ -120,15 +179,8 @@ object SmartSelector {
         }
         SagerDatabase.proxyDao.updateProxy(evaluations.map { it.profile })
 
-        val update = profiles.associateBy { it.id }.toMutableMap()
-        var order = 1L
-        orderedIds.forEach { id ->
-            update[id]?.let {
-                it.userOrder = order++
-            }
-        }
-        SagerDatabase.proxyDao.updateProxy(update.values.toList())
-        return best.profile.id
+        val fallbackIds = evaluations.filterNot { it.score != null }.map { it.profile.id }
+        return commitCandidate(groupId, verified, valid, fallbackIds)
     }
 
     suspend fun selectBestFast(groupId: Long, scope: String = "default"): Long? {
@@ -140,6 +192,8 @@ object SmartSelector {
             .filterNot { it.type == TYPE_CONFIG }
         if (profiles.isEmpty()) return emptyList()
 
+        val policy = modePolicy()
+        val fastTimeoutMs = (FAST_TIMEOUT_MS + policy.probeBiasMs / 2).coerceIn(1_000, 4_000)
         val cachedOrder = DataStore.getSmartPreferredOrder(groupId)
         val profileMap = profiles.associateBy { it.id }
         val ordered = if (cachedOrder.isNotEmpty()) {
@@ -152,21 +206,22 @@ object SmartSelector {
             .sortedByDescending { fastPriorityScore(it) }
             .take(FAST_LIMIT)
 
-        val evaluations = evaluateProfiles(candidates, groupId, scope, FAST_TIMEOUT_MS, FAST_MAX_ATTEMPTS)
+        val evaluations = evaluateProfiles(candidates, groupId, scope, fastTimeoutMs, FAST_MAX_ATTEMPTS)
         if (evaluations.isEmpty()) return emptyList()
         evaluations.forEach { updateHealthState(groupId, scope, it) }
 
         val sorted = refineWithThroughput(evaluations.filter { it.score != null })
-            .sortedWith(compareBy<ProfileEvaluation> { modeAdjustedScore(it) }
+            .sortedWith(compareBy<ProfileEvaluation> {
+                stabilityAdjustedScore(it, DataStore.getSmartPreferredProxy(groupId))
+            }.thenBy { modeAdjustedScore(it) }
                 .thenByDescending { it.bandwidthKbps })
         if (sorted.isEmpty()) return emptyList()
-        val orderedIds = sorted.map { it.profile.id } + evaluations
-            .filterNot { it.score != null }
-            .map { it.profile.id }
-        DataStore.setSmartPreferredProxy(groupId, sorted.first().profile.id)
-        DataStore.setSmartPreferredOrder(groupId, orderedIds)
-        DataStore.markSmartPreferredOrderDirty(groupId)
-        return orderedIds.take(limit.coerceAtLeast(1))
+        val shortlist = sorted.take(policy.topCount.coerceAtLeast(1))
+        val verified = pickVerifiedCandidate(shortlist, scope, policy) ?: shortlist.first()
+        val fallbackIds = evaluations.filterNot { it.score != null }.map { it.profile.id }
+        val committedId = commitCandidate(groupId, verified, sorted, fallbackIds)
+        return (listOf(committedId) + sorted.filterNot { it.profile.id == committedId }.map { it.profile.id } + fallbackIds)
+            .take(limit.coerceAtLeast(1))
     }
 
     private fun fastPriorityScore(profile: ProxyEntity): Long {
@@ -199,6 +254,85 @@ object SmartSelector {
         }
     }
 
+    private fun preferredProxyBias(profileId: Long, preferredId: Long): Int {
+        if (profileId <= 0L || preferredId <= 0L) return 0
+        return if (profileId == preferredId) 220 else 0
+    }
+
+    private fun recencyBias(profileId: Long): Int {
+        val observedAt = DataStore.getSmartLastObservedAt(profileId)
+        if (observedAt <= 0L) return 0
+        val ageMs = System.currentTimeMillis() - observedAt
+        return when {
+            ageMs <= 2 * 60_000L -> 12
+            ageMs <= 10 * 60_000L -> 8
+            ageMs <= 30 * 60_000L -> 4
+            else -> 0
+        }
+    }
+
+    private fun switchChurnPenalty(profileId: Long): Int {
+        return (DataStore.getSmartRecentSwitchCount(profileId) * 4).coerceAtMost(60)
+    }
+
+    private fun stabilityAdjustedScore(ev: ProfileEvaluation, preferredId: Long): Int {
+        val base = modeAdjustedScore(ev)
+        val bias = preferredProxyBias(ev.profile.id, preferredId) + recencyBias(ev.profile.id)
+        val churnPenalty = switchChurnPenalty(ev.profile.id)
+        val policy = modePolicy()
+        val hysteresis = if (ev.profile.id == preferredId) policy.hysteresisBonus else 0
+        val quarantineBonus = if (DataStore.isSmartQuarantined(ev.profile.id)) policy.quarantineBoost else 0
+        return (base - bias - hysteresis + churnPenalty + quarantineBonus).coerceAtLeast(1)
+    }
+
+    private suspend fun verifyCandidate(
+        profile: ProxyEntity,
+        scope: String,
+        policy: ModePolicy,
+    ): ProfileEvaluation? {
+        val evaluated = evaluateProfile(profile, profile.groupId, scope, policy.verifyTimeoutMs, policy.verifyAttempts)
+            ?: return null
+        val refined = refineWithThroughput(listOf(evaluated)).firstOrNull() ?: evaluated
+        return refined
+    }
+
+    private fun commitCandidate(
+        groupId: Long,
+        candidate: ProfileEvaluation,
+        fullOrder: List<ProfileEvaluation>,
+        fallbackIds: List<Long>,
+    ): Long {
+        val orderedIds = listOf(candidate.profile.id) + fullOrder
+            .filterNot { it.profile.id == candidate.profile.id }
+            .map { it.profile.id } + fallbackIds
+        DataStore.setSmartPreferredProxy(groupId, candidate.profile.id)
+        DataStore.setSmartPreferredOrder(groupId, orderedIds)
+        DataStore.markSmartPreferredOrderDirty(groupId)
+        DataStore.clearSmartPreferredOrderDirty(groupId)
+
+        val update = SagerDatabase.proxyDao.getByGroup(groupId).associateBy { it.id }.toMutableMap()
+        var order = 1L
+        orderedIds.forEach { id ->
+            update[id]?.let { it.userOrder = order++ }
+        }
+        SagerDatabase.proxyDao.updateProxy(update.values.toList())
+        return candidate.profile.id
+    }
+
+    private suspend fun pickVerifiedCandidate(
+        shortlist: List<ProfileEvaluation>,
+        scope: String,
+        policy: ModePolicy,
+    ): ProfileEvaluation? {
+        for (candidate in shortlist) {
+            val checked = verifyCandidate(candidate.profile, scope, policy) ?: continue
+            if (checked.score != null && checked.successRatio >= policy.minSuccessRatio) {
+                return checked
+            }
+        }
+        return null
+    }
+
     private fun filterQuarantined(profiles: List<ProxyEntity>): List<ProxyEntity> {
         if (!DataStore.smartQuarantineEnabled) return profiles
         val active = profiles.filterNot { DataStore.isSmartQuarantined(it.id) }
@@ -209,20 +343,27 @@ object SmartSelector {
         val base = ev.score ?: Int.MAX_VALUE
         if (base == Int.MAX_VALUE) return base
         val qualityPenalty = (100 - DataStore.getSmartQualityScore(ev.profile.id)).coerceIn(0, 100) * 3
+        val policy = modePolicy()
+        val bandwidthBonus = if (policy.preferBandwidth) {
+            bandwidthScoreBonus(ev.bandwidthKbps)
+        } else {
+            bandwidthScoreBonus(ev.bandwidthKbps) / 2
+        }
         return when (smartMode()) {
             SmartMode.GAMING -> {
                 base + ev.jitter.coerceAtMost(500) * 2 +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 700.0).toInt() +
-                    qualityPenalty
+                    qualityPenalty -
+                    (bandwidthBonus / 3)
             }
             SmartMode.STREAMING -> {
                 base + ev.jitter.coerceAtMost(500) +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 1000.0).toInt() -
-                    bandwidthScoreBonus(ev.bandwidthKbps) * 2 +
+                    bandwidthBonus * 2 +
                     qualityPenalty
             }
             SmartMode.DOWNLOAD -> {
-                base - bandwidthScoreBonus(ev.bandwidthKbps) * 3 +
+                base - bandwidthBonus * 3 +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 450.0).toInt() +
                     qualityPenalty / 2
             }
@@ -230,7 +371,7 @@ object SmartSelector {
             SmartMode.BALANCED -> {
                 base + ev.jitter.coerceAtMost(350) +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 650.0).toInt() -
-                    bandwidthScoreBonus(ev.bandwidthKbps) +
+                    bandwidthBonus +
                     qualityPenalty
             }
         }.coerceAtLeast(1)
@@ -293,6 +434,7 @@ object SmartSelector {
                 (baseScore + rawPenalty + healthPenalty + streakPenalty + transportPenalty)
                     .coerceAtLeast(1)
             }
+            DataStore.setSmartLastObservedAt(profile.id, System.currentTimeMillis())
             ProfileEvaluation(
                 profile = profile,
                 score = finalScore,
@@ -429,6 +571,7 @@ object SmartSelector {
             DataStore.setSmartLastFailureAt(profileId, System.currentTimeMillis())
             DataStore.setSmartLastScore(profileId, -1)
             DataStore.setSmartLastBandwidthKbps(profileId, -1)
+            DataStore.bumpSmartRecentSwitchCount(profileId)
             val newStreak = (oldStreak + 1).coerceAtMost(20)
             val bump = (220 + newStreak * 30).coerceAtMost(700)
             DataStore.setSmartFailureStreak(profileId, newStreak)
@@ -464,6 +607,7 @@ object SmartSelector {
         val softness = if (result.successRatio < 0.65) 60 else 0
         DataStore.setSmartFailureStreak(profileId, newStreak)
         DataStore.setSmartHealthPenalty(profileId, oldPenalty - baseDrop + softness)
+        DataStore.decaySmartRecentSwitchCount(profileId, if (stable) 2 else 1)
         if (stable || newStreak == 0) {
             DataStore.clearSmartQuarantine(profileId)
         }

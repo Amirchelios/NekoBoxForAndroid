@@ -235,6 +235,26 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartQuarantineLongMin by configurationStore.int("smartQuarantineLongMin") { 360 }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
 
+    data class SmartAdaptivePolicy(
+        val cooldownSec: Int,
+        val minDwellSec: Int,
+        val probeIntervalSec: Int,
+        val badProbeIntervalSec: Int,
+        val warmupRounds: Int,
+        val candidateWins: Int,
+        val candidateWinsWarmup: Int,
+        val minImproveAbs: Int,
+        val minImprovePct: Int,
+        val weakScore: Int,
+        val criticalScore: Int,
+        val failStreakTrigger: Int,
+        val stableLockSec: Int,
+        val excellentScore: Int,
+        val minThroughputGainPct: Int,
+        val disruptionHoldMinSec: Int,
+        val disruptionHoldMaxSec: Int,
+    )
+
     @Volatile
     var smartMainTxRate: Long = 0L
 
@@ -462,6 +482,30 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         configurationStore.putInt("smartLastBandwidthKbps.$profileId", kbps.coerceIn(-1, 5_000_000))
     }
 
+    fun getSmartLastObservedAt(profileId: Long): Long {
+        return configurationStore.getLong("smartLastObservedAt.$profileId", 0L).coerceAtLeast(0L)
+    }
+
+    fun setSmartLastObservedAt(profileId: Long, timestamp: Long) {
+        configurationStore.putLong("smartLastObservedAt.$profileId", timestamp.coerceAtLeast(0L))
+    }
+
+    fun getSmartRecentSwitchCount(profileId: Long): Int {
+        return configurationStore.getInt("smartRecentSwitchCount.$profileId", 0).coerceAtLeast(0)
+    }
+
+    fun setSmartRecentSwitchCount(profileId: Long, count: Int) {
+        configurationStore.putInt("smartRecentSwitchCount.$profileId", count.coerceIn(0, 1000))
+    }
+
+    fun bumpSmartRecentSwitchCount(profileId: Long) {
+        setSmartRecentSwitchCount(profileId, getSmartRecentSwitchCount(profileId) + 1)
+    }
+
+    fun decaySmartRecentSwitchCount(profileId: Long, amount: Int = 1) {
+        setSmartRecentSwitchCount(profileId, (getSmartRecentSwitchCount(profileId) - amount.coerceAtLeast(0)).coerceAtLeast(0))
+    }
+
     fun normalizedSmartProfilePreset(): String {
         return when (smartProfilePreset.trim().lowercase()) {
             "gaming", "game", "minrtt", "latency" -> "gaming"
@@ -470,6 +514,48 @@ object DataStore : OnPreferenceDataStoreChangeListener {
             "manual" -> "manual"
             else -> "balanced"
         }
+    }
+
+    fun smartAdaptivePolicy(): SmartAdaptivePolicy {
+        return SmartAdaptivePolicy(
+            cooldownSec = smartSwitchCooldownSec,
+            minDwellSec = smartSwitchMinDwellSec,
+            probeIntervalSec = smartSwitchProbeIntervalSec,
+            badProbeIntervalSec = smartSwitchBadProbeIntervalSec,
+            warmupRounds = smartSwitchWarmupRounds,
+            candidateWins = smartSwitchCandidateWins,
+            candidateWinsWarmup = smartSwitchCandidateWinsWarmup,
+            minImproveAbs = smartSwitchMinImproveAbs,
+            minImprovePct = smartSwitchMinImprovePct,
+            weakScore = smartSwitchWeakScore,
+            criticalScore = smartSwitchCriticalScore,
+            failStreakTrigger = smartSwitchFailStreakTrigger,
+            stableLockSec = smartSwitchStableLockSec,
+            excellentScore = smartSwitchExcellentScore,
+            minThroughputGainPct = smartSwitchMinThroughputGainPct,
+            disruptionHoldMinSec = smartDisruptionHoldMinSec,
+            disruptionHoldMaxSec = smartDisruptionHoldMaxSec,
+        )
+    }
+
+    fun applySmartAdaptivePolicy(policy: SmartAdaptivePolicy) {
+        smartSwitchCooldownSec = policy.cooldownSec.coerceIn(30, 900)
+        smartSwitchMinDwellSec = policy.minDwellSec.coerceIn(30, 1200)
+        smartSwitchProbeIntervalSec = policy.probeIntervalSec.coerceIn(10, 120)
+        smartSwitchBadProbeIntervalSec = policy.badProbeIntervalSec.coerceIn(5, 60)
+        smartSwitchWarmupRounds = policy.warmupRounds.coerceIn(1, 8)
+        smartSwitchCandidateWins = policy.candidateWins.coerceIn(2, 10)
+        smartSwitchCandidateWinsWarmup = policy.candidateWinsWarmup.coerceIn(1, 5)
+        smartSwitchMinImproveAbs = policy.minImproveAbs.coerceIn(80, 1200)
+        smartSwitchMinImprovePct = policy.minImprovePct.coerceIn(8, 60)
+        smartSwitchWeakScore = policy.weakScore.coerceIn(600, 3000)
+        smartSwitchCriticalScore = policy.criticalScore.coerceIn(800, 5000)
+        smartSwitchFailStreakTrigger = policy.failStreakTrigger.coerceIn(1, 10)
+        smartSwitchStableLockSec = policy.stableLockSec.coerceIn(120, 3600)
+        smartSwitchExcellentScore = policy.excellentScore.coerceIn(450, 1400)
+        smartSwitchMinThroughputGainPct = policy.minThroughputGainPct.coerceIn(5, 80)
+        smartDisruptionHoldMinSec = policy.disruptionHoldMinSec.coerceIn(30, 900)
+        smartDisruptionHoldMaxSec = policy.disruptionHoldMaxSec.coerceIn(60, 1800)
     }
 
     fun getSmartSuccessCount(profileId: Long): Int {
@@ -534,6 +620,8 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         val failure = getSmartFailureCount(profileId)
         val streak = getSmartFailureStreak(profileId)
         val penalty = getSmartHealthPenalty(profileId)
+        val recentSwitches = getSmartRecentSwitchCount(profileId)
+        val observedAt = getSmartLastObservedAt(profileId)
         val successRatio = if (success + failure > 0) {
             success.toDouble() / (success + failure).toDouble()
         } else {
@@ -554,8 +642,14 @@ object DataStore : OnPreferenceDataStoreChangeListener {
             else -> 0
         }
         val reliabilityPart = (successRatio * 35.0).toInt()
-        val penaltyPart = (penalty / 90 + streak * 4).coerceAtMost(45)
-        return (latencyPart + bandwidthPart + reliabilityPart - penaltyPart).coerceIn(0, 100)
+        val penaltyPart = (penalty / 90 + streak * 4 + recentSwitches * 2).coerceAtMost(55)
+        val recencyBonus = when {
+            observedAt <= 0L -> 0
+            System.currentTimeMillis() - observedAt <= 5 * 60_000L -> 6
+            System.currentTimeMillis() - observedAt <= 30 * 60_000L -> 3
+            else -> 0
+        }
+        return (latencyPart + bandwidthPart + reliabilityPart + recencyBonus - penaltyPart).coerceIn(0, 100)
     }
 
     override fun onPreferenceDataStoreChanged(store: PreferenceDataStore, key: String) {
