@@ -138,14 +138,15 @@ object ProxyToSingboxConverter {
         val lines = input.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
 
         lines.forEach { line ->
+            val normalizedLine = normalizeConfigFragment(line)
             when {
-                isBase64(line) -> decodeBase64(line)?.let { configs.addAll(extractConfigsFromText(it)) }
-                isDataUriBase64(line) -> decodeDataUri(line)?.let { configs.addAll(extractConfigsFromText(it)) }
-                else -> configs.addAll(extractConfigsFromText(line))
+                isBase64(normalizedLine) -> decodeBase64(normalizedLine)?.let { configs.addAll(extractConfigsFromText(it)) }
+                isDataUriBase64(normalizedLine) -> decodeDataUri(normalizedLine)?.let { configs.addAll(extractConfigsFromText(it)) }
+                else -> configs.addAll(extractConfigsFromText(normalizedLine))
             }
         }
 
-        val allText = input.replace("\n", " ")
+        val allText = lines.joinToString(" ") { normalizeConfigFragment(it) }
         configs.addAll(extractConfigsFromText(allText))
         return configs.distinct()
     }
@@ -159,6 +160,16 @@ object ProxyToSingboxConverter {
             }
         }
         return configs
+    }
+
+    private fun normalizeConfigFragment(config: String): String {
+        if (supportedProtocols.none { config.startsWith(it) }) return config
+        val index = config.indexOf('#')
+        if (index < 0 || index == config.lastIndex) return config
+        val head = config.substring(0, index + 1)
+        val fragment = config.substring(index + 1)
+        if (fragment.isBlank()) return head
+        return head + fragment.replace(" ", "%20")
     }
 
     private fun convertVmess(

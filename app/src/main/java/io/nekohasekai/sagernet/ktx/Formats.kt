@@ -106,7 +106,10 @@ suspend fun parseProxies(text: String): List<AbstractBean> {
     val contentLines = text.split('\n')
         .map { it.trim() }
         .filter { it.isNotBlank() && !it.startsWith("#") }
-    val links = contentLines.flatMap { it.split(' ') }
+        .map { it.normalizeProxyLinkFragment() }
+    val links = contentLines.flatMap { line ->
+        if (line.startsWithKnownProxyScheme()) listOf(line) else line.split(' ')
+    }
     val linksByLine = contentLines
 
     val entities = ArrayList<AbstractBean>()
@@ -232,6 +235,36 @@ suspend fun parseProxies(text: String): List<AbstractBean> {
         }
     }
     return if (entities.size > entitiesByLine.size) entities else entitiesByLine
+}
+
+private fun String.startsWithKnownProxyScheme(): Boolean {
+    return startsWith("sn://") ||
+        startsWith("socks://") ||
+        startsWith("socks4://") ||
+        startsWith("socks4a://") ||
+        startsWith("socks5://") ||
+        startsWith("vmess://") ||
+        startsWith("vless://") ||
+        startsWith("trojan://") ||
+        startsWith("trojan-go://") ||
+        startsWith("naive+") ||
+        startsWith("hysteria://") ||
+        startsWith("hysteria2://") ||
+        startsWith("hy2://") ||
+        startsWith("tuic://") ||
+        startsWith("anytls://") ||
+        startsWith("ss://") ||
+        startsWith("ssr://")
+}
+
+private fun String.normalizeProxyLinkFragment(): String {
+    if (!startsWithKnownProxyScheme()) return this
+    val index = indexOf('#')
+    if (index < 0 || index == lastIndex) return this
+    val head = substring(0, index + 1)
+    val fragment = substring(index + 1)
+    if (fragment.isBlank()) return head
+    return head + fragment.replace(" ", "%20")
 }
 
 fun <T : Serializable> T.applyDefaultValues(): T {

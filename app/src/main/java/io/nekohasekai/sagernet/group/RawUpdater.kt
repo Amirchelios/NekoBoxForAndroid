@@ -82,50 +82,47 @@ object RawUpdater : GroupUpdater() {
                 listOf(rawText)
             }
             val directProxies = defaultSources.flatMap { parseRaw(it).orEmpty() }
-            if (directProxies.isNotEmpty()) {
-                proxies = dedupeDefaultGroupProxies(proxyGroup, directProxies)
-                rawText = defaultSources.joinToString("\n")
-                aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(defaultSources))
-            } else {
-                val subscriptionLinks = extractSubscriptionLinks(rawText)
-                if (subscriptionLinks.isNotEmpty()) {
-                    val aggregated = mutableListOf<AbstractBean>()
-                    val rawTexts = mutableListOf<String>()
-                    val userAgent = subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
-                    val batches = coroutineScope {
-                        subscriptionLinks.map { subLink ->
-                            async {
-                                val subText = runCatching {
-                                    Util.getStringBox(
-                                        buildSubscriptionRequest(subLink, userAgent)
-                                            .execute().contentString
-                                    )
-                                }.getOrDefault("")
-                                if (subText.isBlank()) return@async Pair("", emptyList<AbstractBean>())
-                                val parsed = runCatching { parseRaw(subText).orEmpty() }.getOrElse { emptyList() }
-                                Pair(subText, parsed)
-                            }
-                        }.awaitAll()
-                    }
-                    for ((subText, subProxies) in batches) {
-                        if (subText.isBlank()) continue
-                        rawTexts.add(subText)
-                        if (subProxies.isNotEmpty()) {
-                            aggregated.addAll(subProxies)
+            val subscriptionLinks = defaultSources.flatMap { extractSubscriptionLinks(it) }.distinct()
+            val nestedProxies = mutableListOf<AbstractBean>()
+            val nestedTexts = mutableListOf<String>()
+            if (subscriptionLinks.isNotEmpty()) {
+                val userAgent = subscription.customUserAgent.takeIf { it.isNotBlank() } ?: USER_AGENT
+                val batches = coroutineScope {
+                    subscriptionLinks.map { subLink ->
+                        async {
+                            val subText = runCatching {
+                                Util.getStringBox(
+                                    buildSubscriptionRequest(subLink, userAgent)
+                                        .execute().contentString
+                                )
+                            }.getOrDefault("")
+                            if (subText.isBlank()) return@async Pair("", emptyList<AbstractBean>())
+                            val parsed = runCatching { parseRaw(subText).orEmpty() }.getOrElse { emptyList() }
+                            Pair(subText, parsed)
                         }
-                    }
-                    proxies = dedupeDefaultGroupProxies(proxyGroup, aggregated).takeIf { it.isNotEmpty() }
-                        ?: error(app.getString(R.string.no_proxies_found))
-                    aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(rawTexts))
-                } else {
-                    aggregateConfig = sanitizeAggregateConfig(
-                        ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
-                    )
-                    if (aggregateConfig.isBlank()) {
-                        error(app.getString(R.string.no_proxies_found))
-                    }
-                    proxies = emptyList()
+                    }.awaitAll()
                 }
+                for ((subText, subProxies) in batches) {
+                    if (subText.isBlank()) continue
+                    nestedTexts.add(subText)
+                    nestedProxies.addAll(subProxies)
+                }
+            }
+
+            val allParsedProxies = directProxies + nestedProxies
+            if (allParsedProxies.isNotEmpty()) {
+                proxies = dedupeDefaultGroupProxies(proxyGroup, allParsedProxies)
+                val aggregateTexts = defaultSources + nestedTexts
+                rawText = aggregateTexts.joinToString("\n")
+                aggregateConfig = sanitizeAggregateConfig(buildAggregateConfig(aggregateTexts))
+            } else {
+                aggregateConfig = sanitizeAggregateConfig(
+                    ProxyToSingboxConverter.convertToSingBoxJson(rawText).orEmpty()
+                )
+                if (aggregateConfig.isBlank()) {
+                    error(app.getString(R.string.no_proxies_found))
+                }
+                proxies = emptyList()
             }
 
             subscription.subscriptionUserinfo =
