@@ -442,18 +442,7 @@
     <string name="nat_stun_server_hint">STUN-сервер</string>
     <string name="nat_result_hint">Результат перевірки NAT</string>
     <string name="tools_network">Мережа</string>
-    <string name="mtu" translatable="false">MTU</string>
-    <string name="backup">Резервне копіювання</string>
-    <string name="backup_groups_and_configurations">Групи та конфігурації</string>
-    <string name="backup_rules">Правила маршрутизації</string>
-    <string name="backup_settings">Налаштування</string>
-    <string name="backup_summary">Якщо налаштування маршрутизації не будуть збережені разом з конфігураціями, власні вихідні з\'єднання будуть втрачені.</string>
-    <string name="backup_not_file">Не є файлом резервної копії: очікувався .json, але отримано %s</string>
-    <string name="invalid_backup_file">Неправильний файл резервної копії</string>
-    <string name="backup_import">Імпорт</string>
-    <string name="backup_import_summary">Імпортування перезапише наявні дані.</string>
-    <string name="backup_importing">Імпортування…</string>
-    <string name="packet_encoding">Кодування пакетів</string>
+    <string name="mtu" translatable="false">MTU</string><string name="packet_encoding">Кодування пакетів</string>
     <string name="acquire_wake_lock">Захоплювати WakeLock</string>
     <string name="release_wake_lock">Відпускати WakeLock</string>
     <string name="acquire_wake_lock_summary">Не давати процесору заснути</string>

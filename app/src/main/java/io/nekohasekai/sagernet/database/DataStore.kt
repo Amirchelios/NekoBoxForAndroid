@@ -54,35 +54,52 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     var runningTest = false
 
-    fun currentGroupId(): Long {
-        val currentSelected = configurationStore.getLong(Key.PROFILE_GROUP, -1)
-        if (currentSelected > 0L) return currentSelected
-        val groups = SagerDatabase.groupDao.allGroups()
-        if (groups.isNotEmpty()) {
-            val groupId = groups[0].id
-            selectedGroup = groupId
-            return groupId
-        }
-        val groupId = SagerDatabase.groupDao.createGroup(ProxyGroup(ungrouped = true))
-        selectedGroup = groupId
-        return groupId
+    fun clearInternalProxyState() {
+        internalProxyActive = false
+        internalProxyProfileId = 0L
+        internalProxyUserSelected = 0L
     }
 
+    fun restoreInternalProxySelection() {
+        val profileId = internalProxyUserSelected
+        if (profileId > 0L) {
+            syncSelectedProfile(profileId)
+        }
+    }
+
+    fun syncSelectedProfile(profileId: Long) {
+        selectedProxy = profileId
+        currentProfile = profileId
+        lastConnectedProfile = profileId
+    }
+
+    fun hasValidProfile(profileId: Long): Boolean {
+        return profileId > 0L && SagerDatabase.proxyDao.getById(profileId) != null
+    }
+
+    fun resolvePreferredProfileId(vararg candidates: Long): Long? {
+        for (candidate in candidates) {
+            if (hasValidProfile(candidate)) return candidate
+        }
+        val all = SagerDatabase.proxyDao.getAll()
+        val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
+        return (auto ?: all.firstOrNull())?.id
+    }
+
+    fun currentGroupId(): Long = currentGroup().id
+
     fun currentGroup(): ProxyGroup {
-        var group: ProxyGroup? = null
         val currentSelected = configurationStore.getLong(Key.PROFILE_GROUP, -1)
         if (currentSelected > 0L) {
-            group = SagerDatabase.groupDao.getById(currentSelected)
+            SagerDatabase.groupDao.getById(currentSelected)?.also {
+                selectedGroup = it.id
+                return it
+            }
         }
-        if (group != null) return group
-        val groups = SagerDatabase.groupDao.allGroups()
-        if (groups.isEmpty()) {
-            group = ProxyGroup(ungrouped = true).apply {
+        val group = SagerDatabase.groupDao.allGroups().firstOrNull()
+            ?: ProxyGroup(ungrouped = true).apply {
                 id = SagerDatabase.groupDao.createGroup(this)
             }
-        } else {
-            group = groups[0]
-        }
         selectedGroup = group.id
         return group
     }

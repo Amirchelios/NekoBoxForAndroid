@@ -15,7 +15,6 @@ import io.nekohasekai.sagernet.bg.proto.ProxyInstance
 import io.nekohasekai.sagernet.bg.proto.SmartSelector
 import io.nekohasekai.sagernet.bg.proto.SmartSwitchController
 import io.nekohasekai.sagernet.database.DataStore
-import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.ktx.Logs
@@ -211,34 +210,16 @@ class BaseService {
         fun onBind(intent: Intent): IBinder? =
             if (intent.action == Action.SERVICE) data.binder else null
         fun reload() {
-            val selected = DataStore.selectedProxy
-            val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
-            if (!selectedExists) {
-                val current = DataStore.currentProfile
-                val currentExists = current > 0L && SagerDatabase.proxyDao.getById(current) != null
-                if (currentExists) {
-                    DataStore.selectedProxy = current
-                    DataStore.lastConnectedProfile = current
-                    return
-                }
-                val lastConnected = DataStore.lastConnectedProfile
-                val lastExists = lastConnected > 0L && SagerDatabase.proxyDao.getById(lastConnected) != null
-                if (lastExists) {
-                    DataStore.selectedProxy = lastConnected
-                    DataStore.currentProfile = lastConnected
-                    return
-                }
-                val all = SagerDatabase.proxyDao.getAll()
-                val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
-                val fallback = auto ?: all.firstOrNull()
-                if (fallback != null) {
-                    DataStore.selectedProxy = fallback.id
-                    DataStore.currentProfile = fallback.id
-                    DataStore.lastConnectedProfile = fallback.id
-                } else {
-                    stopRunner(false, (this as Context).getString(R.string.profile_empty))
-                    return
-                }
+            val resolved = DataStore.resolvePreferredProfileId(
+                DataStore.selectedProxy,
+                DataStore.currentProfile,
+                DataStore.lastConnectedProfile,
+            ) ?: run {
+                stopRunner(false, (this as Context).getString(R.string.profile_empty))
+                return
+            }
+            if (resolved != DataStore.selectedProxy || resolved != DataStore.currentProfile || resolved != DataStore.lastConnectedProfile) {
+                DataStore.syncSelectedProfile(resolved)
             }
             if (canReloadSelector()) {
                 val ent = SagerDatabase.proxyDao.getById(DataStore.selectedProxy)
@@ -328,7 +309,14 @@ class BaseService {
             }
         }
         fun persistStats() {
-            // TODO NEW save app stats?
+            runCatching {
+                runBlocking {
+                    data.proxy?.looper?.stop()
+                    data.proxy?.looper = null
+                }
+            }.onFailure {
+                Logs.w("Failed to persist traffic stats: ${it.readableMessage}")
+            }
         }
         // networks
         suspend fun preInit() {

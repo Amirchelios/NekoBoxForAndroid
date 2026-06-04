@@ -122,6 +122,77 @@ class SmartSwitchController(
                 DataStore.smartSessionHealth = (latencyPart + throughputPart - streakPenalty).coerceIn(0, 100)
             }
 
+            fun congestionLevel(score: Int, streak: Int, txRate: Long, rxRate: Long, bw: Int): Int {
+                val latencyPressure = when {
+                    score <= 0 -> 100
+                    score <= 180 -> 12
+                    score <= 350 -> 24
+                    score <= 700 -> 42
+                    score <= 1200 -> 68
+                    else -> 85
+                }
+                val throughputPressure = when {
+                    bw >= 24_000 -> 0
+                    bw >= 16_000 -> 10
+                    bw >= 10_000 -> 20
+                    bw >= 6_000 -> 35
+                    bw >= 3_000 -> 50
+                    bw > 0 -> 65
+                    else -> 85
+                }
+                val flowPressure = when {
+                    txRate >= 1_500L && rxRate <= 1_000L -> 45
+                    txRate >= 900L && rxRate <= 700L -> 30
+                    rxRate in 1L..1_500L && txRate >= 500L -> 18
+                    else -> 0
+                }
+                val streakPressure = (streak.coerceAtLeast(0) * 8).coerceAtMost(40)
+                return (latencyPressure + throughputPressure + flowPressure + streakPressure)
+                    .coerceIn(0, 100)
+            }
+
+            fun applyAdaptiveProbePolicy(pressure: Int, health: Int) {
+                val now = System.currentTimeMillis()
+                if (now - lastAutoTuneAtMs < 180_000L) return
+                lastAutoTuneAtMs = now
+                when {
+                    pressure >= 80 || health < 30 -> {
+                        if (DataStore.connectionTestConcurrent < 36) {
+                            DataStore.connectionTestConcurrent =
+                                (DataStore.connectionTestConcurrent + 3).coerceAtMost(36)
+                            setDecision("tune:boost_probe_concurrency")
+                        }
+                        if (DataStore.parallelConcurrency < 30) {
+                            DataStore.parallelConcurrency =
+                                (DataStore.parallelConcurrency + 2).coerceAtMost(30)
+                        }
+                        if (DataStore.parallelDelayMs > 80) {
+                            DataStore.parallelDelayMs = (DataStore.parallelDelayMs - 15).coerceAtLeast(80)
+                        }
+                        if (DataStore.parallelTimeoutMs < 9000) {
+                            DataStore.parallelTimeoutMs = (DataStore.parallelTimeoutMs + 1000).coerceAtMost(9000)
+                        }
+                    }
+                    pressure >= 55 || health < 60 -> {
+                        if (DataStore.connectionTestConcurrent < 32) {
+                            DataStore.connectionTestConcurrent =
+                                (DataStore.connectionTestConcurrent + 2).coerceAtMost(32)
+                            setDecision("tune:raise_probe_concurrency")
+                        }
+                        if (DataStore.parallelTimeoutMs < 8500) {
+                            DataStore.parallelTimeoutMs = (DataStore.parallelTimeoutMs + 500).coerceAtMost(8500)
+                        }
+                    }
+                    health > 85 -> {
+                        if (DataStore.connectionTestConcurrent > 14) {
+                            DataStore.connectionTestConcurrent =
+                                (DataStore.connectionTestConcurrent - 1).coerceAtLeast(14)
+                            setDecision("tune:lower_probe_concurrency")
+                        }
+                    }
+                }
+            }
+
             fun isCritical(score: Int, streak: Int): Boolean {
                 return score <= 0 || score >= criticalScore || streak >= failTrigger + 1
             }
@@ -271,22 +342,14 @@ class SmartSwitchController(
                 val trafficCritical = stallCritical || degradedCritical
                 val weak = isWeak(score, streak) || trafficStallRounds >= 1
                 val critical = isCritical(score, streak) || trafficCritical
-                updateSessionHealth(score, streak, bandwidth(activeId))
+                val activeBw = bandwidth(activeId)
+                val pressure = congestionLevel(score, streak, txRate, rxRate, activeBw)
+                updateSessionHealth(score, streak, activeBw)
                 if (trafficCritical) {
                     DataStore.smartSessionHealth = DataStore.smartSessionHealth.coerceAtMost(25)
                     setDecision("critical:traffic_degraded tx=$txRate rx=$rxRate score=$score")
                 }
-                if (now - lastAutoTuneAtMs >= 180_000L) {
-                    lastAutoTuneAtMs = now
-                    val health = DataStore.smartSessionHealth
-                    if (health < 35 && DataStore.connectionTestConcurrent < 32) {
-                        DataStore.connectionTestConcurrent = (DataStore.connectionTestConcurrent + 2).coerceAtMost(32)
-                        setDecision("tune:raise_probe_concurrency")
-                    } else if (health > 85 && DataStore.connectionTestConcurrent > 14) {
-                        DataStore.connectionTestConcurrent = (DataStore.connectionTestConcurrent - 1).coerceAtLeast(14)
-                        setDecision("tune:lower_probe_concurrency")
-                    }
-                }
+                applyAdaptiveProbePolicy(pressure, DataStore.smartSessionHealth)
                 if (!weak && score in 1..excellentScore && streak == 0) {
                     stableRounds = (stableRounds + 1).coerceAtMost(120)
                 } else {
@@ -299,7 +362,16 @@ class SmartSwitchController(
                     stableRounds >= 6 -> 2L
                     else -> 1L
                 }
-                val delayMs = if (weak) badProbeMs else normalProbeMs * stabilityMultiplier
+                val pressureMultiplier = when {
+                    pressure >= 80 -> 1L
+                    pressure >= 55 -> 2L
+                    else -> stabilityMultiplier
+                }
+                val delayMs = if (weak || pressure >= 55) {
+                    badProbeMs.coerceAtMost(normalProbeMs * pressureMultiplier)
+                } else {
+                    normalProbeMs * pressureMultiplier
+                }
                 delay(delayMs)
                 if (trafficCritical) {
                     val stallNow = System.currentTimeMillis()
@@ -311,6 +383,14 @@ class SmartSwitchController(
                         ?: SmartSelector.selectBest(profile.groupId, currentScope())
                     if (stallRescueId != null) {
                         maybeSwitchTo(stallRescueId, warmup = false)
+                    }
+                }
+                if (pressure >= 85) {
+                    val rescueId = SmartSelector.selectBestFast(profile.groupId, currentScope())
+                        ?: SmartSelector.selectBest(profile.groupId, currentScope())
+                    if (rescueId != null) {
+                        maybeSwitchTo(rescueId, warmup = false)
+                        continue
                     }
                 }
                 if (criticalRounds >= 4 && now >= disruptionUntilMs) {

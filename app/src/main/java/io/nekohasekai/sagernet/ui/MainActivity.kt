@@ -140,11 +140,7 @@ class MainActivity : ThemedActivity(),
     private fun setupQuickActions() {
         binding.fab.setOnClickListener {
             if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
-                val restoreId = DataStore.internalProxyUserSelected
-                if (restoreId > 0L) {
-                    DataStore.selectedProxy = restoreId
-                    DataStore.currentProfile = restoreId
-                }
+                DataStore.restoreInternalProxySelection()
                 DataStore.serviceMode = Key.MODE_VPN
                 if (DataStore.serviceState.canStop) {
                     SagerNet.stopService()
@@ -160,13 +156,11 @@ class MainActivity : ThemedActivity(),
                             }
                             delay(100L)
                         }
-                        DataStore.internalProxyActive = false
-                        DataStore.internalProxyProfileId = 0L
+                        DataStore.clearInternalProxyState()
                         launchConnectWithAutoFallback()
                     }
                 } else {
-                    DataStore.internalProxyActive = false
-                    DataStore.internalProxyProfileId = 0L
+                    DataStore.clearInternalProxyState()
                     launchConnectWithAutoFallback()
                 }
             } else if (DataStore.serviceState.canStop) {
@@ -631,18 +625,15 @@ class MainActivity : ThemedActivity(),
             val fallback = auto ?: all.firstOrNull()
             if (fallback == null) return@runOnDefaultDispatcher
             if (DataStore.internalProxyActive && DataStore.serviceMode == Key.MODE_PROXY) {
-                val selected = DataStore.internalProxyUserSelected
-                val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
-                if (!selectedExists) {
+                if (!DataStore.hasValidProfile(DataStore.internalProxyUserSelected)) {
                     DataStore.internalProxyUserSelected = fallback.id
                 }
             } else {
-                val selected = DataStore.selectedProxy
-                val selectedExists = selected > 0L && SagerDatabase.proxyDao.getById(selected) != null
-                if (!selectedExists) {
-                    DataStore.selectedProxy = fallback.id
-                    DataStore.currentProfile = fallback.id
-                }
+                DataStore.resolvePreferredProfileId(
+                    DataStore.selectedProxy,
+                    DataStore.currentProfile,
+                    DataStore.lastConnectedProfile,
+                )?.let(DataStore::syncSelectedProfile) ?: DataStore.syncSelectedProfile(fallback.id)
             }
         }
     }
@@ -734,30 +725,12 @@ class MainActivity : ThemedActivity(),
     }
 
     private fun ensureSelectedProxyForConnect(): Boolean {
-        fun resolve(profileId: Long): Long? {
-            if (profileId <= 0L) return null
-            return SagerDatabase.proxyDao.getById(profileId)?.id
-        }
-
-        val candidates = listOf(
+        val resolved = DataStore.resolvePreferredProfileId(
             DataStore.selectedProxy,
             DataStore.currentProfile,
             DataStore.lastConnectedProfile,
-        )
-        for (candidate in candidates) {
-            val resolved = resolve(candidate) ?: continue
-            DataStore.selectedProxy = resolved
-            DataStore.currentProfile = resolved
-            DataStore.lastConnectedProfile = resolved
-            return true
-        }
-
-        val all = SagerDatabase.proxyDao.getAll()
-        val auto = all.firstOrNull { GroupManager.isDefaultAutoSelectConfig(it) }
-        val fallback = auto ?: all.firstOrNull() ?: return false
-        DataStore.selectedProxy = fallback.id
-        DataStore.currentProfile = fallback.id
-        DataStore.lastConnectedProfile = fallback.id
+        ) ?: return false
+        DataStore.syncSelectedProfile(resolved)
         return true
     }
 
@@ -825,10 +798,8 @@ class MainActivity : ThemedActivity(),
 
     override fun snackbarInternal(text: CharSequence): Snackbar {
         return Snackbar.make(binding.coordinator, text, Snackbar.LENGTH_LONG).apply {
-            if (binding.fab.isShown) {
-                anchorView = binding.fab
-            }
-            // TODO
+            if (binding.fab.isShown) anchorView = binding.fab
+            animationMode = Snackbar.ANIMATION_MODE_SLIDE
         }
     }
 

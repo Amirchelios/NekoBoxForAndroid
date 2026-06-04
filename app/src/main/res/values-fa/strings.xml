@@ -486,20 +486,7 @@
     <string name="nat_stun_server_hint">سرور STUN</string>
     <string name="nat_result_hint">بررسی نتیجه NAT</string>
     <string name="tools_network">شبکه</string>
-    <string name="mtu" translatable="false">MTU</string>
-
-    <string name="backup">پشتیبان‌گیری</string>
-    <string name="backup_groups_and_configurations">گروه‌ها و پیکربندی‌ها</string>
-    <string name="backup_rules">دستورالعمل‌های مسیریابی</string>
-    <string name="backup_settings">تنظیمات</string>
-    <string name="backup_summary">اگر از دستورالعمل‌های مسیریابی با پیکربندی‌ها، پشتیبان‌گیری نشود، خروجی‌های سفارشی از بین خواهند رفت.</string>
-    <string name="backup_not_file">یک فایل پشتیبانی نیست.: انتظار می‌رود یک فایل .json باشد اما %s است.</string>
-    <string name="invalid_backup_file">فایل پشتیبانی نادرست</string>
-    <string name="backup_import">افزودن</string>
-    <string name="backup_import_summary">افزودن فایل پشتیبانی، اطلاعات و تنظیمات کنونی را حذف و بازنویسی می‌کند.</string>
-    <string name="backup_importing">افزودن...</string>
-
-    <string name="packet_encoding">رمزگذاری بسته</string>
+    <string name="mtu" translatable="false">MTU</string><string name="packet_encoding">رمزگذاری بسته</string>
     <string name="acquire_wake_lock">به دست آوردن WakeLock</string>
     <string name="release_wake_lock">رها کردن WakeLock</string>
     <string name="acquire_wake_lock_summary">پردازنده را روشن نگه‌می‌دارد.</string>

@@ -7,6 +7,7 @@ import io.nekohasekai.sagernet.database.*
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.http.HttpBean
 import io.nekohasekai.sagernet.fmt.hysteria.HysteriaBean
+import io.nekohasekai.sagernet.fmt.hysteria.parseHysteriaJsonLike
 import io.nekohasekai.sagernet.fmt.hysteria.parseHysteria1Json
 import io.nekohasekai.sagernet.fmt.mieru.MieruBean
 import io.nekohasekai.sagernet.fmt.naive.NaiveBean
@@ -729,37 +730,12 @@ object RawUpdater : GroupUpdater() {
                         }
 
                         "hysteria2" -> {
-                            val bean = HysteriaBean()
-                            bean.protocolVersion = 2
-                            var hopPorts = ""
-                            for (opt in proxy) {
-                                if (opt.value == null) continue
-                                when (opt.key.replace("_", "-")) {
-                                    "name" -> bean.name = opt.value.toString()
-                                    "server" -> bean.serverAddress = opt.value as String
-                                    "port" -> bean.serverPorts = opt.value.toString()
-                                    "ports" -> hopPorts = opt.value.toString()
-
-                                    "obfs-password" -> bean.obfuscation = opt.value.toString()
-
-                                    "password" -> bean.authPayload = opt.value.toString()
-
-                                    "sni" -> bean.sni = opt.value.toString()
-
-                                    "skip-cert-verify" -> bean.allowInsecure =
-                                        opt.value.toString() == "true"
-
-                                    "up" -> bean.uploadMbps =
-                                        opt.value.toString().substringBefore(" ").toIntOrNull() ?: 0
-
-                                    "down" -> bean.downloadMbps =
-                                        opt.value.toString().substringBefore(" ").toIntOrNull() ?: 0
-                                }
-                            }
-                            if (hopPorts.isNotBlank()) {
-                                bean.serverPorts = hopPorts
-                            }
-                            proxies.add(bean)
+                            proxies.add(
+                                proxy
+                                    .entries
+                                    .associate { it.key.replace("_", "-") to it.value }
+                                    .parseHysteriaJsonLike()
+                            )
                         }
 
                         "tuic" -> {

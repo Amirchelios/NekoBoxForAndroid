@@ -398,17 +398,5 @@
 \n如一定要使用，請先嘗試 N=2，觀察其是否解決了您的問題。強烈反對於此使用多於4個隧道。</string>
     <string name="stun_attest_loading">這可能需要數分鐘…</string>
     <string name="stun_test_summary">使用 STUN 確定用戶端的 NAT 映射行為和 RFC 5780 中定義的 NAT 篩選行為。</string>
-    <string name="start">開始</string>
-    <string name="backup">備份</string>
-    <string name="backup_rules">路由規則</string>
-    <string name="invalid_backup_file">無效的備份檔</string>
-    <string name="tools_network">網路</string>
-    <string name="backup_settings">設定</string>
-    <string name="backup_import">匯入</string>
-    <string name="backup_import_summary">匯入將覆蓋現有資料。</string>
-    <string name="backup_importing">正在匯入…</string>
-    <string name="backup_groups_and_configurations">分組和設定檔</string>
-    <string name="backup_summary">如果路由規則不與設定檔一起備份，則自訂出站將丟失。</string>
-    <string name="backup_not_file">不是一個備份檔案，預計 .json，但 %s</string>
-    <string name="packet_encoding">封包編碼</string>
+    <string name="start">開始</string><string name="packet_encoding">封包編碼</string>
 </resources>

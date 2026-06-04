@@ -40,10 +40,7 @@
     <string name="action_download">下載</string>
     <string name="install_from_fdroid">從 F-Droid 安裝</string>
     <string name="menu_tools">工具</string>
-    <string name="tools_network">網絡</string>
-    <string name="backup">備份</string>
-    <string name="auto_connect_summary">在開機或本程式更新後將自動重新啓用代理</string>
-    <string name="delete">移除</string>
+    <string name="tools_network">網絡</string>    <string name="delete">移除</string>
     <string name="enable">啟用</string>
     <string name="donate_info">貓貓好得意 請比貓貓錢</string>
     <string name="route_bypass">繞過</string>

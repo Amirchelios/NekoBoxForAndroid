@@ -259,11 +259,7 @@
     <string name="app_no_launcher">L\'appli n\'a pas d\'interface.</string>
     <string name="destination_override">Écraser la destination</string>
     <string name="resolve_destination">Résoudre la destination</string>
-    <string name="add_profile_methods_manual_settings">Préférences manuels</string>
-    <string name="backup">Sauvegarde</string>
-    <string name="backup_settings">Préférences</string>
-    <string name="backup_import">Importer</string>
-    <string name="packet_encoding">Codage du paquet</string>
+    <string name="add_profile_methods_manual_settings">Préférences manuels</string><string name="packet_encoding">Codage du paquet</string>
     <string name="auto_connect">Connexion auto</string>
     <string name="api_port">Port de l\'API</string>
     <string name="hysteria_auth_type">Type d\'authentification</string>
@@ -293,8 +289,4 @@
     <string name="profile_import">Importer un profil</string>
     <string name="warp_generate">Générer une configuration</string>
     <string name="stun_attest_loading">Cela peut prendre quelques minutes…</string>
-    <string name="invalid_backup_file">Fichier de sauvegarde invalide</string>
-    <string name="backup_import_summary">L\'importation écrasera les données existantes.</string>
-    <string name="tools_network">Réseaux</string>
-    <string name="backup_importing">Importation…</string>
 </resources>

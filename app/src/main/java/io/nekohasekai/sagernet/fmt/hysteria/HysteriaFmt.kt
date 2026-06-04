@@ -164,41 +164,104 @@ fun HysteriaBean.toUri(): String {
     return builder.toLink(if (protocolVersion == 2) "hy2" else "hysteria")
 }
 
-fun JSONObject.parseHysteria1Json(): HysteriaBean {
-    // TODO parse HY2 JSON+YAML
-    return HysteriaBean().apply {
-        protocolVersion = 1
-        serverAddress = optString("server").substringBeforeLast(":")
-        serverPorts = optString("server").substringAfterLast(":")
-        uploadMbps = getIntNya("up_mbps")
-        downloadMbps = getIntNya("down_mbps")
-        obfuscation = getStr("obfs")
-        getStr("auth")?.also {
-            authPayloadType = HysteriaBean.TYPE_BASE64
-            authPayload = it
-        }
-        getStr("auth_str")?.also {
-            authPayloadType = HysteriaBean.TYPE_STRING
-            authPayload = it
-        }
-        getStr("protocol")?.also {
-            when (it) {
-                "faketcp" -> {
-                    protocol = HysteriaBean.PROTOCOL_FAKETCP
-                }
+private fun JSONObject.asStringMap(): Map<String, Any?> {
+    val out = LinkedHashMap<String, Any?>()
+    for (key in keys()) {
+        out[key] = opt(key)
+    }
+    return out
+}
 
-                "wechat-video" -> {
-                    protocol = HysteriaBean.PROTOCOL_WECHAT_VIDEO
+private fun Any?.asHysteriaMap(): Map<String, Any?> = when (this) {
+    is JSONObject -> asStringMap()
+    is Map<*, *> -> entries.associate { it.key.toString() to it.value }
+    else -> emptyMap()
+}
+
+private fun Map<String, Any?>.read(name: String): String? {
+    val value = this[name] ?: return null
+    val text = value.toString().trim()
+    return text.takeIf { it.isNotEmpty() }
+}
+
+private fun Map<String, Any?>.readBool(name: String): Boolean? {
+    val value = this[name] ?: return null
+    return when (value) {
+        is Boolean -> value
+        is Number -> value.toInt() != 0
+        else -> value.toString().equals("true", ignoreCase = true) || value.toString() == "1"
+    }
+}
+
+private fun Map<String, Any?>.readInt(name: String): Int? {
+    val value = this[name] ?: return null
+    return when (value) {
+        is Number -> value.toInt()
+        else -> value.toString().substringBefore(" ").toIntOrNull()
+    }
+}
+
+fun JSONObject.parseHysteria1Json(): HysteriaBean = parseHysteriaJsonLike()
+
+fun JSONObject.parseHysteriaJsonLike(): HysteriaBean = asStringMap().parseHysteriaJsonLike()
+
+fun Map<String, Any?>.parseHysteriaJsonLike(): HysteriaBean {
+    val isHy2 = containsKey("obfs-password") || containsKey("password") || containsKey("server_name") && !containsKey("auth")
+    return HysteriaBean().apply {
+        protocolVersion = if (isHy2) 2 else 1
+
+        read("server")?.also {
+            serverAddress = it.substringBeforeLast(":")
+            serverPorts = it.substringAfterLast(":")
+        }
+        read("name")?.also { name = it }
+        read("mport")?.also { serverPorts = it }
+        read("ports")?.also { serverPorts = it }
+        read("port")?.also { serverPorts = it }
+        read("insecure")?.also { allowInsecure = it == "true" || it == "1" }
+
+        if (isHy2) {
+            authPayload = read("password").orEmpty()
+            obfuscation = read("obfs-password").orEmpty()
+            sni = read("sni") ?: read("server_name").orEmpty()
+            when (val alpnValue = this@parseHysteriaJsonLike["alpn"]) {
+                is List<*> -> alpn = alpnValue.filterNotNull().joinToString("\n")
+                null -> Unit
+                else -> alpn = alpnValue.toString()
+            }
+            readInt("up")?.also { uploadMbps = it }
+            readInt("down")?.also { downloadMbps = it }
+        } else {
+            readInt("up_mbps")?.also { uploadMbps = it }
+            readInt("down_mbps")?.also { downloadMbps = it }
+            obfuscation = read("obfs").orEmpty()
+            read("auth")?.also {
+                authPayloadType = HysteriaBean.TYPE_BASE64
+                authPayload = it
+            }
+            read("auth_str")?.also {
+                authPayloadType = HysteriaBean.TYPE_STRING
+                authPayload = it
+            }
+            read("protocol")?.also {
+                when (it) {
+                    "faketcp" -> protocol = HysteriaBean.PROTOCOL_FAKETCP
+                    "wechat-video" -> protocol = HysteriaBean.PROTOCOL_WECHAT_VIDEO
                 }
             }
+            sni = read("server_name").orEmpty()
+            alpn = read("alpn").orEmpty()
+            read("insecure")?.also { allowInsecure = it == "true" || it == "1" }
+            readInt("recv_window_conn")?.also { streamReceiveWindow = it }
+            readInt("recv_window")?.also { connectionReceiveWindow = it }
+            read("disable_mtu_discovery")?.also {
+                disableMtuDiscovery = it == "true" || it == "1"
+            }
         }
-        sni = getStr("server_name")
-        alpn = getStr("alpn")
-        allowInsecure = getBool("insecure")
 
-        streamReceiveWindow = getIntNya("recv_window_conn")
-        connectionReceiveWindow = getIntNya("recv_window")
-        disableMtuDiscovery = getBool("disable_mtu_discovery")
+        readInt("recv_window_conn")?.also { streamReceiveWindow = it }
+        readInt("recv_window")?.also { connectionReceiveWindow = it }
+        read("disable_mtu_discovery")?.also { disableMtuDiscovery = it == "true" || it == "1" }
     }
 }
 
