@@ -179,26 +179,39 @@ object RawUpdater : GroupUpdater() {
         val duplicate = ArrayList<String>()
         if (subscription.deduplication) {
             Logs.d("Before deduplication: ${proxies.size}")
-            val uniqueProxies = LinkedHashSet<Protocols.Deduplication>()
-            val uniqueNames = HashMap<Protocols.Deduplication, String>()
-            for (_proxy in proxies) {
-                val proxy = Protocols.Deduplication(_proxy, _proxy.javaClass.toString())
-                if (!uniqueProxies.add(proxy)) {
-                    val index = uniqueProxies.indexOf(proxy)
-                    if (uniqueNames.containsKey(proxy)) {
-                        val name = uniqueNames[proxy]!!.replace(" ($index)", "")
-                        if (name.isNotBlank()) {
-                            duplicate.add("$name ($index)")
-                            uniqueNames[proxy] = ""
-                        }
+            if (GroupManager.isDefaultSubscriptionGroup(proxyGroup)) {
+                val unique = LinkedHashMap<String, AbstractBean>()
+                for (_proxy in proxies) {
+                    val fingerprint = proxyFingerprint(_proxy)
+                    if (unique.containsKey(fingerprint)) {
+                        duplicate.add(_proxy.displayName())
+                    } else {
+                        unique[fingerprint] = _proxy
                     }
-                    duplicate.add(_proxy.displayName() + " ($index)")
-                } else {
-                    uniqueNames[proxy] = _proxy.displayName()
                 }
+                proxies = unique.values.toList()
+            } else {
+                val uniqueProxies = LinkedHashSet<Protocols.Deduplication>()
+                val uniqueNames = HashMap<Protocols.Deduplication, String>()
+                for (_proxy in proxies) {
+                    val proxy = Protocols.Deduplication(_proxy, _proxy.javaClass.toString())
+                    if (!uniqueProxies.add(proxy)) {
+                        val index = uniqueProxies.indexOf(proxy)
+                        if (uniqueNames.containsKey(proxy)) {
+                            val name = uniqueNames[proxy]!!.replace(" ($index)", "")
+                            if (name.isNotBlank()) {
+                                duplicate.add("$name ($index)")
+                                uniqueNames[proxy] = ""
+                            }
+                        }
+                        duplicate.add(_proxy.displayName() + " ($index)")
+                    } else {
+                        uniqueNames[proxy] = _proxy.displayName()
+                    }
+                }
+                uniqueProxies.retainAll(uniqueNames.keys)
+                proxies = uniqueProxies.toList().map { it.bean }
             }
-            uniqueProxies.retainAll(uniqueNames.keys)
-            proxies = uniqueProxies.toList().map { it.bean }
         }
 
         Logs.d("New profiles: ${proxies.size}")
@@ -1138,6 +1151,7 @@ object RawUpdater : GroupUpdater() {
         fun endpoint(portOverride: Any? = null): String {
             return "${norm(bean.serverAddress)}:${portOverride ?: bean.serverPort ?: ""}"
         }
+        fun normalizedFlow(value: Any?): String = exact(value).removeSuffix("-udp443")
         val parts = mutableListOf(bean.javaClass.name, endpoint())
         when (bean) {
             is StandardV2RayBean -> {
@@ -1146,12 +1160,21 @@ object RawUpdater : GroupUpdater() {
                     norm(bean.type),
                     norm(bean.security),
                     norm(bean.sni),
+                    exact(bean.alpn),
+                    norm(bean.utlsFingerprint),
+                    exact(bean.allowInsecure),
                     norm(bean.host),
                     exact(bean.path),
-                    exact(bean.encryption),
+                    normalizedFlow(bean.encryption),
                     exact(bean.realityPubKey),
                     exact(bean.realityShortId),
+                    exact(bean.packetEncoding),
+                    exact(bean.wsMaxEarlyData),
+                    exact(bean.earlyDataHeaderName),
+                    exact(bean.enableECH),
+                    exact(bean.echConfig),
                 )
+                if (bean is VMessBean) parts += exact(bean.alterId)
                 if (bean is TrojanBean) parts += exact(bean.password)
                 if (bean is HttpBean) parts += listOf(exact(bean.username), exact(bean.password))
             }
@@ -1225,13 +1248,9 @@ object RawUpdater : GroupUpdater() {
         val outbounds = JSONArray()
         val validTags = ArrayList<String>()
         val usedTags = HashSet<String>()
-        val parallelUrl = DataStore.parallelUrl.takeIf { it.isNotBlank() } ?: DataStore.connectionTestURL
-        val parallelConcurrency = DataStore.parallelConcurrency.coerceIn(2, 32)
-        val parallelDelayMs = DataStore.parallelDelayMs.coerceIn(50, 1500)
-        val parallelTimeoutMs = DataStore.parallelTimeoutMs.coerceIn(1500, 15000)
         val parallelIntervalSec = DataStore.parallelIntervalSec.coerceIn(5, 600)
         val parallelTolerance = DataStore.parallelTolerance.coerceIn(10, 300)
-        val primaryTag = if (DataStore.autoSelectPrimary == "urltest") "auto" else "bond_min_rtt"
+        val primaryTag = "auto"
         for (raw in rawTexts) {
             val jsonText = ProxyToSingboxConverter.convertToSingBoxJson(raw).orEmpty()
             if (jsonText.isBlank()) continue
@@ -1240,7 +1259,7 @@ object RawUpdater : GroupUpdater() {
             for (i in 0 until list.length()) {
                 val outbound = list.optJSONObject(i) ?: continue
                 val type = outbound.optString("type")
-                if (type == "selector" || type == "urltest" || type == "parallel" || type == "direct" ||
+                if (type == "selector" || type == "urltest" || type == "direct" ||
                     type == "block" || type == "dns"
                 ) {
                     continue
@@ -1271,9 +1290,6 @@ object RawUpdater : GroupUpdater() {
             put("tag", "proxy")
             put("default", primaryTag)
             val list = JSONArray()
-            list.put("bond_min_rtt")
-            list.put("bond_download")
-            list.put("bond_race")
             list.put("auto")
             validTags.forEach { list.put(it) }
             list.put("direct")
@@ -1284,45 +1300,12 @@ object RawUpdater : GroupUpdater() {
             put("tag", "direct")
         })
         merged.put(JSONObject().apply {
-            put("type", "parallel")
-            put("tag", "bond_min_rtt")
-            val list = JSONArray()
-            validTags.forEach { list.put(it) }
-            put("outbounds", list)
-            put("strategy", "least_rtt")
-            put("concurrency", parallelConcurrency)
-            put("delay", "${parallelDelayMs}ms")
-            put("timeout", "${parallelTimeoutMs}ms")
-        })
-        merged.put(JSONObject().apply {
-            put("type", "parallel")
-            put("tag", "bond_download")
-            val list = JSONArray()
-            validTags.forEach { list.put(it) }
-            put("outbounds", list)
-            put("strategy", "round_robin")
-            put("concurrency", parallelConcurrency)
-            put("delay", "${parallelDelayMs}ms")
-            put("timeout", "${parallelTimeoutMs}ms")
-        })
-        merged.put(JSONObject().apply {
-            put("type", "parallel")
-            put("tag", "bond_race")
-            val list = JSONArray()
-            validTags.forEach { list.put(it) }
-            put("outbounds", list)
-            put("strategy", "race")
-            put("concurrency", parallelConcurrency)
-            put("delay", "${parallelDelayMs}ms")
-            put("timeout", "${parallelTimeoutMs}ms")
-        })
-        merged.put(JSONObject().apply {
             put("type", "urltest")
             put("tag", "auto")
             val list = JSONArray()
             validTags.forEach { list.put(it) }
             put("outbounds", list)
-            put("url", parallelUrl)
+            put("url", DataStore.parallelUrl.takeIf { it.isNotBlank() } ?: DataStore.connectionTestURL)
             put("interrupt_exist_connections", false)
             put("interval", "${parallelIntervalSec}s")
             put("tolerance", parallelTolerance)
