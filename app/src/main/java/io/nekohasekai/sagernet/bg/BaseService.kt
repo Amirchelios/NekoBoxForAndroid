@@ -124,6 +124,11 @@ class BaseService {
             proxy = null
             connectingJob = null
             smartSwitchJob = null
+            DataStore.smartRuntimeGroupId = 0L
+            DataStore.smartActiveProxyId = 0L
+            DataStore.smartStandbyProxyId = 0L
+            DataStore.smartSessionHealth = 0
+            DataStore.smartLastDecision = "stopped"
         }
 
         fun changeState(s: State, msg: String? = null) {
@@ -144,6 +149,23 @@ class BaseService {
         override val coroutineContext = Dispatchers.Main.immediate + Job()
         override fun getState(): Int = (data?.state ?: State.Idle).ordinal
         override fun getProfileName(): String = data?.proxy?.displayProfileName ?: "Idle"
+        override fun getSmartRuntimeGroupId(): Long = DataStore.smartRuntimeGroupId
+        override fun getSmartActiveProxyId(): Long = DataStore.smartActiveProxyId
+        override fun getSmartStandbyProxyId(): Long = DataStore.smartStandbyProxyId
+        override fun getSmartSessionHealth(): Int = DataStore.smartSessionHealth
+        override fun getSmartTxRate(): Long = DataStore.smartMainTxRate
+        override fun getSmartRxRate(): Long = DataStore.smartMainRxRate
+        override fun getSmartLastDecision(): String = DataStore.smartLastDecision
+        override fun getSmartQuarantinedProxyIds(): String {
+            val groupId = DataStore.smartRuntimeGroupId
+            if (groupId <= 0L) return ""
+            return SagerDatabase.proxyDao.getByGroup(groupId)
+                .asSequence()
+                .map { it.id }
+                .map { it to DataStore.getSmartQuarantineUntil(it) }
+                .filter { (_, until) -> until > System.currentTimeMillis() }
+                .joinToString(",") { (id, until) -> "$id:$until" }
+        }
         override fun registerCallback(cb: ISagerNetServiceCallback, id: Int) {
             if (id == SagerConnection.CONNECTION_ID_RESTART_BG) {
                 Runtime.getRuntime().exit(0)

@@ -177,7 +177,7 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         smartEnableNetworkLearning.onPreferenceChangeListener = reloadListener
 
         smartProfilePreset.setOnPreferenceChangeListener { _, newValue ->
-            applySmartProfilePreset(newValue?.toString().orEmpty())
+            DataStore.applySmartProfilePreset(newValue?.toString().orEmpty())
             needReload()
             true
         }
@@ -198,84 +198,6 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         }
         if (::smartDebugPanel.isInitialized) {
             smartDebugPanel.summary = buildSmartDebugSummary()
-        }
-    }
-
-    private fun applySmartProfilePreset(preset: String) {
-        when (preset) {
-            "gaming" -> {
-                DataStore.parallelConcurrency = 24
-                DataStore.connectionTestConcurrent = 24
-                DataStore.smartSwitchCooldownSec = 45
-                DataStore.smartSwitchMinDwellSec = 45
-                DataStore.smartSwitchProbeIntervalSec = 16
-                DataStore.smartSwitchBadProbeIntervalSec = 5
-                DataStore.smartSwitchCandidateWins = 2
-                DataStore.smartSwitchCandidateWinsWarmup = 1
-                DataStore.smartSwitchMinImproveAbs = 140
-                DataStore.smartSwitchMinImprovePct = 12
-                DataStore.smartSwitchStableLockSec = 300
-                DataStore.smartSwitchExcellentScore = 620
-                DataStore.smartSwitchMinThroughputGainPct = 28
-            }
-
-            "streaming", "stable" -> {
-                DataStore.smartSwitchCooldownSec = 180
-                DataStore.smartSwitchMinDwellSec = 240
-                DataStore.smartSwitchProbeIntervalSec = 45
-                DataStore.smartSwitchBadProbeIntervalSec = 12
-                DataStore.smartSwitchCandidateWins = 5
-                DataStore.smartSwitchCandidateWinsWarmup = 3
-                DataStore.smartSwitchMinImproveAbs = 320
-                DataStore.smartSwitchMinImprovePct = 24
-                DataStore.smartSwitchStableLockSec = 1200
-                DataStore.smartSwitchExcellentScore = 820
-                DataStore.smartSwitchMinThroughputGainPct = 24
-            }
-
-            "download", "max_download" -> {
-                DataStore.parallelConcurrency = 28
-                DataStore.connectionTestConcurrent = 24
-                DataStore.smartSwitchCooldownSec = 90
-                DataStore.smartSwitchMinDwellSec = 90
-                DataStore.smartSwitchProbeIntervalSec = 22
-                DataStore.smartSwitchBadProbeIntervalSec = 8
-                DataStore.smartSwitchCandidateWins = 3
-                DataStore.smartSwitchCandidateWinsWarmup = 2
-                DataStore.smartSwitchMinImproveAbs = 180
-                DataStore.smartSwitchMinImprovePct = 14
-                DataStore.smartSwitchStableLockSec = 600
-                DataStore.smartSwitchExcellentScore = 680
-                DataStore.smartSwitchMinThroughputGainPct = 10
-            }
-
-            "manual" -> {
-                DataStore.smartSwitchCooldownSec = 300
-                DataStore.smartSwitchMinDwellSec = 600
-                DataStore.smartSwitchProbeIntervalSec = 60
-                DataStore.smartSwitchBadProbeIntervalSec = 20
-                DataStore.smartSwitchCandidateWins = 5
-                DataStore.smartSwitchCandidateWinsWarmup = 3
-                DataStore.smartSwitchMinImproveAbs = 400
-                DataStore.smartSwitchMinImprovePct = 30
-                DataStore.smartSwitchStableLockSec = 1800
-                DataStore.smartSwitchExcellentScore = 900
-                DataStore.smartSwitchMinThroughputGainPct = 30
-            }
-
-            else -> {
-                DataStore.smartSwitchCooldownSec = 120
-                DataStore.smartSwitchMinDwellSec = 150
-                DataStore.smartSwitchProbeIntervalSec = 30
-                DataStore.smartSwitchBadProbeIntervalSec = 10
-                DataStore.smartSwitchCandidateWins = 4
-                DataStore.smartSwitchCandidateWinsWarmup = 2
-                DataStore.smartSwitchMinImproveAbs = 260
-                DataStore.smartSwitchMinImprovePct = 20
-                DataStore.smartSwitchStableLockSec = 900
-                DataStore.smartSwitchExcellentScore = 760
-                DataStore.smartSwitchMinThroughputGainPct = 18
-            }
         }
     }
 

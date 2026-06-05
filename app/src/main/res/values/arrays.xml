@@ -564,4 +564,16 @@
         <item>manual</item>
     </string-array>
 
+    <string-array name="smart_sensitivity_entries">
+        <item>@string/smart_sensitivity_responsive</item>
+        <item>@string/smart_sensitivity_balanced</item>
+        <item>@string/smart_sensitivity_conservative</item>
+    </string-array>
+
+    <string-array name="smart_sensitivity_values">
+        <item>responsive</item>
+        <item>balanced</item>
+        <item>conservative</item>
+    </string-array>
+
 </resources>

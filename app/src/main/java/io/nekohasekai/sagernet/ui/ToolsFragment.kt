@@ -15,7 +15,7 @@ class ToolsFragment : ToolbarFragment(R.layout.layout_tools) {
         super.onViewCreated(view, savedInstanceState)
         toolbar.setTitle(R.string.menu_tools)
 
-        val tools = listOf<NamedFragment>(NetworkFragment())
+        val tools = listOf<NamedFragment>(NetworkFragment(), SmartCoreFragment())
 
         val binding = LayoutToolsBinding.bind(view)
         binding.toolsPager.adapter = ToolsAdapter(tools)

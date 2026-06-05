@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/smart_status">
+        <Preference app:key="smartStatusActive" app:title="@string/smart_status_active" />
+        <Preference app:key="smartStatusStandby" app:title="@string/smart_status_standby" />
+        <Preference app:key="smartStatusHealth" app:title="@string/smart_status_health" />
+        <Preference app:key="smartStatusDecision" app:title="@string/smart_status_last_decision" />
+        <Preference app:key="smartStatusQuarantine" app:title="@string/smart_status_quarantine" />
+        <Preference app:key="smartStatusRefresh" app:title="@string/smart_status_refresh" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/smart_controls">
+        <ListPreference
+            app:defaultValue="balanced"
+            app:entries="@array/smart_profile_entries"
+            app:entryValues="@array/smart_profile_values"
+            app:key="smartProfilePreset"
+            app:title="@string/smart_profile"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:defaultValue="balanced"
+            app:entries="@array/smart_sensitivity_entries"
+            app:entryValues="@array/smart_sensitivity_values"
+            app:key="smartSwitchSensitivity"
+            app:title="@string/smart_switch_sensitivity"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreference
+            app:defaultValue="true"
+            app:key="smartSwitchNotificationsEnabled"
+            app:summary="@string/smart_switch_notifications_summary"
+            app:title="@string/smart_switch_notifications" />
+        <SwitchPreference
+            app:defaultValue="true"
+            app:key="smartInterruptExistingConnections"
+            app:summary="@string/smart_interrupt_connections_summary"
+            app:title="@string/smart_interrupt_connections" />
+        <SwitchPreference
+            app:defaultValue="true"
+            app:key="smartEnableNetworkLearning"
+            app:summary="@string/smart_network_learning_summary"
+            app:title="@string/smart_network_learning" />
+    </PreferenceCategory>
+</PreferenceScreen>

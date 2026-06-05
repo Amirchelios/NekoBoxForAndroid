@@ -103,6 +103,7 @@ class ServiceNotification(
     }
 
     suspend fun postServerSwitched(previous: ProxyEntity, current: ProxyEntity) {
+        if (!DataStore.smartSwitchNotificationsEnabled) return
         val context = service as Context
         val previousTitle = genTitle(previous)
         val currentTitle = genTitle(current)

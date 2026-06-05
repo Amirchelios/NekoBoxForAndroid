@@ -556,4 +556,27 @@
     <string name="server_switch_notifications">اعلان‌های تغییر سرور</string>
     <string name="server_switched">سرور تغییر کرد</string>
     <string name="server_switched_detail">سرور از %1$s به %2$s تغییر کرد</string>
+    <string name="smart_core">هسته هوشمند</string>
+    <string name="smart_status">وضعیت هسته هوشمند</string>
+    <string name="smart_controls">کنترل سوییچ هوشمند</string>
+    <string name="smart_status_active">سرور فعال</string>
+    <string name="smart_status_standby">سرور آماده‌به‌کار</string>
+    <string name="smart_status_health">سلامت اتصال</string>
+    <string name="smart_status_last_decision">آخرین تصمیم</string>
+    <string name="smart_status_quarantine">سرورهای قرنطینه‌شده</string>
+    <string name="smart_status_refresh">به‌روزرسانی وضعیت</string>
+    <string name="smart_status_none">هیچ‌کدام</string>
+    <string name="smart_status_no_decision">هنوز تصمیمی ثبت نشده است</string>
+    <string name="smart_status_latency">%1$d میلی‌ثانیه</string>
+    <string name="smart_status_health_detail">سلامت: %1$d از ۱۰۰\nارسال: %2$d بایت/ثانیه · دریافت: %3$d بایت/ثانیه</string>
+    <string name="smart_status_profile_detail">%1$s\nتاخیر: %2$s · سرعت: %3$s · خطاهای متوالی: %4$d</string>
+    <string name="smart_status_quarantine_item">%1$s · %2$d دقیقه باقی‌مانده</string>
+    <string name="smart_switch_sensitivity">حساسیت تغییر سرور</string>
+    <string name="smart_sensitivity_responsive">واکنش سریع</string>
+    <string name="smart_sensitivity_balanced">متعادل</string>
+    <string name="smart_sensitivity_conservative">محافظه‌کارانه</string>
+    <string name="smart_switch_notifications">اعلان هنگام تغییر سرور</string>
+    <string name="smart_switch_notifications_summary">نام سرور قبلی و جدید را خارج از برنامه نمایش می‌دهد</string>
+    <string name="smart_interrupt_connections">انتقال فوری اتصال‌های موجود</string>
+    <string name="smart_interrupt_connections_summary">پس از تغییر سرور اتصال‌های سرور قبلی را می‌بندد؛ نیازمند بارگذاری مجدد سرویس</string>
 </resources>

@@ -19,6 +19,9 @@ class SmartSwitchController(
         data.smartSwitchJob = runOnDefaultDispatcher {
             val mode = DataStore.normalizedSmartProfilePreset()
             val policy = DataStore.smartAdaptivePolicy()
+            val sensitivity = DataStore.smartSwitchSensitivity
+            DataStore.smartRuntimeGroupId = profile.groupId
+            DataStore.smartStandbyProxyId = 0L
             if (mode == "manual") {
                 DataStore.smartLastDecision = "manual:auto_switch_disabled"
                 return@runOnDefaultDispatcher
@@ -40,10 +43,20 @@ class SmartSwitchController(
             val normalProbeMs = policy.probeIntervalSec.coerceIn(10, 120) * 1000L
             val badProbeMs = policy.badProbeIntervalSec.coerceIn(5, 60) * 1000L
             val warmupRounds = policy.warmupRounds.coerceIn(1, 8)
-            val baseWins = policy.candidateWins.coerceIn(2, 10)
-            val warmupWins = policy.candidateWinsWarmup.coerceIn(1, 5)
-            val minImproveAbs = policy.minImproveAbs.coerceIn(80, 1200)
-            val minImprovePct = policy.minImprovePct.coerceIn(8, 60)
+            val sensitivityWins = when (sensitivity) {
+                "responsive" -> -1
+                "conservative" -> 2
+                else -> 0
+            }
+            val sensitivityThresholdPct = when (sensitivity) {
+                "responsive" -> 75
+                "conservative" -> 135
+                else -> 100
+            }
+            val baseWins = (policy.candidateWins + sensitivityWins).coerceIn(1, 10)
+            val warmupWins = (policy.candidateWinsWarmup + sensitivityWins).coerceIn(1, 5)
+            val minImproveAbs = (policy.minImproveAbs * sensitivityThresholdPct / 100).coerceIn(80, 1200)
+            val minImprovePct = (policy.minImprovePct * sensitivityThresholdPct / 100).coerceIn(8, 60)
             val weakScoreBase = policy.weakScore.coerceIn(600, 3000)
             val criticalScoreBase = policy.criticalScore.coerceIn(800, 5000)
             val weakScore = when (mode) {
@@ -97,9 +110,24 @@ class SmartSwitchController(
                 return service.smartSwitchScope()
             }
 
+            fun syncActiveFromCore() {
+                val coreActiveId = DataStore.smartActiveProxyId
+                if (coreActiveId <= 0L || coreActiveId == activeId) return
+                activeId = coreActiveId
+                activeSinceMs = System.currentTimeMillis()
+                if (standbyId == activeId) {
+                    standbyId = 0L
+                    DataStore.smartStandbyProxyId = 0L
+                }
+            }
+
             fun setDecision(reason: String) {
-                if (!DataStore.smartDebugEnabled) return
                 DataStore.smartLastDecision = reason
+            }
+
+            fun setStandby(id: Long) {
+                standbyId = id.takeIf { it > 0L && it != activeId } ?: 0L
+                DataStore.smartStandbyProxyId = standbyId
             }
 
             fun updateSessionHealth(score: Int, streak: Int, bw: Int) {
@@ -208,8 +236,16 @@ class SmartSwitchController(
                 val tag = data.proxy?.config?.profileTagMap?.get(id).orEmpty()
                 if (tag.isBlank()) return false
                 val previousId = activeId
-                data.proxy?.box?.selectOutbound(tag)
+                val switched = data.proxy?.box?.selectOutbound(tag) == true
+                if (!switched) {
+                    setDecision("switch_rejected:$id")
+                    return false
+                }
                 activeId = id
+                DataStore.smartActiveProxyId = id
+                if (standbyId == id) {
+                    DataStore.smartStandbyProxyId = 0L
+                }
                 activeSinceMs = System.currentTimeMillis()
                 lastSwitchAtMs = activeSinceMs
                 if (previousId > 0L && previousId != id) {
@@ -312,7 +348,7 @@ class SmartSwitchController(
             }
             val fastTop = SmartSelector.selectTopFast(profile.groupId, 3, currentScope())
             val fastId = fastTop.firstOrNull()
-            standbyId = fastTop.getOrNull(1) ?: 0L
+            setStandby(fastTop.firstOrNull { it != activeId } ?: 0L)
             if (fastId != null) {
                 maybeSwitchTo(fastId, warmup = true)
             }
@@ -328,6 +364,7 @@ class SmartSwitchController(
                 maybeSwitchTo(id, warmup = true)
             }
             while (DataStore.serviceState == BaseService.State.Connected) {
+                syncActiveFromCore()
                 val now = System.currentTimeMillis()
                 val (score, streak) = activeStats()
                 val txRate = DataStore.smartMainTxRate
@@ -361,6 +398,10 @@ class SmartSwitchController(
                 val activeBw = bandwidth(activeId)
                 val pressure = congestionLevel(score, streak, txRate, rxRate, activeBw)
                 updateSessionHealth(score, streak, activeBw)
+                setDecision(
+                    "monitor:active=$activeId standby=$standbyId score=$score " +
+                        "health=${DataStore.smartSessionHealth} pressure=$pressure"
+                )
                 if (trafficCritical) {
                     DataStore.smartSessionHealth = DataStore.smartSessionHealth.coerceAtMost(25)
                     setDecision("critical:traffic_degraded tx=$txRate rx=$rxRate score=$score")
@@ -426,7 +467,7 @@ class SmartSwitchController(
                 }
                 val top = SmartSelector.selectTopFast(profile.groupId, 3, currentScope())
                 val id = top.firstOrNull()
-                standbyId = top.getOrNull(1) ?: standbyId
+                setStandby(top.firstOrNull { it != activeId } ?: standbyId)
                 if (id == null) {
                     nullProbeStreak++
                     disruptionNullStreak++

@@ -92,6 +92,17 @@ class NativeInterface : BoxPlatformInterface, NB4AInterface {
                 val id = data.proxy!!.config.profileTagMap
                     .filterValues { it == tag }.keys.firstOrNull() ?: -1
                 val ent = SagerDatabase.proxyDao.getById(id) ?: return@runOnDefaultDispatcher
+                val previousId = DataStore.smartActiveProxyId
+                DataStore.smartRuntimeGroupId = ent.groupId
+                DataStore.smartActiveProxyId = id
+                if (DataStore.smartStandbyProxyId == id) {
+                    DataStore.smartStandbyProxyId = previousId.takeIf { it > 0L && it != id } ?: 0L
+                }
+                DataStore.smartLastDecision = if (previousId > 0L && previousId != id) {
+                    "core_switch:$previousId->$id"
+                } else {
+                    "core_active:$id"
+                }
                 // traffic & title
                 data.proxy?.apply {
                     looper?.selectMain(id)

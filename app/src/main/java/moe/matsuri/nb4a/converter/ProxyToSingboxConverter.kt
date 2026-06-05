@@ -1,5 +1,6 @@
 package moe.matsuri.nb4a.converter
 
+import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.ktx.toStringPretty
 import moe.matsuri.nb4a.utils.JavaUtil.gson
 import moe.matsuri.nb4a.utils.Util
@@ -124,7 +125,7 @@ object ProxyToSingboxConverter {
                 "tag" to "auto",
                 "outbounds" to validTags,
                 "url" to "https://speed.cloudflare.com/__down?bytes=1000000",
-                "interrupt_exist_connections" to true,
+                "interrupt_exist_connections" to DataStore.smartInterruptExistingConnections,
                 "interval" to "8s",
                 "tolerance" to 20
             )

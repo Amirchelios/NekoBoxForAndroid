@@ -930,7 +930,7 @@ object RawUpdater : GroupUpdater() {
             if (type == "urltest") {
                 outbound.remove("timeout")
                 outbound.remove("timeoout")
-                outbound.put("interrupt_exist_connections", true)
+                outbound.put("interrupt_exist_connections", DataStore.smartInterruptExistingConnections)
             }
             if (isInvalidRealityOutbound(outbound)) {
                 outbound.optString("tag").takeIf { it.isNotBlank() }?.let { invalidTags.add(it) }
@@ -1282,7 +1282,7 @@ object RawUpdater : GroupUpdater() {
             validTags.forEach { list.put(it) }
             put("outbounds", list)
             put("url", DataStore.parallelUrl.takeIf { it.isNotBlank() } ?: DataStore.connectionTestURL)
-            put("interrupt_exist_connections", true)
+            put("interrupt_exist_connections", DataStore.smartInterruptExistingConnections)
             put("interval", "${parallelIntervalSec}s")
             put("tolerance", parallelTolerance)
         })

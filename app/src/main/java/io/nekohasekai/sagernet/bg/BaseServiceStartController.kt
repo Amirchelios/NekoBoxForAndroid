@@ -42,8 +42,15 @@ class BaseServiceStartController(
             }
             service.startProcesses()
             data.changeState(BaseService.State.Connected)
+            DataStore.smartRuntimeGroupId = profile.groupId
+            DataStore.smartActiveProxyId = profile.id
+            DataStore.smartStandbyProxyId = 0L
+            DataStore.smartSessionHealth = 0
             if (GroupManager.isAutoSelectAggregate(profile)) {
+                DataStore.smartLastDecision = "starting:smart_controller"
                 service.startSmartSwitch(profile)
+            } else {
+                DataStore.smartLastDecision = "connected:single_route"
             }
             service.lateInit()
         } catch (_: CancellationException) {

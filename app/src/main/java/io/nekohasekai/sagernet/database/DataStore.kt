@@ -216,6 +216,14 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartSwitchExcellentScore by configurationStore.int("smartSwitchExcellentScore") { 760 }
     var smartSwitchMinThroughputGainPct by configurationStore.int("smartSwitchMinThroughputGainPct") { 18 }
     var smartProfilePreset by configurationStore.string("smartProfilePreset") { "balanced" }
+    var smartSwitchSensitivity by configurationStore.string("smartSwitchSensitivity") { "balanced" }
+    var smartSwitchNotificationsEnabled by configurationStore.boolean("smartSwitchNotificationsEnabled") { true }
+    var smartInterruptExistingConnections by configurationStore.boolean("smartInterruptExistingConnections") { true }
+    var smartActiveProxyId by configurationStore.long("smartActiveProxyId")
+    @Volatile
+    var smartRuntimeGroupId: Long = 0L
+    @Volatile
+    var smartStandbyProxyId: Long = 0L
     var smartEnableNetworkLearning by configurationStore.boolean("smartEnableNetworkLearning") { true }
     var smartDebugEnabled by configurationStore.boolean("smartDebugEnabled") { false }
     var smartSessionHealth by configurationStore.int("smartSessionHealth") { 0 }
@@ -556,6 +564,81 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         smartSwitchMinThroughputGainPct = policy.minThroughputGainPct.coerceIn(5, 80)
         smartDisruptionHoldMinSec = policy.disruptionHoldMinSec.coerceIn(30, 900)
         smartDisruptionHoldMaxSec = policy.disruptionHoldMaxSec.coerceIn(60, 1800)
+    }
+
+    fun applySmartProfilePreset(preset: String) {
+        smartProfilePreset = preset
+        when (preset) {
+            "gaming" -> {
+                parallelConcurrency = 24
+                connectionTestConcurrent = 24
+                smartSwitchCooldownSec = 45
+                smartSwitchMinDwellSec = 45
+                smartSwitchProbeIntervalSec = 16
+                smartSwitchBadProbeIntervalSec = 5
+                smartSwitchCandidateWins = 2
+                smartSwitchCandidateWinsWarmup = 1
+                smartSwitchMinImproveAbs = 140
+                smartSwitchMinImprovePct = 12
+                smartSwitchStableLockSec = 300
+                smartSwitchExcellentScore = 620
+                smartSwitchMinThroughputGainPct = 28
+            }
+            "streaming", "stable" -> {
+                smartSwitchCooldownSec = 180
+                smartSwitchMinDwellSec = 240
+                smartSwitchProbeIntervalSec = 45
+                smartSwitchBadProbeIntervalSec = 12
+                smartSwitchCandidateWins = 5
+                smartSwitchCandidateWinsWarmup = 3
+                smartSwitchMinImproveAbs = 320
+                smartSwitchMinImprovePct = 24
+                smartSwitchStableLockSec = 1200
+                smartSwitchExcellentScore = 820
+                smartSwitchMinThroughputGainPct = 24
+            }
+            "download", "max_download" -> {
+                parallelConcurrency = 28
+                connectionTestConcurrent = 24
+                smartSwitchCooldownSec = 90
+                smartSwitchMinDwellSec = 90
+                smartSwitchProbeIntervalSec = 22
+                smartSwitchBadProbeIntervalSec = 8
+                smartSwitchCandidateWins = 3
+                smartSwitchCandidateWinsWarmup = 2
+                smartSwitchMinImproveAbs = 180
+                smartSwitchMinImprovePct = 14
+                smartSwitchStableLockSec = 600
+                smartSwitchExcellentScore = 680
+                smartSwitchMinThroughputGainPct = 10
+            }
+            "manual" -> {
+                smartSwitchCooldownSec = 300
+                smartSwitchMinDwellSec = 600
+                smartSwitchProbeIntervalSec = 60
+                smartSwitchBadProbeIntervalSec = 20
+                smartSwitchCandidateWins = 5
+                smartSwitchCandidateWinsWarmup = 3
+                smartSwitchMinImproveAbs = 400
+                smartSwitchMinImprovePct = 30
+                smartSwitchStableLockSec = 1800
+                smartSwitchExcellentScore = 900
+                smartSwitchMinThroughputGainPct = 30
+            }
+            else -> {
+                smartSwitchCooldownSec = 120
+                smartSwitchMinDwellSec = 150
+                smartSwitchProbeIntervalSec = 30
+                smartSwitchBadProbeIntervalSec = 10
+                smartSwitchCandidateWins = 4
+                smartSwitchCandidateWinsWarmup = 2
+                smartSwitchMinImproveAbs = 260
+                smartSwitchMinImprovePct = 20
+                smartSwitchStableLockSec = 900
+                smartSwitchExcellentScore = 760
+                smartSwitchMinThroughputGainPct = 18
+            }
+        }
     }
 
     fun getSmartSuccessCount(profileId: Long): Int {

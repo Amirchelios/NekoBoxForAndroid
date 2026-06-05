@@ -624,4 +624,27 @@
     <string name="server_switch_notifications">Server switch notifications</string>
     <string name="server_switched">Server switched</string>
     <string name="server_switched_detail">Switched from %1$s to %2$s</string>
+    <string name="smart_core">Smart Core</string>
+    <string name="smart_status">Smart Core Status</string>
+    <string name="smart_controls">Smart Switching Controls</string>
+    <string name="smart_status_active">Active server</string>
+    <string name="smart_status_standby">Standby server</string>
+    <string name="smart_status_health">Connection health</string>
+    <string name="smart_status_last_decision">Last decision</string>
+    <string name="smart_status_quarantine">Quarantined servers</string>
+    <string name="smart_status_refresh">Refresh status</string>
+    <string name="smart_status_none">None</string>
+    <string name="smart_status_no_decision">No decision recorded</string>
+    <string name="smart_status_latency">%1$d ms</string>
+    <string name="smart_status_health_detail">Health: %1$d/100\nTX: %2$d B/s · RX: %3$d B/s</string>
+    <string name="smart_status_profile_detail">%1$s\nLatency: %2$s · Speed: %3$s · Failure streak: %4$d</string>
+    <string name="smart_status_quarantine_item">%1$s · %2$d min remaining</string>
+    <string name="smart_switch_sensitivity">Switch sensitivity</string>
+    <string name="smart_sensitivity_responsive">Responsive</string>
+    <string name="smart_sensitivity_balanced">Balanced</string>
+    <string name="smart_sensitivity_conservative">Conservative</string>
+    <string name="smart_switch_notifications">Notify when server changes</string>
+    <string name="smart_switch_notifications_summary">Show the previous and new server outside the app</string>
+    <string name="smart_interrupt_connections">Immediately move existing connections</string>
+    <string name="smart_interrupt_connections_summary">Close connections on the old server after failover; requires service reload</string>
 </resources>
