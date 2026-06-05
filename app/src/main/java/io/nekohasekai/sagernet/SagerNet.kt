@@ -208,6 +208,10 @@ class SagerNet : Application(),
                             "connection-test",
                             application.getText(R.string.connection_test),
                             NotificationManager.IMPORTANCE_DEFAULT
+                        ), NotificationChannel(
+                            "service-switch",
+                            application.getText(R.string.server_switch_notifications),
+                            NotificationManager.IMPORTANCE_DEFAULT
                         )
                     )
                 )

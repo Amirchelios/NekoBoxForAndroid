@@ -3,6 +3,7 @@ package io.nekohasekai.sagernet.bg.proto
 import io.nekohasekai.sagernet.bg.BaseService
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.ProxyEntity
+import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import kotlinx.coroutines.delay
 import libcore.Libcore
@@ -202,7 +203,7 @@ class SmartSwitchController(
                 return isCritical(score, streak) || score >= weakScore || streak >= failTrigger
             }
 
-            fun selectOutboundById(id: Long): Boolean {
+            suspend fun selectOutboundById(id: Long): Boolean {
                 if (id <= 0L) return false
                 val tag = data.proxy?.config?.profileTagMap?.get(id).orEmpty()
                 if (tag.isBlank()) return false
@@ -218,10 +219,17 @@ class SmartSwitchController(
                 DataStore.setSmartPreferredProxyScoped(currentScope(), profile.groupId, id)
                 DataStore.bumpSmartRecentSwitchCount(id)
                 setDecision("switch:$id")
+                if (previousId > 0L && previousId != id) {
+                    val previous = SagerDatabase.proxyDao.getById(previousId)
+                    val current = SagerDatabase.proxyDao.getById(id)
+                    if (previous != null && current != null) {
+                        data.notification?.postServerSwitched(previous, current)
+                    }
+                }
                 return true
             }
 
-            fun maybeSwitchTo(id: Long, warmup: Boolean): Boolean {
+            suspend fun maybeSwitchTo(id: Long, warmup: Boolean): Boolean {
                 if (id <= 0L) return false
                 if (id == activeId) {
                     pendingCandidateId = 0L

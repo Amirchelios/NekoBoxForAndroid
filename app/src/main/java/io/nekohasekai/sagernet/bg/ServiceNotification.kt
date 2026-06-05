@@ -39,10 +39,11 @@ import kotlinx.coroutines.sync.withLock
  */
 class ServiceNotification(
     private val service: BaseService.Interface, title: String,
-    channel: String, visible: Boolean = false,
+    private val channel: String, visible: Boolean = false,
 ) : BroadcastReceiver() {
     companion object {
         const val notificationId = 1
+        private const val serverSwitchNotificationId = 3
         val flags =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
 
@@ -99,6 +100,31 @@ class ServiceNotification(
             it.setContentTitle(newTitle)
         }
         update()
+    }
+
+    suspend fun postServerSwitched(previous: ProxyEntity, current: ProxyEntity) {
+        val context = service as Context
+        val previousTitle = genTitle(previous)
+        val currentTitle = genTitle(current)
+        postNotificationTitle(currentTitle)
+
+        val notification = NotificationCompat.Builder(context, "service-switch")
+            .setSmallIcon(R.drawable.ic_service_active)
+            .setContentTitle(context.getString(R.string.server_switched))
+            .setContentText(context.getString(R.string.server_switched_detail, previousTitle, currentTitle))
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    context.getString(R.string.server_switched_detail, previousTitle, currentTitle)
+                )
+            )
+            .setContentIntent(SagerNet.configureIntent(context))
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        runCatching {
+            NotificationManagerCompat.from(context).notify(serverSwitchNotificationId, notification)
+        }
     }
 
     suspend fun postNotificationWakeLockStatus(acquired: Boolean) {

@@ -6,8 +6,9 @@ dependencyResolutionManagement {
         maven(url = "https://maven.aliyun.com/repository/google") {
             content {
                 includeGroupByRegex("androidx\\..*")
+                includeGroup("com.android")
                 includeGroupByRegex("com\\.android\\..*")
-                includeGroupByRegex("com\\.google\\.android\\..*")
+                includeGroupByRegex("com\\.google\\..*")
             }
         }
         maven(url = "https://dl.google.com/dl/android/maven2")

@@ -124,7 +124,7 @@ object ProxyToSingboxConverter {
                 "tag" to "auto",
                 "outbounds" to validTags,
                 "url" to "https://speed.cloudflare.com/__down?bytes=1000000",
-                "interrupt_exist_connections" to false,
+                "interrupt_exist_connections" to true,
                 "interval" to "8s",
                 "tolerance" to 20
             )

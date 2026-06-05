@@ -621,4 +621,7 @@
     <string name="minimize">Minimize</string>
     <string name="app_list_permission_denied">Unable to read installed apps.\nThis is usually because the system has restricted app read permissions.\nPlease grant permissions in the system settings.</string>
     <string name="open_app_settings">Open System Settings</string>
+    <string name="server_switch_notifications">Server switch notifications</string>
+    <string name="server_switched">Server switched</string>
+    <string name="server_switched_detail">Switched from %1$s to %2$s</string>
 </resources>
