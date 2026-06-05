@@ -29,6 +29,9 @@ type boxPlatformInterfaceWrapper struct{}
 
 func (w *boxPlatformInterfaceWrapper) ReadWIFIState() adapter.WIFIState {
 	state := strings.Split(intfBox.WIFIState(), ",")
+	if len(state) < 2 {
+		return adapter.WIFIState{}
+	}
 	return adapter.WIFIState{
 		SSID:  state[0],
 		BSSID: state[1],

@@ -35,7 +35,10 @@ func init() {
 	dialer.DoNotSelectInterface = true
 }
 
-var mainInstance *BoxInstance
+var (
+	mainInstance     *BoxInstance
+	mainInstanceLock sync.RWMutex
+)
 
 func VersionBox() string {
 	version := []string{
@@ -121,10 +124,10 @@ type routeHealth struct {
 }
 
 type adaptiveState struct {
-	InstabilityEWMA int32
-	FailureEWMA     int32
-	LatencyEWMA     int32
-	UpdatedAtMs     int64
+	InstabilityEWMA int32 `json:"instability_ewma"`
+	FailureEWMA     int32 `json:"failure_ewma"`
+	LatencyEWMA     int32 `json:"latency_ewma"`
+	UpdatedAtMs     int64 `json:"updated_at_ms"`
 }
 
 type adaptiveTuning struct {
@@ -138,10 +141,8 @@ type adaptiveTuning struct {
 }
 
 var (
-	routeHealthLock sync.Mutex
-	routeHealthMap  = map[string]routeHealth{}
 	adaptiveLock    sync.Mutex
-	adaptiveCore    adaptiveState
+	adaptiveByScope = map[string]adaptiveState{}
 	telemetryLock   sync.Mutex
 	telemetryLastMs = map[string]int64{}
 )
@@ -156,24 +157,29 @@ func routeKeyFromConfig(config string) string {
 
 func routeKeyForInstance(i *BoxInstance, link string) string {
 	if i != nil && i.routeKey != "" {
-		return i.routeKey
+		return i.routeKey + ":" + link
 	}
-	if mainInstance != nil && mainInstance.routeKey != "" {
-		return "main:" + mainInstance.routeKey + ":" + link
+	if main := getMainInstance(); main != nil && main.routeKey != "" {
+		return "main:" + main.routeKey + ":" + main.currentSelectedOutbound() + ":" + link
 	}
 	return "direct:" + link
 }
 
-func loadRouteHealth(key string) routeHealth {
-	routeHealthLock.Lock()
-	defer routeHealthLock.Unlock()
-	return routeHealthMap[key]
+func getMainInstance() *BoxInstance {
+	mainInstanceLock.RLock()
+	instance := mainInstance
+	mainInstanceLock.RUnlock()
+	return instance
 }
 
-func storeRouteHealth(key string, h routeHealth) {
-	routeHealthLock.Lock()
-	routeHealthMap[key] = h
-	routeHealthLock.Unlock()
+func (b *BoxInstance) currentSelectedOutbound() string {
+	b.selectLock.Lock()
+	tag := b.selectedOutboundTag
+	b.selectLock.Unlock()
+	if tag == "" {
+		return "unknown"
+	}
+	return tag
 }
 
 func clampInt32(v, min, max int32) int32 {
@@ -187,8 +193,9 @@ func clampInt32(v, min, max int32) int32 {
 }
 
 func currentAdaptiveTuning() adaptiveTuning {
+	scope := currentNetworkScope()
 	adaptiveLock.Lock()
-	state := adaptiveCore
+	state := adaptiveByScope[scope]
 	adaptiveLock.Unlock()
 
 	severity := int32(0)
@@ -228,29 +235,38 @@ func currentAdaptiveTuning() adaptiveTuning {
 
 func adaptiveUpdateOnSwitchReject() {
 	nowMs := time.Now().UnixMilli()
+	scope := currentNetworkScope()
 	adaptiveLock.Lock()
-	adaptiveCore.InstabilityEWMA = clampInt32((adaptiveCore.InstabilityEWMA*8+220)/9, 0, 2500)
-	adaptiveCore.UpdatedAtMs = nowMs
+	state := adaptiveByScope[scope]
+	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*8+220)/9, 0, 2500)
+	state.UpdatedAtMs = nowMs
+	adaptiveByScope[scope] = state
 	adaptiveLock.Unlock()
 }
 
 func adaptiveUpdateOnUrlSuccess(score int32, jitter int32) {
 	nowMs := time.Now().UnixMilli()
+	scope := currentNetworkScope()
 	adaptiveLock.Lock()
-	adaptiveCore.LatencyEWMA = clampInt32((adaptiveCore.LatencyEWMA*7+score*3)/10, 0, 20000)
-	adaptiveCore.InstabilityEWMA = clampInt32((adaptiveCore.InstabilityEWMA*8+jitter*2)/10, 0, 2500)
-	adaptiveCore.FailureEWMA = clampInt32((adaptiveCore.FailureEWMA*7)/10, 0, 2500)
-	adaptiveCore.UpdatedAtMs = nowMs
+	state := adaptiveByScope[scope]
+	state.LatencyEWMA = clampInt32((state.LatencyEWMA*7+score*3)/10, 0, 20000)
+	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*8+jitter*2)/10, 0, 2500)
+	state.FailureEWMA = clampInt32((state.FailureEWMA*7)/10, 0, 2500)
+	state.UpdatedAtMs = nowMs
+	adaptiveByScope[scope] = state
 	adaptiveLock.Unlock()
 }
 
 func adaptiveUpdateOnUrlFail(failStreak int) {
 	nowMs := time.Now().UnixMilli()
 	bump := int32(260 + failStreak*80)
+	scope := currentNetworkScope()
 	adaptiveLock.Lock()
-	adaptiveCore.FailureEWMA = clampInt32((adaptiveCore.FailureEWMA*8+bump*2)/10, 0, 2500)
-	adaptiveCore.InstabilityEWMA = clampInt32((adaptiveCore.InstabilityEWMA*8+170)/9, 0, 2500)
-	adaptiveCore.UpdatedAtMs = nowMs
+	state := adaptiveByScope[scope]
+	state.FailureEWMA = clampInt32((state.FailureEWMA*8+bump*2)/10, 0, 2500)
+	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*8+170)/9, 0, 2500)
+	state.UpdatedAtMs = nowMs
+	adaptiveByScope[scope] = state
 	adaptiveLock.Unlock()
 }
 
@@ -340,10 +356,12 @@ func (b *BoxInstance) Close() (err error) {
 	b.state = 2
 
 	// clear main instance
+	mainInstanceLock.Lock()
 	if mainInstance == b {
 		mainInstance = nil
 		goServeProtect(false)
 	}
+	mainInstanceLock.Unlock()
 
 	// close box
 	if b.cancel != nil {
@@ -370,7 +388,9 @@ func (b *BoxInstance) Wake() {
 }
 
 func (b *BoxInstance) SetAsMain() {
+	mainInstanceLock.Lock()
 	mainInstance = b
+	mainInstanceLock.Unlock()
 	goServeProtect(true)
 }
 
@@ -415,6 +435,7 @@ func (b *BoxInstance) SelectOutbound(tag string) bool {
 			b.rapidSwitchRejects++
 			if b.rapidSwitchRejects < coreSelectorForceSwitchAfter {
 				adaptiveUpdateOnSwitchReject()
+				healthManager.selected(b.selectedOutboundTag, "switch_hold:"+tag)
 				remain := b.switchHoldUntilMs - nowMs
 				telemetryLog(
 					"select_hold",
@@ -432,6 +453,7 @@ func (b *BoxInstance) SelectOutbound(tag string) bool {
 			b.rapidSwitchRejects++
 			if b.rapidSwitchRejects < coreSelectorForceSwitchAfter {
 				adaptiveUpdateOnSwitchReject()
+				healthManager.selected(b.selectedOutboundTag, "switch_interval:"+tag)
 				telemetryLog(
 					"select_interval",
 					2000,
@@ -478,7 +500,9 @@ func (b *BoxInstance) SelectOutbound(tag string) bool {
 				tuning.MinSwitchIntervalMs,
 				tuning.BurstLimit,
 			)
+			healthManager.selected(tag, "switch_ok:"+tag)
 		} else {
+			healthManager.selected(b.selectedOutboundTag, "switch_failed:"+tag)
 			telemetryLog(
 				"select_fail",
 				1200,
@@ -496,8 +520,11 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 	defer device.DeferPanicToError("box.UrlTest", func(err_ error) { err = err_ })
 	nowMs := time.Now().UnixMilli()
 	tuning := currentAdaptiveTuning()
-	healthKey := routeKeyForInstance(i, link)
-	health := loadRouteHealth(healthKey)
+	healthKey := healthManager.routeKey(routeKeyForInstance(i, link), nowMs)
+	health, allowProbe := healthManager.load(healthKey, nowMs)
+	if !allowProbe {
+		return coreUrltestBlockedBasePenalty + int32(health.FailStreak*90), nil
+	}
 	if health.BlockUntilMs > nowMs {
 		waitPenalty := int32((health.BlockUntilMs - nowMs) / 1000 * 40)
 		if waitPenalty < 0 {
@@ -528,7 +555,8 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 			)
 		}
 		// test direct
-		if mainInstance == nil {
+		main := getMainInstance()
+		if main == nil {
 			return speedtest.UrlTest(
 				boxapi.CreateProxyHttpClient(nil, nil),
 				link,
@@ -537,11 +565,11 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 			)
 		}
 		// test mainInstance
-		if mainInstance.v2api != nil {
-			connectionTracker = mainInstance.v2api.StatsService()
+		if main.v2api != nil {
+			connectionTracker = main.v2api.StatsService()
 		}
 		return speedtest.UrlTest(
-			boxapi.CreateProxyHttpClient(mainInstance.Box, connectionTracker),
+			boxapi.CreateProxyHttpClient(main.Box, connectionTracker),
 			link,
 			timeoutMs,
 			speedtest.UrlTestStandard_RTT,
@@ -646,7 +674,7 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 					blockMs,
 				)
 			}
-			storeRouteHealth(healthKey, health)
+			healthManager.store(healthKey, health, "probe_failed:"+healthKey)
 			telemetryLog(
 				"urltest_fail",
 				1200,
@@ -678,7 +706,7 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 		health.FailStreak = 0
 		health.BlockUntilMs = 0
 		health.LastUpdatedMs = nowMs
-		storeRouteHealth(healthKey, health)
+		healthManager.store(healthKey, health, "probe_fallback_ok:"+healthKey)
 		adaptiveUpdateOnUrlSuccess(score, jitter)
 		telemetryLog(
 			"urltest_fallback_ok",
@@ -709,7 +737,7 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 		health.FailStreak = 0
 		health.BlockUntilMs = 0
 		health.LastUpdatedMs = nowMs
-		storeRouteHealth(healthKey, health)
+		healthManager.store(healthKey, health, "probe_single_ok:"+healthKey)
 		adaptiveUpdateOnUrlSuccess(score, 0)
 		telemetryLog(
 			"urltest_single",
@@ -753,7 +781,7 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 	health.FailStreak = 0
 	health.BlockUntilMs = 0
 	health.LastUpdatedMs = nowMs
-	storeRouteHealth(healthKey, health)
+	healthManager.store(healthKey, health, "probe_ok:"+healthKey)
 	adaptiveUpdateOnUrlSuccess(score, jitter)
 	telemetryLog(
 		"urltest_ok",
