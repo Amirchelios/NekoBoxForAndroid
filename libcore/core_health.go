@@ -2,6 +2,8 @@ package libcore
 
 import (
 	"encoding/json"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +28,18 @@ type coreTelemetrySnapshot struct {
 	OpenCircuitCount int           `json:"open_circuit_count"`
 	Adaptive         adaptiveState `json:"adaptive"`
 	UpdatedAtMs      int64         `json:"updated_at_ms"`
+}
+
+type coreHealthSnapshot struct {
+	Key             string `json:"key"`
+	LastScore       int32  `json:"last_score"`
+	LatencyEWMA     int32  `json:"latency_ewma"`
+	JitterEWMA      int32  `json:"jitter_ewma"`
+	SuccessStreak   int    `json:"success_streak"`
+	FailStreak      int    `json:"fail_streak"`
+	BlockUntilMs    int64  `json:"block_until_ms"`
+	HalfOpenProbeAt int64  `json:"half_open_probe_at_ms"`
+	LastUpdatedMs   int64  `json:"last_updated_ms"`
 }
 
 type coreHealthManager struct {
@@ -79,17 +93,31 @@ func (m *coreHealthManager) cleanupLocked(nowMs int64) {
 		}
 	}
 	for len(m.routes) > coreHealthMaxEntries {
-		var oldestKey string
-		oldestAt := int64(^uint64(0) >> 1)
+		type kv struct {
+			key   string
+			entry coreHealthEntry
+		}
+		items := make([]kv, 0, len(m.routes))
 		for key, entry := range m.routes {
-			if entry.LastUpdatedMs < oldestAt {
-				oldestKey, oldestAt = key, entry.LastUpdatedMs
+			items = append(items, kv{key: key, entry: entry})
+		}
+		slices.SortFunc(items, func(a, b kv) int {
+			switch {
+			case a.entry.LastUpdatedMs < b.entry.LastUpdatedMs:
+				return -1
+			case a.entry.LastUpdatedMs > b.entry.LastUpdatedMs:
+				return 1
+			case a.key < b.key:
+				return -1
+			case a.key > b.key:
+				return 1
+			default:
+				return 0
 			}
+		})
+		for i := 0; i < len(items)-coreHealthMaxEntries; i++ {
+			delete(m.routes, items[i].key)
 		}
-		if oldestKey == "" {
-			break
-		}
-		delete(m.routes, oldestKey)
 	}
 }
 
@@ -164,4 +192,39 @@ func CoreTelemetry() string {
 	healthManager.lock.Unlock()
 	data, _ := json.Marshal(snapshot)
 	return string(data)
+}
+
+func CoreHealthSnapshot() []coreHealthSnapshot {
+	nowMs := time.Now().UnixMilli()
+	healthManager.lock.Lock()
+	healthManager.cleanupLocked(nowMs)
+	items := make([]coreHealthSnapshot, 0, len(healthManager.routes))
+	for key, entry := range healthManager.routes {
+		items = append(items, coreHealthSnapshot{
+			Key:             key,
+			LastScore:       entry.LastScore,
+			LatencyEWMA:     entry.LatencyEWMA,
+			JitterEWMA:      entry.JitterEWMA,
+			SuccessStreak:   entry.SuccessStreak,
+			FailStreak:      entry.FailStreak,
+			BlockUntilMs:    entry.BlockUntilMs,
+			HalfOpenProbeAt: entry.HalfOpenProbeAtMs,
+			LastUpdatedMs:   entry.LastUpdatedMs,
+		})
+	}
+	healthManager.lock.Unlock()
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].BlockUntilMs != items[j].BlockUntilMs {
+			return items[i].BlockUntilMs > items[j].BlockUntilMs
+		}
+		return items[i].LastUpdatedMs > items[j].LastUpdatedMs
+	})
+	return items
+}
+
+func CoreTelemetryEvents() []coreEvent {
+	telemetryLock.Lock()
+	events := append([]coreEvent(nil), telemetryEvents...)
+	telemetryLock.Unlock()
+	return events
 }

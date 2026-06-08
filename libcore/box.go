@@ -2,6 +2,7 @@ package libcore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -145,7 +146,20 @@ var (
 	adaptiveByScope = map[string]adaptiveState{}
 	telemetryLock   sync.Mutex
 	telemetryLastMs = map[string]int64{}
+	telemetryEvents  = make([]coreEvent, 0, 128)
 )
+
+type coreEvent struct {
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+	AtMs    int64  `json:"at_ms"`
+}
+
+type coreDiagnosticsSnapshot struct {
+	Telemetry string               `json:"telemetry"`
+	Health    []coreHealthSnapshot `json:"health"`
+	Events    []coreEvent          `json:"events"`
+}
 
 func routeKeyFromConfig(config string) string {
 	if config == "" {
@@ -271,6 +285,7 @@ func adaptiveUpdateOnUrlFail(failStreak int) {
 }
 
 func telemetryLog(kind string, minIntervalMs int64, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
 	nowMs := time.Now().UnixMilli()
 	telemetryLock.Lock()
 	last := telemetryLastMs[kind]
@@ -279,8 +294,25 @@ func telemetryLog(kind string, minIntervalMs int64, format string, args ...any) 
 		return
 	}
 	telemetryLastMs[kind] = nowMs
+	telemetryEvents = append(telemetryEvents, coreEvent{Kind: kind, Message: msg, AtMs: nowMs})
+	if len(telemetryEvents) > 128 {
+		telemetryEvents = append([]coreEvent(nil), telemetryEvents[len(telemetryEvents)-128:]...)
+	}
 	telemetryLock.Unlock()
-	log.Printf("[core/%s] %s", kind, fmt.Sprintf(format, args...))
+	log.Printf("[core/%s] %s", kind, msg)
+}
+
+func CoreDiagnostics() string {
+	snapshot := coreDiagnosticsSnapshot{
+		Telemetry: CoreTelemetry(),
+		Health:    CoreHealthSnapshot(),
+		Events:    CoreTelemetryEvents(),
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
 }
 
 func NewSingBoxInstance(config string, localTransport LocalDNSTransport) (b *BoxInstance, err error) {

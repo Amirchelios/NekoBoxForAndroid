@@ -15,7 +15,7 @@ func TestCoreHealthManagerBoundsEntries(t *testing.T) {
 		}
 	}
 
-	manager.cleanupLocked(nowMs + int64(time.Minute))
+	manager.cleanupLocked(nowMs + int64(time.Minute/time.Millisecond))
 
 	if len(manager.routes) != coreHealthMaxEntries {
 		t.Fatalf("expected %d routes, got %d", coreHealthMaxEntries, len(manager.routes))
