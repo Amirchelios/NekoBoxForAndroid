@@ -1,0 +1,64 @@
+name: Core Build
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - libcore/**
+      - buildScript/lib/**
+      - buildScript/init/**
+      - buildScript/fdroid/prebuild.sh
+      - .github/workflows/core.yml
+
+jobs:
+  build-core:
+    name: Build LibCore AAR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github
+            app
+            buildSrc
+            build.gradle.kts
+            settings.gradle.kts
+            gradle.properties
+            gradle
+            repositories.gradle.kts
+            nb4a.properties
+            libcore
+            buildScript
+            run
+            LICENSE
+            README.md
+      - name: Gradle and NDK env
+        run: |
+          echo "sdk.dir=${ANDROID_HOME}" > local.properties
+          echo "ndk.dir=${ANDROID_HOME}/ndk/25.0.8775105" >> local.properties
+      - name: Go cache key
+        run: |
+          sha1sum $(find buildScript/lib libcore -type f \( -name '*.go' -o -name '*.sh' -o -name 'go.mod' -o -name 'go.sum' \) | sort) > core_status
+      - name: Cache libcore
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/libs/libcore.aar
+            libcore/.build
+          key: core-${{ hashFiles('.github/workflows/core.yml', 'core_status') }}
+      - name: Install Golang
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.25'
+      - name: Build LibCore
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./run lib core
+      - name: Upload LibCore
+        uses: actions/upload-artifact@v4
+        with:
+          name: libcore-aar
+          path: app/libs/libcore.aar

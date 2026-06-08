@@ -9,6 +9,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github
+            app
+            buildSrc
+            build.gradle.kts
+            settings.gradle.kts
+            gradle.properties
+            gradle
+            repositories.gradle.kts
+            nb4a.properties
+            libcore
+            buildScript
+            run
+            singbox_subs_builder
+            proxy-to-singbox-converter-main
+            LICENSE
+            README.md
       - name: Golang Status
         run: find buildScript libcore/*.sh | xargs cat | sha1sum > golang_status
       - name: Libcore Status
@@ -36,6 +56,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github
+            app
+            buildSrc
+            build.gradle.kts
+            settings.gradle.kts
+            gradle.properties
+            gradle
+            repositories.gradle.kts
+            nb4a.properties
+            libcore
+            buildScript
+            run
+            singbox_subs_builder
+            proxy-to-singbox-converter-main
+            LICENSE
+            README.md
       - name: Golang Status
         run: find buildScript libcore/*.sh | xargs cat | sha1sum > golang_status
       - name: Libcore Status
