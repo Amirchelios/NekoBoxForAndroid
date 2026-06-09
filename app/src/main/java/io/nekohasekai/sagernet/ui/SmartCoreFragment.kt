@@ -10,6 +10,7 @@ import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import io.nekohasekai.sagernet.R
+import io.nekohasekai.sagernet.bg.proto.SmartLearningEngine
 import io.nekohasekai.sagernet.bg.BaseService
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.ProxyEntity
@@ -104,27 +105,15 @@ class SmartCorePreferenceFragment : PreferenceFragmentCompat() {
             ?: DataStore.smartMainRxRate
         val runtimeDecision = service?.let { runCatching { it.smartLastDecision }.getOrNull() }
             ?: DataStore.smartLastDecision
-        val runtimeQuarantinedIds = service?.let {
-            runCatching {
-                it.smartQuarantinedProxyIds.split(',')
-                    .mapNotNull { item ->
-                        val parts = item.split(':', limit = 2)
-                        val id = parts.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null
-                        val until = parts.getOrNull(1)?.toLongOrNull() ?: return@mapNotNull null
-                        id to until
-                    }
-                    .toMap()
-            }.getOrDefault(emptyMap())
-        }
         val groupId = runtimeGroupId.takeIf { it > 0L } ?: DataStore.selectedGroup
 
         val activeId = if (serviceState == BaseService.State.Connected) {
             runtimeActiveId.takeIf { it > 0L }
-                ?: DataStore.getSmartPreferredProxy(groupId)
+                ?: SmartLearningEngine.preferredProxy(groupId)
         } else {
             0L
         }
-        val order = DataStore.getSmartPreferredOrder(groupId)
+        val order = SmartLearningEngine.preferredOrder(groupId)
         val standbyId = runtimeStandbyId.takeIf { it > 0L }
             ?: order.firstOrNull { it != activeId }
             ?: 0L
@@ -142,16 +131,13 @@ class SmartCorePreferenceFragment : PreferenceFragmentCompat() {
         decision.summary = runtimeDecision.ifBlank { getString(R.string.smart_status_no_decision) }
 
         val now = System.currentTimeMillis()
-        val quarantined = profiles.filter {
-            (runtimeQuarantinedIds?.get(it.id) ?: DataStore.getSmartQuarantineUntil(it.id)) > now
-        }
+        val quarantined = profiles.filter { SmartLearningEngine.isQuarantined(it.id, now) }
         quarantine.summary = if (quarantined.isEmpty()) {
             getString(R.string.smart_status_none)
         } else {
             quarantined.joinToString("\n") {
                 val remaining = TimeUnit.MILLISECONDS.toMinutes(
-                    ((runtimeQuarantinedIds?.get(it.id) ?: DataStore.getSmartQuarantineUntil(it.id)) - now)
-                        .coerceAtLeast(0L)
+                    (SmartLearningEngine.getSummary(it.id).quarantineUntil - now).coerceAtLeast(0L)
                 ).coerceAtLeast(1L)
                 getString(R.string.smart_status_quarantine_item, it.displayName(), remaining)
             }
@@ -160,15 +146,27 @@ class SmartCorePreferenceFragment : PreferenceFragmentCompat() {
 
     private fun describeProfile(profile: ProxyEntity?): String {
         if (profile == null) return getString(R.string.smart_status_none)
-        val score = DataStore.getSmartLastScore(profile.id)
-        val bandwidth = DataStore.getSmartLastBandwidthKbps(profile.id)
-        val streak = DataStore.getSmartFailureStreak(profile.id)
+        val summary = SmartLearningEngine.getSummary(profile.id)
+        val score = summary.lastScore
+        val bandwidth = summary.lastBandwidthKbps
+        val streak = summary.failureStreak
+        val emaScore = SmartLearningEngine.getEma(profile.id, "score")
+        val emaBandwidth = SmartLearningEngine.getEma(profile.id, "bandwidth")
         val latency = if (score > 0) getString(R.string.smart_status_latency, score) else "-"
         val speed = if (bandwidth > 0) {
             Formatter.formatFileSize(requireContext(), bandwidth.toLong() * 1000L / 8L) + "/s"
         } else {
             "-"
         }
-        return getString(R.string.smart_status_profile_detail, profile.displayName(), latency, speed, streak)
+        return getString(
+            R.string.smart_status_profile_detail,
+            profile.displayName(),
+            latency,
+            speed,
+            streak
+        ) + "\n" +
+            "ema_score=" + if (emaScore >= 0) emaScore else "-" +
+            " ema_bw=" + if (emaBandwidth >= 0) emaBandwidth else "-" +
+            "\n" + SmartLearningEngine.formatSummary(profile.id)
     }
 }

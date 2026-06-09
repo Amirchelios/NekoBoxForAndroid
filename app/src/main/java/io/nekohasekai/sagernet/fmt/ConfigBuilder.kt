@@ -3,6 +3,7 @@ package io.nekohasekai.sagernet.fmt
 import android.widget.Toast
 import io.nekohasekai.sagernet.*
 import io.nekohasekai.sagernet.bg.VpnService
+import io.nekohasekai.sagernet.bg.proto.SmartLearningEngine
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.ProxyEntity.Companion.TYPE_CONFIG
@@ -525,8 +526,8 @@ fun buildConfig(
             list.forEach {
                 tagMap[it.id] = buildChain(it.id, it)
             }
-            val preferredId = DataStore.getSmartPreferredProxy(groupId)
-            val preferredOrder = DataStore.getSmartPreferredOrder(groupId)
+            val preferredId = SmartLearningEngine.preferredProxy(groupId)
+            val preferredOrder = SmartLearningEngine.preferredOrder(groupId)
             val orderedTags = if (preferredOrder.isNotEmpty()) {
                 val preferredTags = preferredOrder.mapNotNull { tagMap[it] }
                 val restTags = tagMap.entries

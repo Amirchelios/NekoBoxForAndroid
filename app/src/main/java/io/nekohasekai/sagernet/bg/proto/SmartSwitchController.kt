@@ -5,6 +5,7 @@ import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
+import io.nekohasekai.sagernet.bg.proto.SmartLearningEngine
 import kotlinx.coroutines.delay
 import libcore.Libcore
 import kotlin.math.max
@@ -251,7 +252,7 @@ class SmartSwitchController(
                 if (previousId > 0L && previousId != id) {
                     DataStore.bumpSmartRecentSwitchCount(previousId)
                 }
-                DataStore.setSmartPreferredProxy(profile.groupId, id)
+                SmartLearningEngine.setPreferredProxy(profile.groupId, id)
                 DataStore.setSmartPreferredProxyScoped(currentScope(), profile.groupId, id)
                 DataStore.bumpSmartRecentSwitchCount(id)
                 setDecision("switch:$id")
@@ -340,7 +341,7 @@ class SmartSwitchController(
             }
 
             val scopedPreferredId = DataStore.getSmartPreferredProxyScoped(currentScope(), profile.groupId)
-            val preferredId = DataStore.getSmartPreferredProxy(profile.groupId)
+            val preferredId = SmartLearningEngine.preferredProxy(profile.groupId)
             if (scopedPreferredId > 0L) {
                 selectOutboundById(scopedPreferredId)
             } else if (preferredId > 0L) {

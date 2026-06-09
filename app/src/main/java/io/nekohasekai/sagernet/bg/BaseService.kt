@@ -13,6 +13,7 @@ import io.nekohasekai.sagernet.aidl.ISagerNetService
 import io.nekohasekai.sagernet.aidl.ISagerNetServiceCallback
 import io.nekohasekai.sagernet.bg.proto.ProxyInstance
 import io.nekohasekai.sagernet.bg.proto.SmartSelector
+import io.nekohasekai.sagernet.bg.proto.SmartLearningEngine
 import io.nekohasekai.sagernet.bg.proto.SmartSwitchController
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.ProxyEntity
@@ -162,7 +163,7 @@ class BaseService {
             return SagerDatabase.proxyDao.getByGroup(groupId)
                 .asSequence()
                 .map { it.id }
-                .map { it to DataStore.getSmartQuarantineUntil(it) }
+                .map { it to SmartLearningEngine.getSummary(it).quarantineUntil }
                 .filter { (_, until) -> until > System.currentTimeMillis() }
                 .joinToString(",") { (id, until) -> "$id:$until" }
         }

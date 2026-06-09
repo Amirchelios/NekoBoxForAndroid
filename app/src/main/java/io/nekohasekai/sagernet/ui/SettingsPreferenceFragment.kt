@@ -12,6 +12,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.nekohasekai.sagernet.Key
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
+import io.nekohasekai.sagernet.bg.proto.SmartLearningEngine
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.preference.EditTextPreferenceModifiers
 import io.nekohasekai.sagernet.ktx.*
@@ -204,8 +205,30 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
     private fun buildSmartDebugSummary(): String {
         val health = DataStore.smartSessionHealth
         val decision = DataStore.smartLastDecision.ifBlank { "idle" }
-        return getString(R.string.smart_debug_health) + ": " + health + "/100\n" +
-            getString(R.string.smart_debug_last_decision) + ": " + decision
+        val activeId = DataStore.smartActiveProxyId
+        val summary = if (activeId > 0L) SmartLearningEngine.getSummary(activeId) else null
+        return buildString {
+            append(getString(R.string.smart_debug_health))
+            append(": ")
+            append(health)
+            append("/100\n")
+            append(getString(R.string.smart_debug_last_decision))
+            append(": ")
+            append(decision)
+            if (summary != null) {
+                append("\n")
+                append("quality=")
+                append(summary.qualityScore)
+                append(" confidence=")
+                append(summary.confidence)
+                append(" streak=")
+                append(summary.failureStreak)
+                append(" ema_score=")
+                append(SmartLearningEngine.getEma(activeId, "score"))
+                append(" ema_bw=")
+                append(SmartLearningEngine.getEma(activeId, "bandwidth"))
+            }
+        }
     }
 
 }
