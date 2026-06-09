@@ -152,15 +152,16 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val safeToolbar = toolbar
 
         if (!select) {
-            toolbar.inflateMenu(R.menu.add_profile_menu)
+            safeToolbar?.inflateMenu(R.menu.add_profile_menu)
             updateAddProfileMenu()
-            toolbar.setOnMenuItemClickListener(this)
+            safeToolbar?.setOnMenuItemClickListener(this)
         } else {
-            toolbar.setTitle(titleRes)
-            toolbar.setNavigationIcon(R.drawable.ic_navigation_close)
-            toolbar.setNavigationOnClickListener {
+            safeToolbar?.setTitle(titleRes)
+            safeToolbar?.setNavigationIcon(R.drawable.ic_navigation_close)
+            safeToolbar?.setNavigationOnClickListener {
                 requireActivity().finish()
             }
         }
@@ -176,7 +177,7 @@ class ConfigurationFragment @JvmOverloads constructor(
         if (showAllProfiles) {
             tabLayout.isGone = true
             groupPager.isUserInputEnabled = false
-            toolbar.elevation = 0F
+            safeToolbar?.elevation = 0F
         }
 
         TabLayoutMediator(tabLayout, groupPager) { tab, position ->
@@ -188,7 +189,7 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
         }.attach()
 
-        toolbar.setOnClickListener {
+        safeToolbar?.setOnClickListener {
             val fragment = getCurrentGroupFragment()
 
             if (fragment != null) {
@@ -223,10 +224,11 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     private fun updateAddProfileMenu() {
         if (select) return
-        val addItem = toolbar.menu.findItem(R.id.action_add) ?: return
+        val safeToolbar = toolbar ?: return
+        val addItem = safeToolbar.menu.findItem(R.id.action_add) ?: return
         addItem.isVisible = DataStore.clientMode
         addItem.isEnabled = DataStore.clientMode
-        val autoDnsItem = toolbar.menu.findItem(R.id.action_auto_dns) ?: return
+        val autoDnsItem = safeToolbar.menu.findItem(R.id.action_auto_dns) ?: return
         autoDnsItem.isVisible = DataStore.clientMode
         autoDnsItem.isEnabled = DataStore.clientMode
     }
@@ -577,7 +579,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                         }
                         val hideTab = showAllProfiles || groupList.size < 2
                         tabLayout.isGone = hideTab
-                        toolbar.elevation = if (hideTab) 0F else dp2px(4).toFloat()
+                        toolbar?.elevation = if (hideTab) 0F else dp2px(4).toFloat()
                         if (!select && !showAllProfiles) {
                             groupPager.registerOnPageChangeCallback(updateSelectedCallback)
                         }

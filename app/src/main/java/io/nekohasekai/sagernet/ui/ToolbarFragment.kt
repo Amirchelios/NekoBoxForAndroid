@@ -13,15 +13,22 @@ open class ToolbarFragment : Fragment {
     constructor() : super()
     constructor(contentLayoutId: Int) : super(contentLayoutId)
 
-    lateinit var toolbar: Toolbar
+    private var _toolbar: Toolbar? = null
+    val toolbar: Toolbar?
+        get() = _toolbar
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        toolbar = view.findViewById(R.id.toolbar)
-        toolbar.setNavigationIcon(R.drawable.ic_navigation_menu)
-        toolbar.setNavigationOnClickListener {
+        _toolbar = view.findViewById(R.id.toolbar)
+        _toolbar?.setNavigationIcon(R.drawable.ic_navigation_menu)
+        _toolbar?.setNavigationOnClickListener {
             (activity as MainActivity).binding.drawerLayout.openDrawer(GravityCompat.START)
         }
+    }
+
+    override fun onDestroyView() {
+        _toolbar = null
+        super.onDestroyView()
     }
 
     open fun onKeyDown(ketCode: Int, event: KeyEvent) = false

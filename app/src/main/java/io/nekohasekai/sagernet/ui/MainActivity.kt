@@ -89,14 +89,17 @@ class MainActivity : ThemedActivity(),
         binding.fab.initProgress(binding.fabProgress)
         setupNavigationView()
 
+        setContentView(binding.root)
+
         if (savedInstanceState == null) {
             displayFragmentWithId(R.id.nav_configuration)
         }
         setupBackNavigation()
         setupQuickActions()
 
-        setContentView(binding.root)
-        setupStartupUi()
+        binding.drawerLayout.post {
+            setupStartupUi()
+        }
         changeState(BaseService.State.Idle)
         setupRuntime()
 

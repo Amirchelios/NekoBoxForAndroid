@@ -44,7 +44,7 @@ class AboutFragment : ToolbarFragment(R.layout.layout_about) {
         val binding = LayoutAboutBinding.bind(view)
 
         ViewCompat.setOnApplyWindowInsetsListener(view, ListListener)
-        toolbar.setTitle(R.string.menu_about)
+        toolbar?.setTitle(R.string.menu_about)
 
         parentFragmentManager.beginTransaction()
             .replace(R.id.about_fragment_holder, AboutContent())

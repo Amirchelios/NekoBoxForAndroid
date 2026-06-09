@@ -13,7 +13,7 @@ class ToolsFragment : ToolbarFragment(R.layout.layout_tools) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        toolbar.setTitle(R.string.menu_tools)
+        toolbar?.setTitle(R.string.menu_tools)
 
         val tools = listOf<NamedFragment>(NetworkFragment(), SmartCoreFragment())
 
