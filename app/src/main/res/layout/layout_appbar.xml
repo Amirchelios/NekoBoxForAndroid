@@ -5,15 +5,17 @@
     android:layout_width="match_parent"
     android:layout_height="?attr/actionBarSize"
     android:background="@drawable/bg_appbar"
-    android:elevation="4dp">
+    android:elevation="6dp">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/bg_appbar"
+        android:contentInsetStartWithNavigation="0dp"
         android:theme="?actionBarTheme"
         android:touchscreenBlocksFocus="false"
         app:popupTheme="@style/ThemeOverlay.AppCompat.DayNight"
+        app:titleTextAppearance="@style/Widget.SagerNet.SectionTitle"
         app:title="@string/app_name" />
 </com.google.android.material.appbar.AppBarLayout>

@@ -340,6 +340,7 @@
     <string name="auto">Auto</string>
     <string name="enable_log">Enable Log</string>
     <string name="enable_log_sum">For debugging purposes</string>
+    <string name="loading">Loading</string>
     <string name="list">List</string>
     <string name="random">Random</string>
     <string name="leastPing" translatable="false">Ping</string>

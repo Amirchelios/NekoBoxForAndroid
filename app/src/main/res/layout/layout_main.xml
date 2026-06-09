@@ -23,9 +23,9 @@
             android:id="@+id/quick_server_update"
             android:layout_width="46dp"
             android:layout_height="46dp"
-            android:layout_gravity="top|left"
-            android:layout_marginLeft="36dp"
-            android:layout_marginTop="4dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="68dp"
+            android:layout_marginEnd="18dp"
             android:background="@drawable/bg_quick_update_appbar_button"
             android:clickable="true"
             android:elevation="18dp"
@@ -142,11 +142,7 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="260dp"
                 android:layout_height="62dp"
-                app:cardBackgroundColor="@color/glass_surface"
-                app:cardCornerRadius="18dp"
-                app:cardElevation="8dp"
-                app:strokeColor="@color/glass_stroke"
-                app:strokeWidth="1dp">
+                style="@style/Widget.SagerNet.Card">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -253,21 +249,17 @@
 
         </io.nekohasekai.sagernet.widget.StatsBar>
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/location_card"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/location_card"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
             android:alpha="0"
             android:translationY="84dp"
             android:visibility="gone"
-            app:cardBackgroundColor="@android:color/transparent"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="10dp"
-            app:strokeColor="@color/glass_stroke"
-            app:strokeWidth="1dp"
-            app:layout_anchor="@id/fab"
-            app:layout_anchorGravity="center_horizontal|bottom">
+                style="@style/Widget.SagerNet.Card"
+                app:layout_anchor="@id/fab"
+                app:layout_anchorGravity="center_horizontal|bottom">
 
             <LinearLayout
                 android:layout_width="wrap_content"
