@@ -106,6 +106,7 @@ class SmartCorePreferenceFragment : PreferenceFragmentCompat() {
         val runtimeDecision = service?.let { runCatching { it.smartLastDecision }.getOrNull() }
             ?: DataStore.smartLastDecision
         val groupId = runtimeGroupId.takeIf { it > 0L } ?: DataStore.selectedGroup
+        val ambientHealthy = SmartLearningEngine.probeAmbientNetwork()
 
         val activeId = if (serviceState == BaseService.State.Connected) {
             runtimeActiveId.takeIf { it > 0L }
@@ -127,7 +128,11 @@ class SmartCorePreferenceFragment : PreferenceFragmentCompat() {
             runtimeHealth.coerceIn(0, 100),
             runtimeTxRate,
             runtimeRxRate,
-        )
+        ) + "\n" + if (ambientHealthy) {
+            "network=ok"
+        } else {
+            "network=degraded"
+        }
         decision.summary = runtimeDecision.ifBlank { getString(R.string.smart_status_no_decision) }
 
         val now = System.currentTimeMillis()

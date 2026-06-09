@@ -12,6 +12,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import java.net.HttpURLConnection
+import java.net.URL
 
 object SmartSelector {
 
@@ -40,6 +42,7 @@ object SmartSelector {
 
     private data class ProfileEvaluation(
         val profile: ProxyEntity,
+        val learnedScore: Int,
         val score: Int?,
         val successRatio: Double,
         val jitter: Int,
@@ -148,11 +151,12 @@ object SmartSelector {
         if (profiles.isEmpty()) return null
 
         val policy = modePolicy()
+        val ambientHealthy = probeAmbientNetwork()
         val candidates = filterQuarantined(profiles)
         val timeoutMs = (TIMEOUT_MS + policy.probeBiasMs).coerceIn(1_500, 6_000)
-        val evaluations = evaluateProfiles(candidates, groupId, scope, timeoutMs, MAX_ATTEMPTS)
+        val evaluations = evaluateProfiles(candidates, groupId, scope, timeoutMs, MAX_ATTEMPTS, ambientHealthy)
         if (evaluations.isEmpty()) return null
-        evaluations.forEach { updateHealthState(groupId, scope, it) }
+        evaluations.forEach { updateHealthState(groupId, scope, it, ambientHealthy) }
 
         val valid = refineWithThroughput(evaluations.filter { it.score != null })
             .sortedWith(compareBy<ProfileEvaluation> {
@@ -162,7 +166,7 @@ object SmartSelector {
         if (valid.isEmpty()) return null
 
         val shortlist = valid.take(policy.topCount.coerceAtLeast(1))
-        val verified = pickVerifiedCandidate(shortlist, scope, policy) ?: shortlist.first()
+        val verified = pickVerifiedCandidate(shortlist, scope, policy, ambientHealthy) ?: shortlist.first()
         if (verified.score == null || verified.successRatio < policy.minSuccessRatio) {
             return shortlist.firstOrNull()?.profile?.id
         }
@@ -193,6 +197,7 @@ object SmartSelector {
         if (profiles.isEmpty()) return emptyList()
 
         val policy = modePolicy()
+        val ambientHealthy = probeAmbientNetwork()
         val fastTimeoutMs = (FAST_TIMEOUT_MS + policy.probeBiasMs / 2).coerceIn(1_000, 4_000)
         val cachedOrder = SmartLearningEngine.preferredOrder(groupId)
         val profileMap = profiles.associateBy { it.id }
@@ -206,9 +211,9 @@ object SmartSelector {
             .sortedByDescending { fastPriorityScore(it) }
             .take(FAST_LIMIT)
 
-        val evaluations = evaluateProfiles(candidates, groupId, scope, fastTimeoutMs, FAST_MAX_ATTEMPTS)
+        val evaluations = evaluateProfiles(candidates, groupId, scope, fastTimeoutMs, FAST_MAX_ATTEMPTS, ambientHealthy)
         if (evaluations.isEmpty()) return emptyList()
-        evaluations.forEach { updateHealthState(groupId, scope, it) }
+        evaluations.forEach { updateHealthState(groupId, scope, it, ambientHealthy) }
 
         val sorted = refineWithThroughput(evaluations.filter { it.score != null })
             .sortedWith(compareBy<ProfileEvaluation> {
@@ -217,7 +222,7 @@ object SmartSelector {
                 .thenByDescending { it.bandwidthKbps })
         if (sorted.isEmpty()) return emptyList()
         val shortlist = sorted.take(policy.topCount.coerceAtLeast(1))
-        val verified = pickVerifiedCandidate(shortlist, scope, policy) ?: shortlist.first()
+        val verified = pickVerifiedCandidate(shortlist, scope, policy, ambientHealthy) ?: shortlist.first()
         val fallbackIds = evaluations.filterNot { it.score != null }.map { it.profile.id }
         val committedId = commitCandidate(groupId, verified, sorted, fallbackIds)
         return (listOf(committedId) + sorted.filterNot { it.profile.id == committedId }.map { it.profile.id } + fallbackIds)
@@ -230,6 +235,7 @@ object SmartSelector {
         val failStreak = SmartLearningEngine.failureStreak(profile.id)
         val healthPenalty = SmartLearningEngine.healthPenalty(profile.id)
         val quality = SmartLearningEngine.qualityScore(profile.id)
+        val composite = SmartLearningEngine.compositeScore(profile.id)
         val quarantinePenalty = if (SmartLearningEngine.isQuarantined(profile.id)) 12_000L else 0L
 
         val latencyScore = if (lastScore > 0) {
@@ -240,7 +246,7 @@ object SmartSelector {
         val throughputScore = bandwidth.coerceAtMost(80_000).toLong() * 2L
         val failPenalty = failStreak.toLong() * 1_500L
         val healthPenaltyScore = healthPenalty.toLong() * 4L
-        return latencyScore + throughputScore + quality.toLong() * 600L -
+        return latencyScore + throughputScore + quality.toLong() * 420L + composite.toLong() * 8L -
             failPenalty - healthPenaltyScore - quarantinePenalty
     }
 
@@ -282,15 +288,24 @@ object SmartSelector {
         val policy = modePolicy()
         val hysteresis = if (ev.profile.id == preferredId) policy.hysteresisBonus else 0
         val quarantineBonus = if (SmartLearningEngine.isQuarantined(ev.profile.id)) policy.quarantineBoost else 0
-        return (base - bias - hysteresis + churnPenalty + quarantineBonus).coerceAtLeast(1)
+        val learnedBias = ev.learnedScore / 2
+        return (base - bias - hysteresis - learnedBias + churnPenalty + quarantineBonus).coerceAtLeast(1)
     }
 
     private suspend fun verifyCandidate(
         profile: ProxyEntity,
         scope: String,
         policy: ModePolicy,
+        ambientHealthy: Boolean,
     ): ProfileEvaluation? {
-        val evaluated = evaluateProfile(profile, profile.groupId, scope, policy.verifyTimeoutMs, policy.verifyAttempts)
+        val evaluated = evaluateProfile(
+            profile,
+            profile.groupId,
+            scope,
+            policy.verifyTimeoutMs,
+            policy.verifyAttempts,
+            ambientHealthy,
+        )
             ?: return null
         val refined = refineWithThroughput(listOf(evaluated)).firstOrNull() ?: evaluated
         return refined
@@ -323,9 +338,10 @@ object SmartSelector {
         shortlist: List<ProfileEvaluation>,
         scope: String,
         policy: ModePolicy,
+        ambientHealthy: Boolean,
     ): ProfileEvaluation? {
         for (candidate in shortlist) {
-            val checked = verifyCandidate(candidate.profile, scope, policy) ?: continue
+            val checked = verifyCandidate(candidate.profile, scope, policy, ambientHealthy) ?: continue
             if (checked.score != null && checked.successRatio >= policy.minSuccessRatio) {
                 return checked
             }
@@ -343,6 +359,7 @@ object SmartSelector {
         val base = ev.score ?: Int.MAX_VALUE
         if (base == Int.MAX_VALUE) return base
         val qualityPenalty = (100 - SmartLearningEngine.qualityScore(ev.profile.id)).coerceIn(0, 100) * 3
+        val learnedScore = ev.learnedScore
         val policy = modePolicy()
         val bandwidthBonus = if (policy.preferBandwidth) {
             bandwidthScoreBonus(ev.bandwidthKbps)
@@ -354,25 +371,29 @@ object SmartSelector {
                 base + ev.jitter.coerceAtMost(500) * 2 +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 700.0).toInt() +
                     qualityPenalty -
-                    (bandwidthBonus / 3)
+                    (bandwidthBonus / 3) -
+                    (learnedScore / 30)
             }
             SmartMode.STREAMING -> {
                 base + ev.jitter.coerceAtMost(500) +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 1000.0).toInt() -
                     bandwidthBonus * 2 +
-                    qualityPenalty
+                    qualityPenalty -
+                    (learnedScore / 24)
             }
             SmartMode.DOWNLOAD -> {
                 base - bandwidthBonus * 3 +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 450.0).toInt() +
-                    qualityPenalty / 2
+                    qualityPenalty / 2 -
+                    (learnedScore / 20)
             }
             SmartMode.MANUAL,
             SmartMode.BALANCED -> {
                 base + ev.jitter.coerceAtMost(350) +
                     ((1.0 - ev.successRatio).coerceIn(0.0, 1.0) * 650.0).toInt() -
                     bandwidthBonus +
-                    qualityPenalty
+                    qualityPenalty -
+                    (learnedScore / 26)
             }
         }.coerceAtLeast(1)
     }
@@ -383,6 +404,7 @@ object SmartSelector {
         scope: String,
         timeoutMs: Int,
         attempts: Int,
+        ambientHealthy: Boolean,
     ): List<ProfileEvaluation> {
         val concurrency = DataStore.connectionTestConcurrent.coerceAtLeast(1)
         val semaphore = Semaphore(concurrency)
@@ -390,7 +412,7 @@ object SmartSelector {
             profiles.map { profile ->
                 async {
                     semaphore.withPermit {
-                        evaluateProfile(profile, groupId, scope, timeoutMs, attempts)
+                        evaluateProfile(profile, groupId, scope, timeoutMs, attempts, ambientHealthy)
                     }
                 }
             }.awaitAll().filterNotNull()
@@ -403,6 +425,7 @@ object SmartSelector {
         scope: String,
         timeoutMs: Int,
         attempts: Int,
+        ambientHealthy: Boolean,
     ): ProfileEvaluation? {
         return try {
             val transportClass = detectTransportClass(profile)
@@ -428,15 +451,18 @@ object SmartSelector {
             } else {
                 0
             }
+            val learnedScore = SmartLearningEngine.compositeScore(profile.id, scope, transportClass.key)
             val finalScore = if (baseScore == null || successRatio < MIN_SUCCESS_RATIO) {
                 null
             } else {
-                (baseScore + rawPenalty + healthPenalty + streakPenalty + transportPenalty)
+                val ambientPenalty = if (ambientHealthy) 0 else 240
+                (baseScore + rawPenalty + healthPenalty + streakPenalty + transportPenalty + ambientPenalty - (learnedScore / 15))
                     .coerceAtLeast(1)
             }
             DataStore.setSmartLastObservedAt(profile.id, System.currentTimeMillis())
             ProfileEvaluation(
                 profile = profile,
+                learnedScore = learnedScore,
                 score = finalScore,
                 successRatio = successRatio,
                 jitter = jitter,
@@ -562,7 +588,7 @@ object SmartSelector {
         return (failPenalty + jitterPenalty + worstPenalty - bandwidthBonus).coerceAtLeast(0)
     }
 
-    private fun updateHealthState(groupId: Long, scope: String, result: ProfileEvaluation) {
+    private fun updateHealthState(groupId: Long, scope: String, result: ProfileEvaluation, ambientHealthy: Boolean) {
         SmartLearningEngine.observe(
             SmartLearningEngine.Observation(
                 profileId = result.profile.id,
@@ -580,11 +606,32 @@ object SmartSelector {
             val step = DataStore.smartTransportPenaltyStep.coerceIn(20, 600)
             val decay = DataStore.smartTransportPenaltyDecay.coerceIn(10, 400)
             if (result.score == null) {
-                DataStore.adjustSmartTransportPenalty(scope, groupId, result.transportClass.key, step)
+                DataStore.adjustSmartTransportPenalty(scope, groupId, result.transportClass.key, if (ambientHealthy) step else step / 2)
             } else {
                 DataStore.decaySmartTransportPenalty(scope, groupId, result.transportClass.key, decay)
             }
         }
+    }
+
+    private suspend fun probeAmbientNetwork(): Boolean {
+        val urls = listOf(
+            "https://cp.cloudflare.com/generate_204",
+            "https://www.gstatic.com/generate_204"
+        )
+        for (raw in urls) {
+            val ok = runCatching {
+                val connection = URL(raw).openConnection() as HttpURLConnection
+                connection.connectTimeout = 1500
+                connection.readTimeout = 1500
+                connection.instanceFollowRedirects = false
+                connection.requestMethod = "GET"
+                val code = connection.responseCode
+                connection.disconnect()
+                code in 200..204
+            }.getOrDefault(false)
+            if (ok) return true
+        }
+        return false
     }
 
     private fun detectTransportClass(profile: ProxyEntity): TransportClass {
