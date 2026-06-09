@@ -219,6 +219,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartSwitchSensitivity by configurationStore.string("smartSwitchSensitivity") { "balanced" }
     var smartSwitchNotificationsEnabled by configurationStore.boolean("smartSwitchNotificationsEnabled") { true }
     var smartInterruptExistingConnections by configurationStore.boolean("smartInterruptExistingConnections") { true }
+    @Volatile
     var smartActiveProxyId by configurationStore.long("smartActiveProxyId")
     @Volatile
     var smartRuntimeGroupId: Long = 0L
@@ -226,7 +227,9 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartStandbyProxyId: Long = 0L
     var smartEnableNetworkLearning by configurationStore.boolean("smartEnableNetworkLearning") { true }
     var smartDebugEnabled by configurationStore.boolean("smartDebugEnabled") { false }
+    @Volatile
     var smartSessionHealth by configurationStore.int("smartSessionHealth") { 0 }
+    @Volatile
     var smartLastDecision by configurationStore.string("smartLastDecision") { "idle" }
     var smartAdaptiveTransportEnabled by configurationStore.boolean("smartAdaptiveTransportEnabled") { true }
     var smartTransportPenaltyStep by configurationStore.int("smartTransportPenaltyStep") { 160 }
@@ -263,6 +266,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         val disruptionHoldMaxSec: Int,
     )
 
+    @Volatile
     @Volatile
     var smartMainTxRate: Long = 0L
 

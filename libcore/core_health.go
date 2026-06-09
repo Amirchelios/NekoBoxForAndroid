@@ -26,6 +26,8 @@ type coreTelemetrySnapshot struct {
 	LastDecision     string        `json:"last_decision"`
 	RouteCount       int           `json:"route_count"`
 	OpenCircuitCount int           `json:"open_circuit_count"`
+	Severity         int32         `json:"severity"`
+	Stability        int32         `json:"stability"`
 	Adaptive         adaptiveState `json:"adaptive"`
 	UpdatedAtMs      int64         `json:"updated_at_ms"`
 }
@@ -174,6 +176,7 @@ func CoreTelemetry() string {
 	adaptiveLock.Unlock()
 	healthManager.lock.Lock()
 	healthManager.cleanupLocked(nowMs)
+	policy := currentAdaptivePolicy()
 	open := 0
 	for _, entry := range healthManager.routes {
 		if entry.BlockUntilMs > nowMs {
@@ -186,6 +189,8 @@ func CoreTelemetry() string {
 		LastDecision:     healthManager.lastDecision,
 		RouteCount:       len(healthManager.routes),
 		OpenCircuitCount: open,
+		Severity:         policy.Severity,
+		Stability:        policy.Stability,
 		Adaptive:         adaptive,
 		UpdatedAtMs:      healthManager.updatedAtMs,
 	}

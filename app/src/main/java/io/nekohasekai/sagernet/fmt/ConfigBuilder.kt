@@ -538,11 +538,21 @@ fun buildConfig(
                 tagMap.values.toList()
             }
             DataStore.clearSmartPreferredOrderDirty(groupId)
+            val urlTestTag = "${TAG_PROXY}-urltest"
+            outbounds.add(0, Outbound_URLTestOptions().apply {
+                type = "urltest"
+                tag = urlTestTag
+                outbounds = orderedTags
+                url = DataStore.connectionTestURL.ifBlank { "https://www.gstatic.com/generate_204" }
+                interval = (DataStore.smartSwitchProbeIntervalSec.coerceIn(10, 120) * 1000L)
+                tolerance = DataStore.parallelTolerance.coerceIn(20, 500)
+            })
             outbounds.add(0, Outbound_SelectorOptions().apply {
                 type = "selector"
                 tag = TAG_PROXY
-                default_ = tagMap[preferredId] ?: tagMap[proxy.id] ?: tagMap.values.firstOrNull()
-                outbounds = orderedTags
+                default_ = urlTestTag
+                outbounds = listOf(urlTestTag) + orderedTags
+                interrupt_exist_connections = DataStore.smartInterruptExistingConnections
             })
         } else {
             buildChain(0, proxy)
@@ -679,31 +689,34 @@ fun buildConfig(
         // Force Iran to go direct and block known ads/malware/phishing.
         if (!forTest) {
             val forceRuleSets = listOf(
-                "geosite:ir",
-                "geoip:ir",
-                "geosite:category-ads-all",
-                "geosite:malware",
-                "geosite:phishing",
-                "geosite:cryptominers",
-                "geoip:malware",
-                "geoip:phishing"
+                "rule-set:geosite-ir",
+                "rule-set:geoip-ir",
+                "rule-set:geosite-category-ads-all",
+                "rule-set:geosite-malware",
+                "rule-set:geosite-phishing",
+                "rule-set:geosite-cryptominers",
+                "rule-set:geoip-malware",
+                "rule-set:geoip-phishing"
             )
             generateRuleSet(forceRuleSets, route.rule_set)
+            if (route.rule_set != null) {
+                route.rule_set = route.rule_set.distinctBy { it.tag }
+            }
 
             route.rules.add(0, Rule_DefaultOptions().apply {
                 rule_set = mutableListOf(
-                    "geosite:category-ads-all",
-                    "geosite:malware",
-                    "geosite:phishing",
-                    "geosite:cryptominers",
-                    "geoip:malware",
-                    "geoip:phishing"
+                    "rule-set:geosite-category-ads-all",
+                    "rule-set:geosite-malware",
+                    "rule-set:geosite-phishing",
+                    "rule-set:geosite-cryptominers",
+                    "rule-set:geoip-malware",
+                    "rule-set:geoip-phishing"
                 )
                 outbound = TAG_BLOCK
             })
 
             route.rules.add(0, Rule_DefaultOptions().apply {
-                rule_set = mutableListOf("geosite:ir", "geoip:ir")
+                rule_set = mutableListOf("rule-set:geosite-ir", "rule-set:geoip-ir")
                 outbound = TAG_DIRECT
             })
 
@@ -711,11 +724,6 @@ fun buildConfig(
                 ip_is_private = true
                 outbound = TAG_DIRECT
             })
-        }
-
-        // 对 rule_set tag 去重
-        if (route.rule_set != null) {
-            route.rule_set = route.rule_set.distinctBy { it.tag }
         }
 
         for (freedom in arrayOf(TAG_DIRECT, TAG_BYPASS)) outbounds.add(Outbound().apply {

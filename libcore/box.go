@@ -141,6 +141,12 @@ type adaptiveTuning struct {
 	StableBonus         int32
 }
 
+type adaptivePolicy struct {
+	Severity  int32
+	Stability int32
+	Tuning    adaptiveTuning
+}
+
 var (
 	adaptiveLock    sync.Mutex
 	adaptiveByScope = map[string]adaptiveState{}
@@ -206,7 +212,7 @@ func clampInt32(v, min, max int32) int32 {
 	return v
 }
 
-func currentAdaptiveTuning() adaptiveTuning {
+func currentAdaptivePolicy() adaptivePolicy {
 	scope := currentNetworkScope()
 	adaptiveLock.Lock()
 	state := adaptiveByScope[scope]
@@ -219,18 +225,28 @@ func currentAdaptiveTuning() adaptiveTuning {
 	if severity > 14 {
 		severity = 14
 	}
+	stability := int32(0)
+	stability += clampInt32(3-state.InstabilityEWMA/250, 0, 3)
+	stability += clampInt32(4-state.FailureEWMA/300, 0, 4)
+	stability += clampInt32(3-state.LatencyEWMA/900, 0, 3)
 
 	t := adaptiveTuning{
-		MinSwitchIntervalMs: coreSelectorMinSwitchIntervalMs + int64(severity)*2_200,
-		BurstLimit:          coreSelectorBurstLimit - int(severity/5),
-		BurstHoldMs:         coreSelectorBurstHoldMs + int64(severity)*4_000,
-		MaxRetry:            coreUrltestMaxRetry + int(severity/4),
-		TimeoutBoostMs:      severity * 120,
+		MinSwitchIntervalMs: coreSelectorMinSwitchIntervalMs + int64(severity)*2_200 - int64(stability)*1_500,
+		BurstLimit:          coreSelectorBurstLimit - int(severity/5) + int(stability/2),
+		BurstHoldMs:         coreSelectorBurstHoldMs + int64(severity)*4_000 - int64(stability)*2_500,
+		MaxRetry:            coreUrltestMaxRetry + int(severity/4) + int(stability/3),
+		TimeoutBoostMs:      severity*120 - stability*70,
 		FailPenalty:         coreUrltestHealthFailPenalty + severity*12,
-		StableBonus:         coreUrltestHealthStableBonus + severity*8,
+		StableBonus:         coreUrltestHealthStableBonus + severity*8 + stability*12,
+	}
+	if t.MinSwitchIntervalMs < 8_000 {
+		t.MinSwitchIntervalMs = 8_000
 	}
 	if t.BurstLimit < 3 {
 		t.BurstLimit = 3
+	}
+	if t.BurstLimit > 8 {
+		t.BurstLimit = 8
 	}
 	if t.MaxRetry > 5 {
 		t.MaxRetry = 5
@@ -238,13 +254,23 @@ func currentAdaptiveTuning() adaptiveTuning {
 	if t.MinSwitchIntervalMs > 45_000 {
 		t.MinSwitchIntervalMs = 45_000
 	}
+	if t.BurstHoldMs < 20_000 {
+		t.BurstHoldMs = 20_000
+	}
 	if t.BurstHoldMs > 90_000 {
 		t.BurstHoldMs = 90_000
+	}
+	if t.TimeoutBoostMs < 0 {
+		t.TimeoutBoostMs = 0
 	}
 	if t.TimeoutBoostMs > 1_200 {
 		t.TimeoutBoostMs = 1_200
 	}
-	return t
+	return adaptivePolicy{Severity: severity, Stability: stability, Tuning: t}
+}
+
+func currentAdaptiveTuning() adaptiveTuning {
+	return currentAdaptivePolicy().Tuning
 }
 
 func adaptiveUpdateOnSwitchReject() {
@@ -252,7 +278,7 @@ func adaptiveUpdateOnSwitchReject() {
 	scope := currentNetworkScope()
 	adaptiveLock.Lock()
 	state := adaptiveByScope[scope]
-	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*8+220)/9, 0, 2500)
+	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*9+180)/10, 0, 2500)
 	state.UpdatedAtMs = nowMs
 	adaptiveByScope[scope] = state
 	adaptiveLock.Unlock()
@@ -265,7 +291,7 @@ func adaptiveUpdateOnUrlSuccess(score int32, jitter int32) {
 	state := adaptiveByScope[scope]
 	state.LatencyEWMA = clampInt32((state.LatencyEWMA*7+score*3)/10, 0, 20000)
 	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*8+jitter*2)/10, 0, 2500)
-	state.FailureEWMA = clampInt32((state.FailureEWMA*7)/10, 0, 2500)
+	state.FailureEWMA = clampInt32((state.FailureEWMA*6)/10, 0, 2500)
 	state.UpdatedAtMs = nowMs
 	adaptiveByScope[scope] = state
 	adaptiveLock.Unlock()
@@ -277,8 +303,8 @@ func adaptiveUpdateOnUrlFail(failStreak int) {
 	scope := currentNetworkScope()
 	adaptiveLock.Lock()
 	state := adaptiveByScope[scope]
-	state.FailureEWMA = clampInt32((state.FailureEWMA*8+bump*2)/10, 0, 2500)
-	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*8+170)/9, 0, 2500)
+	state.FailureEWMA = clampInt32((state.FailureEWMA*7+bump*3)/10, 0, 2500)
+	state.InstabilityEWMA = clampInt32((state.InstabilityEWMA*9+220)/10, 0, 2500)
 	state.UpdatedAtMs = nowMs
 	adaptiveByScope[scope] = state
 	adaptiveLock.Unlock()
