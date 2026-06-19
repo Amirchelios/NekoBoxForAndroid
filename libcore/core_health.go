@@ -22,12 +22,14 @@ type coreHealthEntry struct {
 
 type coreTelemetrySnapshot struct {
 	NetworkScope     string        `json:"network_scope"`
+	NetworkClass     string        `json:"network_class"`
 	SelectedOutbound string        `json:"selected_outbound"`
 	LastDecision     string        `json:"last_decision"`
 	RouteCount       int           `json:"route_count"`
 	OpenCircuitCount int           `json:"open_circuit_count"`
 	Severity         int32         `json:"severity"`
 	Stability        int32         `json:"stability"`
+	Recommendation   string        `json:"recommendation"`
 	Adaptive         adaptiveState `json:"adaptive"`
 	UpdatedAtMs      int64         `json:"updated_at_ms"`
 }
@@ -128,6 +130,10 @@ func (m *coreHealthManager) load(key string, nowMs int64) (routeHealth, bool) {
 	defer m.lock.Unlock()
 	m.cleanupLocked(nowMs)
 	entry := m.routes[key]
+	if entry.BlockUntilMs > nowMs && entry.HalfOpenProbeAtMs > 0 &&
+		nowMs-entry.HalfOpenProbeAtMs < coreHalfOpenProbeWait.Milliseconds() {
+		return entry.routeHealth, false
+	}
 	if entry.BlockUntilMs == 0 && entry.HalfOpenProbeAtMs > 0 &&
 		nowMs-entry.HalfOpenProbeAtMs < coreHalfOpenProbeWait.Milliseconds() {
 		return entry.routeHealth, false
@@ -171,12 +177,14 @@ func CoreTelemetry() string {
 	nowMs := time.Now().UnixMilli()
 	healthManager.syncNetworkScope(nowMs)
 	scope := currentNetworkScope()
+	networkClass := currentNetworkClass()
 	adaptiveLock.Lock()
 	adaptive := adaptiveByScope[scope]
 	adaptiveLock.Unlock()
 	healthManager.lock.Lock()
 	healthManager.cleanupLocked(nowMs)
 	policy := currentAdaptivePolicy()
+	recommendation := recommendCoreActionLocked(nowMs, policy)
 	open := 0
 	for _, entry := range healthManager.routes {
 		if entry.BlockUntilMs > nowMs {
@@ -185,18 +193,47 @@ func CoreTelemetry() string {
 	}
 	snapshot := coreTelemetrySnapshot{
 		NetworkScope:     healthManager.networkScope,
+		NetworkClass:     networkClass,
 		SelectedOutbound: healthManager.selectedOutbound,
 		LastDecision:     healthManager.lastDecision,
 		RouteCount:       len(healthManager.routes),
 		OpenCircuitCount: open,
 		Severity:         policy.Severity,
 		Stability:        policy.Stability,
+		Recommendation:   recommendation,
 		Adaptive:         adaptive,
 		UpdatedAtMs:      healthManager.updatedAtMs,
 	}
 	healthManager.lock.Unlock()
 	data, _ := json.Marshal(snapshot)
 	return string(data)
+}
+
+func recommendCoreActionLocked(nowMs int64, policy adaptivePolicy) string {
+	open := 0
+	worstFail := 0
+	worstScore := int32(1<<31 - 1)
+	for _, entry := range healthManager.routes {
+		if entry.BlockUntilMs > nowMs {
+			open++
+		}
+		if entry.FailStreak > worstFail {
+			worstFail = entry.FailStreak
+		}
+		if entry.LastScore > 0 && entry.LastScore < worstScore {
+			worstScore = entry.LastScore
+		}
+	}
+	switch {
+	case open >= 4 || worstFail >= 5:
+		return "prefer_stable_fallback"
+	case open >= 2 || worstFail >= 3 || policy.Severity >= 8:
+		return "use_conservative_fallback"
+	case worstScore > 0 && worstScore < 900:
+		return "prefer_fastest_known_good"
+	default:
+		return "keep_current_route"
+	}
 }
 
 func CoreHealthSnapshot() []coreHealthSnapshot {
@@ -232,4 +269,14 @@ func CoreTelemetryEvents() []coreEvent {
 	events := append([]coreEvent(nil), telemetryEvents...)
 	telemetryLock.Unlock()
 	return events
+}
+
+func CoreRecommendation() string {
+	nowMs := time.Now().UnixMilli()
+	healthManager.lock.Lock()
+	healthManager.cleanupLocked(nowMs)
+	policy := currentAdaptivePolicy()
+	recommendation := recommendCoreActionLocked(nowMs, policy)
+	healthManager.lock.Unlock()
+	return recommendation
 }

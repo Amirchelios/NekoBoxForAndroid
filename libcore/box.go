@@ -145,6 +145,7 @@ type adaptivePolicy struct {
 	Severity  int32
 	Stability int32
 	Tuning    adaptiveTuning
+	Network   string
 }
 
 var (
@@ -163,6 +164,7 @@ type coreEvent struct {
 
 type coreDiagnosticsSnapshot struct {
 	Telemetry string               `json:"telemetry"`
+	Recommendation string           `json:"recommendation"`
 	Health    []coreHealthSnapshot `json:"health"`
 	Events    []coreEvent          `json:"events"`
 }
@@ -212,8 +214,28 @@ func clampInt32(v, min, max int32) int32 {
 	return v
 }
 
+func maxInt32(v, min int32) int32 {
+	if v < min {
+		return min
+	}
+	return v
+}
+
+func currentNetworkClass() string {
+	scope := currentNetworkScope()
+	switch {
+	case strings.HasPrefix(scope, "network:wifi:"):
+		return "wifi"
+	case strings.HasPrefix(scope, "network:mobile"):
+		return "mobile"
+	default:
+		return "unknown"
+	}
+}
+
 func currentAdaptivePolicy() adaptivePolicy {
 	scope := currentNetworkScope()
+	networkClass := currentNetworkClass()
 	adaptiveLock.Lock()
 	state := adaptiveByScope[scope]
 	adaptiveLock.Unlock()
@@ -266,7 +288,49 @@ func currentAdaptivePolicy() adaptivePolicy {
 	if t.TimeoutBoostMs > 1_200 {
 		t.TimeoutBoostMs = 1_200
 	}
-	return adaptivePolicy{Severity: severity, Stability: stability, Tuning: t}
+	switch networkClass {
+	case "mobile":
+		t.MinSwitchIntervalMs += 3_000
+		t.BurstLimit--
+		t.BurstHoldMs += 8_000
+		t.MaxRetry++
+		t.TimeoutBoostMs += 180
+		t.FailPenalty += 18
+	case "wifi":
+		t.MinSwitchIntervalMs -= 2_000
+		t.BurstLimit++
+		t.BurstHoldMs -= 5_000
+		t.TimeoutBoostMs = maxInt32(t.TimeoutBoostMs-80, 0)
+		t.StableBonus += 18
+	}
+	if t.MinSwitchIntervalMs < 8_000 {
+		t.MinSwitchIntervalMs = 8_000
+	}
+	if t.MinSwitchIntervalMs > 45_000 {
+		t.MinSwitchIntervalMs = 45_000
+	}
+	if t.BurstLimit < 3 {
+		t.BurstLimit = 3
+	}
+	if t.BurstLimit > 8 {
+		t.BurstLimit = 8
+	}
+	if t.BurstHoldMs < 20_000 {
+		t.BurstHoldMs = 20_000
+	}
+	if t.BurstHoldMs > 90_000 {
+		t.BurstHoldMs = 90_000
+	}
+	if t.MaxRetry < coreUrltestMaxRetry {
+		t.MaxRetry = coreUrltestMaxRetry
+	}
+	if t.MaxRetry > 6 {
+		t.MaxRetry = 6
+	}
+	if t.TimeoutBoostMs > 1_500 {
+		t.TimeoutBoostMs = 1_500
+	}
+	return adaptivePolicy{Severity: severity, Stability: stability, Tuning: t, Network: networkClass}
 }
 
 func currentAdaptiveTuning() adaptiveTuning {
@@ -330,15 +394,20 @@ func telemetryLog(kind string, minIntervalMs int64, format string, args ...any) 
 
 func CoreDiagnostics() string {
 	snapshot := coreDiagnosticsSnapshot{
-		Telemetry: CoreTelemetry(),
-		Health:    CoreHealthSnapshot(),
-		Events:    CoreTelemetryEvents(),
+		Telemetry:      CoreTelemetry(),
+		Recommendation: CoreRecommendation(),
+		Health:         CoreHealthSnapshot(),
+		Events:         CoreTelemetryEvents(),
 	}
 	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return "{}"
 	}
 	return string(data)
+}
+
+func CoreFallbackRecommendation() string {
+	return CoreRecommendation()
 }
 
 func NewSingBoxInstance(config string, localTransport LocalDNSTransport) (b *BoxInstance, err error) {

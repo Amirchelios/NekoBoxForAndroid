@@ -118,6 +118,8 @@ func (w *boxPlatformInterfaceWrapper) UnderNetworkExtension() bool {
 }
 
 func (w *boxPlatformInterfaceWrapper) ClearDNSCache() {
+	NotifyNetworkChanged()
+	telemetryLog("dns_flush", 3000, "dns cache flush requested")
 }
 
 // process.Searcher
