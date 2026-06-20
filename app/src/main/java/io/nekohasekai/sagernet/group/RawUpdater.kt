@@ -536,7 +536,7 @@ object RawUpdater : GroupUpdater() {
                                         opt.value as? Boolean == true
 
                                     "client-fingerprint" -> bean.utlsFingerprint =
-                                        opt.value as String
+                                        (opt.value as String).normalizeUtlsFingerprint().orEmpty()
 
                                     "reality-opts" -> (opt.value as? Map<String, Any?>)?.also {
                                         for (realityOpt in it) {
@@ -661,7 +661,7 @@ object RawUpdater : GroupUpdater() {
                                     "port" -> bean.serverPort = opt.value.toString().toInt()
                                     "password" -> bean.password = opt.value.toString()
                                     "client-fingerprint" -> bean.utlsFingerprint =
-                                        opt.value as String
+                                        (opt.value as String).normalizeUtlsFingerprint().orEmpty()
 
                                     "sni" -> bean.sni = opt.value.toString()
                                     "skip-cert-verify" -> bean.allowInsecure =

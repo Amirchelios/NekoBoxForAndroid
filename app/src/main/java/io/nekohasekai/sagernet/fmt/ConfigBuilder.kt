@@ -552,7 +552,6 @@ fun buildConfig(
                 tag = TAG_PROXY
                 default_ = urlTestTag
                 outbounds = listOf(urlTestTag) + orderedTags
-                interrupt_exist_connections = DataStore.smartInterruptExistingConnections
             })
         } else {
             buildChain(0, proxy)
@@ -686,37 +685,24 @@ fun buildConfig(
             }
         }
 
-        // Force Iran to go direct and block known ads/malware/phishing.
+        // These tags are backed by the bundled geosite/geoip databases. Do not add
+        // remote-only tags here unless a matching RuleSet definition is also added.
         if (!forTest) {
             val forceRuleSets = listOf(
-                "rule-set:geosite-ir",
-                "rule-set:geoip-ir",
-                "rule-set:geosite-category-ads-all",
-                "rule-set:geosite-malware",
-                "rule-set:geosite-phishing",
-                "rule-set:geosite-cryptominers",
-                "rule-set:geoip-malware",
-                "rule-set:geoip-phishing"
+                "geosite:ir",
+                "geoip:ir",
+                "geosite:category-ads-all"
             )
             generateRuleSet(forceRuleSets, route.rule_set)
-            if (route.rule_set != null) {
-                route.rule_set = route.rule_set.distinctBy { it.tag }
-            }
+            route.rule_set = route.rule_set.distinctBy { it.tag }
 
             route.rules.add(0, Rule_DefaultOptions().apply {
-                rule_set = mutableListOf(
-                    "rule-set:geosite-category-ads-all",
-                    "rule-set:geosite-malware",
-                    "rule-set:geosite-phishing",
-                    "rule-set:geosite-cryptominers",
-                    "rule-set:geoip-malware",
-                    "rule-set:geoip-phishing"
-                )
-                outbound = TAG_BLOCK
+                rule_set = mutableListOf("geosite:category-ads-all")
+                action = "reject"
             })
 
             route.rules.add(0, Rule_DefaultOptions().apply {
-                rule_set = mutableListOf("rule-set:geosite-ir", "rule-set:geoip-ir")
+                rule_set = mutableListOf("geosite:ir", "geoip:ir")
                 outbound = TAG_DIRECT
             })
 

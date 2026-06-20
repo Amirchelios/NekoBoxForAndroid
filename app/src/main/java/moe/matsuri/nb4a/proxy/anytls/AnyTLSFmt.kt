@@ -2,6 +2,7 @@ package moe.matsuri.nb4a.proxy.anytls
 
 import io.nekohasekai.sagernet.ktx.blankAsNull
 import io.nekohasekai.sagernet.ktx.linkBuilder
+import io.nekohasekai.sagernet.ktx.normalizeUtlsFingerprint
 import io.nekohasekai.sagernet.ktx.toLink
 import io.nekohasekai.sagernet.ktx.urlSafe
 import moe.matsuri.nb4a.SingBoxOptions
@@ -23,7 +24,7 @@ fun buildSingBoxOutboundAnyTLSBean(bean: AnyTLSBean): SingBoxOptions.Outbound_An
             bean.certificates.blankAsNull()?.let {
                 certificate = it
             }
-            bean.utlsFingerprint.blankAsNull()?.let {
+            bean.utlsFingerprint.normalizeUtlsFingerprint()?.let {
                 utls = SingBoxOptions.OutboundUTLSOptions().apply {
                     enabled = true
                     fingerprint = it
@@ -75,7 +76,7 @@ fun parseAnytls(url: String): AnyTLSBean {
             allowInsecure = it == "1" || it == "true"
         }
         link.queryParameter("fp")?.let {
-            utlsFingerprint = it
+            utlsFingerprint = it.normalizeUtlsFingerprint().orEmpty()
         }
     }
 }

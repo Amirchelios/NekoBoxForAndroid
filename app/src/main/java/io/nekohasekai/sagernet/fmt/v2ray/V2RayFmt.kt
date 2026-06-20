@@ -355,7 +355,7 @@ fun parseV2RayN(link: String): VMessBean {
             bean.sni = vmessQRCode.sni
             if (bean.sni.isNullOrBlank()) bean.sni = bean.host
             bean.alpn = vmessQRCode.alpn
-            bean.utlsFingerprint = vmessQRCode.fp
+            bean.utlsFingerprint = vmessQRCode.fp.normalizeUtlsFingerprint().orEmpty()
         }
         else -> {
             bean.security = "none"
@@ -432,7 +432,7 @@ fun VMessBean.toV2rayN(): String {
         scy = bean.encryption
         sni = bean.sni
         alpn = bean.alpn.replace("\n", ",")
-        fp = bean.utlsFingerprint
+        fp = bean.utlsFingerprint.normalizeUtlsFingerprint().orEmpty()
     }.let {
         NGUtil.encode(Gson().toJson(it))
     }
@@ -607,7 +607,7 @@ fun buildSingBoxOutboundTLS(bean: StandardV2RayBean): OutboundTLSOptions? {
         if (bean.sni.isNotBlank()) server_name = bean.sni
         if (bean.alpn.isNotBlank()) alpn = bean.alpn.listByLineOrComma()
         if (bean.certificates.isNotBlank()) certificate = bean.certificates
-        var fp = bean.utlsFingerprint
+        var fp = bean.utlsFingerprint.normalizeUtlsFingerprint()
         if (bean.realityPubKey.isNotBlank()) {
             reality = OutboundRealityOptions().apply {
                 enabled = true
@@ -616,7 +616,7 @@ fun buildSingBoxOutboundTLS(bean: StandardV2RayBean): OutboundTLSOptions? {
             }
             if (fp.isNullOrBlank()) fp = "chrome"
         }
-        if (fp.isNotBlank()) {
+        if (!fp.isNullOrBlank()) {
             utls = OutboundUTLSOptions().apply {
                 enabled = true
                 fingerprint = fp
