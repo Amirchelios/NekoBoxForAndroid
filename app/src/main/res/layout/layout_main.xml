@@ -128,20 +128,22 @@
 
         <io.nekohasekai.sagernet.widget.StatsBar
             android:id="@+id/stats"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="12dp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="24dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:nextFocusUp="@+id/fab"
             android:gravity="center"
             android:orientation="horizontal"
-            android:translationY="248dp"
-            app:layout_anchor="@id/fab"
-            app:layout_anchorGravity="center_horizontal|bottom">
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
 
             <com.google.android.material.card.MaterialCardView
-                android:layout_width="260dp"
-                android:layout_height="62dp"
+                android:layout_width="0dp"
+                android:layout_height="72dp"
+                android:layout_weight="1"
                 style="@style/Widget.SagerNet.Card">
 
                 <LinearLayout
@@ -149,146 +151,168 @@
                     android:layout_height="match_parent"
                     android:gravity="center"
                     android:orientation="horizontal"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp">
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
                         android:gravity="center"
-                        android:orientation="vertical">
+                        android:orientation="horizontal">
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
+                            android:layout_width="34dp"
+                            android:layout_height="34dp"
+                            android:background="@drawable/bg_location_picker_delay"
                             android:gravity="center"
                             android:orientation="horizontal">
 
                             <ImageView
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:layout_marginEnd="6dp"
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
                                 android:contentDescription="@null"
                                 android:src="@drawable/ic_baseline_download_24"
-                                android:tint="@color/brand_primary" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/speed_download"
-                                android:textAllCaps="false"
-                                android:textColor="@color/glass_text"
-                                android:textSize="11sp" />
+                                android:tint="@android:color/white" />
                         </LinearLayout>
 
-                        <TextView
-                            android:id="@+id/rx"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:singleLine="true"
-                            android:textColor="@color/glass_text"
-                            android:textLocale="en-US"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            tools:text="24 KB/s" />
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:singleLine="true"
+                                android:text="@string/speed_download"
+                                android:textAllCaps="false"
+                                android:textColor="@color/quick_bar_text_inactive"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/rx"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:ellipsize="end"
+                                android:singleLine="true"
+                                android:textColor="@color/glass_text"
+                                android:textLocale="en-US"
+                                android:textSize="15sp"
+                                android:textStyle="bold"
+                                tools:text="24 KB/s" />
+                        </LinearLayout>
                     </LinearLayout>
 
                     <View
                         android:layout_width="1dp"
-                        android:layout_height="34dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginEnd="8dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginEnd="12dp"
                         android:background="@color/glass_stroke" />
 
                     <LinearLayout
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
                         android:gravity="center"
-                        android:orientation="vertical">
+                        android:orientation="horizontal">
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
+                            android:layout_width="34dp"
+                            android:layout_height="34dp"
+                            android:background="@drawable/bg_location_picker_delay"
                             android:gravity="center"
                             android:orientation="horizontal">
 
                             <ImageView
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:layout_marginEnd="6dp"
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
                                 android:contentDescription="@null"
                                 android:src="@drawable/ic_file_file_upload"
-                                android:tint="@color/connect_fab_background_connected" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/speed_upload"
-                                android:textAllCaps="false"
-                                android:textColor="@color/glass_text"
-                                android:textSize="11sp" />
+                                android:tint="@android:color/white" />
                         </LinearLayout>
 
-                        <TextView
-                            android:id="@+id/tx"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:singleLine="true"
-                            android:textColor="@color/glass_text"
-                            android:textLocale="en-US"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            tools:text="8 KB/s" />
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:singleLine="true"
+                                android:text="@string/speed_upload"
+                                android:textAllCaps="false"
+                                android:textColor="@color/quick_bar_text_inactive"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tx"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:ellipsize="end"
+                                android:singleLine="true"
+                                android:textColor="@color/glass_text"
+                                android:textLocale="en-US"
+                                android:textSize="15sp"
+                                android:textStyle="bold"
+                                tools:text="8 KB/s" />
+                        </LinearLayout>
                     </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/location_card"
+                style="@style/Widget.SagerNet.Card"
+                android:layout_width="wrap_content"
+                android:layout_height="72dp"
+                android:layout_marginStart="8dp"
+                android:alpha="0"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_location_badge"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp">
+
+                    <TextView
+                        android:id="@+id/location_flag"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🌍"
+                        android:textSize="28sp" />
+
+                    <ImageView
+                        android:id="@+id/location_switch"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="6dp"
+                        android:contentDescription="@string/quick_connection_method"
+                        android:src="@drawable/ic_baseline_compare_arrows_24"
+                        android:tint="@color/glass_text" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
         </io.nekohasekai.sagernet.widget.StatsBar>
 
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/location_card"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
-            android:alpha="0"
-            android:translationY="84dp"
-            android:visibility="gone"
-                style="@style/Widget.SagerNet.Card"
-                app:layout_anchor="@id/fab"
-                app:layout_anchorGravity="center_horizontal|bottom">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:background="@drawable/bg_location_badge"
-                android:paddingStart="14dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="14dp"
-                android:paddingBottom="10dp">
-
-                <TextView
-                    android:id="@+id/location_flag"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🌍"
-                    android:textSize="30sp" />
-
-                <ImageView
-                    android:id="@+id/location_switch"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_marginStart="8dp"
-                    android:contentDescription="@string/quick_connection_method"
-                    android:src="@drawable/ic_baseline_compare_arrows_24"
-                    android:tint="@color/glass_text" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/startup_loading"

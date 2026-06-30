@@ -1,12 +1,12 @@
 package io.nekohasekai.sagernet.widget
 
 import android.content.Context
-import android.text.format.Formatter
 import android.util.AttributeSet
 import android.widget.LinearLayout
 import android.widget.TextView
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.bg.BaseService
+import java.util.Locale
 
 class StatsBar @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null,
@@ -38,20 +38,18 @@ class StatsBar @JvmOverloads constructor(
     }
 
     private fun formatSpeed(rate: Long): String {
-        return "${Formatter.formatFileSize(context, rate).toEnglishDigits()}/s"
-    }
-
-    private fun String.toEnglishDigits(): String {
-        val map = mapOf(
-            '۰' to '0', '۱' to '1', '۲' to '2', '۳' to '3', '۴' to '4',
-            '۵' to '5', '۶' to '6', '۷' to '7', '۸' to '8', '۹' to '9',
-            '٠' to '0', '١' to '1', '٢' to '2', '٣' to '3', '٤' to '4',
-            '٥' to '5', '٦' to '6', '٧' to '7', '٨' to '8', '٩' to '9'
-        )
-        val sb = StringBuilder(length)
-        for (ch in this) {
-            sb.append(map[ch] ?: ch)
+        val units = arrayOf("B", "KB", "MB", "GB", "TB")
+        var value = rate.coerceAtLeast(0L).toDouble()
+        var unit = 0
+        while (value >= 1024.0 && unit < units.lastIndex) {
+            value /= 1024.0
+            unit++
         }
-        return sb.toString()
+        val text = if (value >= 10.0 || unit == 0) {
+            String.format(Locale.US, "%.0f", value)
+        } else {
+            String.format(Locale.US, "%.1f", value)
+        }
+        return "$text ${units[unit]}/s"
     }
 }

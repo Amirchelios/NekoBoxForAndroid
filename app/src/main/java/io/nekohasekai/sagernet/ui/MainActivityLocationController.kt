@@ -142,15 +142,9 @@ class MainActivityLocationController(
         }
         if (card.visibility != View.VISIBLE) {
             card.visibility = View.VISIBLE
-            card.alpha = 0f
-            card.scaleX = 0.96f
-            card.scaleY = 0.96f
-            card.animate()
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(360L)
-                .start()
+            card.alpha = 1f
+            card.scaleX = 1f
+            card.scaleY = 1f
         }
     }
 

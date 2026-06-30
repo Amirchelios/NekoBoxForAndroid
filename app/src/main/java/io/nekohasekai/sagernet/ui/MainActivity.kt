@@ -341,7 +341,11 @@ class MainActivity : ThemedActivity(),
             binding.fab.show()
         } else {
             if (fragment is ConfigurationFragment) {
-                binding.stats.visibility = View.VISIBLE
+                binding.stats.visibility = if (DataStore.serviceState == BaseService.State.Connected) {
+                    View.VISIBLE
+                } else {
+                    View.INVISIBLE
+                }
                 binding.fab.show()
             } else if (!DataStore.showBottomBar) {
                 binding.stats.visibility = View.GONE
@@ -366,6 +370,7 @@ class MainActivity : ThemedActivity(),
         tx.replace(R.id.fragment_holder, fragment)
             .commitAllowingStateLoss()
         binding.drawerLayout.closeDrawers()
+        binding.fragmentHolder.post { updateStatsAnimation(DataStore.serviceState) }
     }
 
     private fun applyClientModeUi() {
@@ -593,29 +598,47 @@ class MainActivity : ThemedActivity(),
     private fun updateStatsAnimation(state: BaseService.State) {
         val stats = binding.stats
         stats.animate().cancel()
+        val showOnMain = !DataStore.clientMode &&
+            supportFragmentManager.findFragmentById(R.id.fragment_holder) is ConfigurationFragment
+        if (!showOnMain) {
+            stats.visibility = View.GONE
+            return
+        }
         if (state == BaseService.State.Connected) {
-            val density = resources.displayMetrics.density
+            binding.locationCard.visibility = View.VISIBLE
+            binding.locationCard.alpha = 1f
+            binding.locationCard.scaleX = 1f
+            binding.locationCard.scaleY = 1f
+            if (binding.locationFlag.text.isNullOrBlank()) {
+                binding.locationFlag.text = "🌍"
+            }
             stats.visibility = View.VISIBLE
             stats.alpha = 0f
             stats.scaleX = 0.92f
             stats.scaleY = 0.92f
-            stats.translationY = 220f * density
+            stats.translationY = 28f * resources.displayMetrics.density
             stats.animate()
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .translationY(156f * density)
+                .translationY(0f)
                 .setDuration(520L)
                 .setInterpolator(OvershootInterpolator(0.9f))
                 .setStartDelay(60L)
                 .start()
         } else {
+            binding.locationCard.visibility = View.GONE
+            stats.translationY = 0f
             stats.animate()
                 .alpha(0f)
-                .scaleX(0.9f)
-                .scaleY(0.9f)
+                .scaleX(0.94f)
+                .scaleY(0.94f)
                 .setDuration(220L)
-                .withEndAction { stats.visibility = View.INVISIBLE }
+                .withEndAction {
+                    if (DataStore.serviceState != BaseService.State.Connected) {
+                        stats.visibility = View.INVISIBLE
+                    }
+                }
                 .start()
         }
     }
