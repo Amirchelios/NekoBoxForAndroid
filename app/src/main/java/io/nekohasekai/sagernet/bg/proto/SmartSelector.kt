@@ -22,14 +22,18 @@ object SmartSelector {
     private const val FAST_TIMEOUT_MS = 1800
     private const val FAST_MAX_ATTEMPTS = 2
     private const val FAST_LIMIT = 40
-    private const val MIN_SUCCESS_RATIO = 0.35
+    private const val MIN_SUCCESS_RATIO = 0.50
+    private const val STRONG_SUCCESS_RATIO = 0.72
+    private const val MAX_JITTER_FOR_STRONG_ROUTE = 1600
+    private const val MAX_WORST_FOR_STRONG_ROUTE = 7500
+    private const val MAX_WORST_FOR_WEAK_ROUTE = 5200
     private val testUrls = listOf(
         "https://cp.cloudflare.com/generate_204",
         "https://www.gstatic.com/generate_204",
         "https://www.msftconnecttest.com/connecttest.txt",
         "https://connectivitycheck.gstatic.com/generate_204",
         "https://detectportal.firefox.com/success.txt",
-        "https://speed.cloudflare.com/__down?bytes=200000"
+        "https://speed.cloudflare.com/__down?bytes=400000"
     )
 
     private data class ProbeSnapshot(
@@ -452,7 +456,11 @@ object SmartSelector {
                 0
             }
             val learnedScore = SmartLearningEngine.compositeScore(profile.id, scope, transportClass.key)
-            val finalScore = if (baseScore == null || successRatio < MIN_SUCCESS_RATIO) {
+            val unstableRoute = successRatio < MIN_SUCCESS_RATIO ||
+                (successRatio < STRONG_SUCCESS_RATIO && jitter > MAX_JITTER_FOR_STRONG_ROUTE) ||
+                (successRatio < STRONG_SUCCESS_RATIO && worst > MAX_WORST_FOR_WEAK_ROUTE) ||
+                (worst > MAX_WORST_FOR_STRONG_ROUTE && successRatio < 0.85)
+            val finalScore = if (baseScore == null || unstableRoute) {
                 null
             } else {
                 val ambientPenalty = if (ambientHealthy) 0 else 240
@@ -570,12 +578,12 @@ object SmartSelector {
         baseScore: Int?,
         bandwidthKbps: Int,
     ): Int {
-        val failPenalty = ((1.0 - successRatio).coerceIn(0.0, 1.0) * 900.0).toInt()
-        val jitterPenalty = (jitter * 2).coerceAtMost(260)
+        val failPenalty = ((1.0 - successRatio).coerceIn(0.0, 1.0) * 1200.0).toInt()
+        val jitterPenalty = (jitter * 2).coerceAtMost(360)
         val worstPenalty = if (baseScore == null || worst <= 0) {
-            160
+            220
         } else {
-            ((worst - baseScore) / 2).coerceIn(0, 260)
+            ((worst - baseScore) / 2).coerceIn(0, 360)
         }
         val bandwidthBonus = when {
             bandwidthKbps >= 24_000 -> 220

@@ -8,7 +8,6 @@ import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import io.nekohasekai.sagernet.bg.proto.SmartLearningEngine
 import kotlinx.coroutines.delay
 import libcore.Libcore
-import kotlin.math.max
 
 class SmartSwitchController(
     private val service: BaseService.Interface,
@@ -39,10 +38,10 @@ class SmartSwitchController(
                 "download" -> 1.40
                 else -> 1.0
             }
-            val cooldownMs = (policy.cooldownSec.coerceIn(30, 900) * cooldownFactor).toLong() * 1000L
-            val minDwellMs = (policy.minDwellSec.coerceIn(30, 1200) * dwellFactor).toLong() * 1000L
-            val normalProbeMs = policy.probeIntervalSec.coerceIn(10, 120) * 1000L
-            val badProbeMs = policy.badProbeIntervalSec.coerceIn(5, 60) * 1000L
+            val cooldownMs = (policy.cooldownSec.coerceIn(20, 900) * cooldownFactor).toLong() * 1000L
+            val minDwellMs = (policy.minDwellSec.coerceIn(20, 1200) * dwellFactor).toLong() * 1000L
+            val normalProbeMs = policy.probeIntervalSec.coerceIn(8, 120) * 1000L
+            val badProbeMs = policy.badProbeIntervalSec.coerceIn(3, 60) * 1000L
             val warmupRounds = policy.warmupRounds.coerceIn(1, 8)
             val sensitivityWins = when (sensitivity) {
                 "responsive" -> -1
@@ -184,18 +183,18 @@ class SmartSwitchController(
 
             fun applyAdaptiveProbePolicy(pressure: Int, health: Int) {
                 val now = System.currentTimeMillis()
-                if (now - lastAutoTuneAtMs < 180_000L) return
+                if (now - lastAutoTuneAtMs < 120_000L) return
                 lastAutoTuneAtMs = now
                 when {
-                    pressure >= 80 || health < 30 -> {
-                        if (DataStore.connectionTestConcurrent < 36) {
+                    pressure >= 75 || health < 35 -> {
+                        if (DataStore.connectionTestConcurrent < 40) {
                             DataStore.connectionTestConcurrent =
-                                (DataStore.connectionTestConcurrent + 3).coerceAtMost(36)
+                                (DataStore.connectionTestConcurrent + 4).coerceAtMost(40)
                             setDecision("tune:boost_probe_concurrency")
                         }
-                        if (DataStore.parallelConcurrency < 30) {
+                        if (DataStore.parallelConcurrency < 34) {
                             DataStore.parallelConcurrency =
-                                (DataStore.parallelConcurrency + 2).coerceAtMost(30)
+                                (DataStore.parallelConcurrency + 2).coerceAtMost(34)
                         }
                         if (DataStore.parallelDelayMs > 80) {
                             DataStore.parallelDelayMs = (DataStore.parallelDelayMs - 15).coerceAtLeast(80)
@@ -204,20 +203,20 @@ class SmartSwitchController(
                             DataStore.parallelTimeoutMs = (DataStore.parallelTimeoutMs + 1000).coerceAtMost(9000)
                         }
                     }
-                    pressure >= 55 || health < 60 -> {
-                        if (DataStore.connectionTestConcurrent < 32) {
+                    pressure >= 50 || health < 65 -> {
+                        if (DataStore.connectionTestConcurrent < 34) {
                             DataStore.connectionTestConcurrent =
-                                (DataStore.connectionTestConcurrent + 2).coerceAtMost(32)
+                                (DataStore.connectionTestConcurrent + 2).coerceAtMost(34)
                             setDecision("tune:raise_probe_concurrency")
                         }
                         if (DataStore.parallelTimeoutMs < 8500) {
                             DataStore.parallelTimeoutMs = (DataStore.parallelTimeoutMs + 500).coerceAtMost(8500)
                         }
                     }
-                    health > 85 -> {
-                        if (DataStore.connectionTestConcurrent > 14) {
+                    health > 90 -> {
+                        if (DataStore.connectionTestConcurrent > 18) {
                             DataStore.connectionTestConcurrent =
-                                (DataStore.connectionTestConcurrent - 1).coerceAtLeast(14)
+                                (DataStore.connectionTestConcurrent - 1).coerceAtLeast(18)
                             setDecision("tune:lower_probe_concurrency")
                         }
                     }
@@ -256,6 +255,9 @@ class SmartSwitchController(
                 DataStore.setSmartPreferredProxyScoped(currentScope(), profile.groupId, id)
                 DataStore.bumpSmartRecentSwitchCount(id)
                 setDecision("switch:$id")
+                if (previousId > 0L && previousId != id && DataStore.smartInterruptExistingConnections) {
+                    runCatching { Libcore.resetAllConnections(true) }
+                }
                 if (previousId > 0L && previousId != id) {
                     val previous = SagerDatabase.proxyDao.getById(previousId)
                     val current = SagerDatabase.proxyDao.getById(id)
@@ -275,6 +277,8 @@ class SmartSwitchController(
                 }
                 val candidateScore = DataStore.getSmartLastScore(id)
                 if (candidateScore <= 0) return false
+                val candidateStreak = DataStore.getSmartFailureStreak(id)
+                val candidateQuality = DataStore.getSmartQualityScore(id)
                 val now = System.currentTimeMillis()
                 val (activeScore, activeStreak) = activeStats()
                 val trafficEmergency = trafficStallRounds >= 2
@@ -283,6 +287,16 @@ class SmartSwitchController(
                 val activeGood = activeScore in 1..excellentScore && activeStreak == 0
                 val activeBw = bandwidth(activeId)
                 val candidateBw = bandwidth(id)
+                val candidateUnstable = candidateStreak >= failTrigger ||
+                    (candidateQuality < 35 && candidateScore >= weakScore)
+                if (!activeCritical && candidateUnstable) {
+                    setDecision("hold:candidate_unstable")
+                    return false
+                }
+                if (activeCritical && candidateStreak > failTrigger && candidateScore >= criticalScore) {
+                    setDecision("hold:candidate_critical")
+                    return false
+                }
                 if (!warmup && !activeCritical && now < disruptionUntilMs) {
                     setDecision("hold:disruption_window")
                     return false
@@ -330,6 +344,8 @@ class SmartSwitchController(
                     warmup -> warmupWins + if (activeExcellent) 1 else 0
                     activeWeak -> baseWins
                     else -> baseWins + 1
+                }.let {
+                    if (candidateQuality >= 70 && candidateStreak == 0) it - 1 else it
                 }.coerceAtLeast(1)
                 if (pendingWins < requiredWins) return false
                 if (selectOutboundById(id)) {
