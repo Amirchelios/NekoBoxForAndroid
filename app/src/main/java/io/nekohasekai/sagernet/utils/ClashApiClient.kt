@@ -97,6 +97,34 @@ class ClashApiClient(
         return request("PUT", "/proxies/${encodePathSegment(groupName)}", body).code in 200..299
     }
 
+    fun closeStaleConnections(groupName: String, selectedProxyName: String): Int {
+        val response = request("GET", "/connections")
+        if (response.code !in 200..299) return 0
+        val root = JSONObject(response.body)
+        val connections = root.optJSONArray("connections") ?: return 0
+        val ids = arrayListOf<String>()
+        for (i in 0 until connections.length()) {
+            val connection = connections.optJSONObject(i) ?: continue
+            val chains = connection.optJSONArray("chains") ?: continue
+            var containsGroup = false
+            var containsSelected = false
+            for (j in 0 until chains.length()) {
+                val item = chains.optString(j)
+                if (item == groupName) containsGroup = true
+                if (item == selectedProxyName) containsSelected = true
+            }
+            if (containsGroup && !containsSelected) {
+                connection.optString("id").takeIf { it.isNotBlank() }?.let(ids::add)
+            }
+        }
+        var closed = 0
+        for (id in ids) {
+            val closeResponse = request("DELETE", "/connections/${encodePathSegment(id)}")
+            if (closeResponse.code in 200..299) closed++
+        }
+        return closed
+    }
+
     private fun request(method: String, path: String, body: String? = null): Response {
         val connection = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
         try {

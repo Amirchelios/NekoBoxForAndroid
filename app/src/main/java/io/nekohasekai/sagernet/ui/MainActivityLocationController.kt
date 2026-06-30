@@ -1,6 +1,11 @@
 package io.nekohasekai.sagernet.ui
 
 import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -197,7 +202,9 @@ class MainActivityLocationController(
         for (proxy in snapshot.proxies.values) {
             if (!proxy.isSelectableProxy) continue
             val flag = extractFlag(proxy.name) ?: continue
-            if (proxy.historyDelay != null && proxy.historyDelay <= 0) continue
+            val delay = proxy.historyDelay ?: continue
+            if (delay <= 0) continue
+            if (snapshot.preferredGroupNameFor(proxy.name) == null) continue
             byFlag.getOrPut(flag) { mutableListOf() }.add(proxy)
         }
         return byFlag.entries
@@ -216,64 +223,212 @@ class MainActivityLocationController(
         val autoName = autoGroup?.let { group ->
             data.snapshot.proxies[group]?.all?.firstOrNull { it.equals("auto", ignoreCase = true) }
         }
-        val entries = arrayListOf<String>()
-        val displayFlags = arrayListOf<String?>()
-        val actions = arrayListOf<suspend () -> AppliedLocation?>()
+        val rows = arrayListOf<PickerRow>()
         if (autoGroup != null && autoName != null) {
-            entries.add(activity.getString(R.string.location_picker_auto))
-            displayFlags.add("🌍")
-            actions.add {
+            rows.add(PickerRow(
+                title = activity.getString(R.string.location_picker_auto),
+                subtitle = autoGroup,
+                flag = "🌍",
+            ) {
                 if (data.client.switchProxy(autoGroup, autoName)) {
+                    data.client.closeStaleConnections(autoGroup, autoName)
                     AppliedLocation(autoGroup, autoName, "🌍")
                 } else {
                     null
                 }
-            }
+            })
         }
-        for (choice in data.choices) {
+        val verifiedRows = data.choices.map { choice ->
             val best = choice.proxies.first()
-            val delay = best.historyDelay?.let { " · ${it}ms" }.orEmpty()
-            entries.add("${choice.flag}  ${choice.proxies.size}$delay")
-            displayFlags.add(choice.flag)
-            actions.add {
+            PickerRow(
+                title = shortProxyTitle(best.name, choice.flag),
+                subtitle = activity.resources.getQuantityString(
+                    R.plurals.location_picker_server_count,
+                    choice.proxies.size,
+                    choice.proxies.size
+                ),
+                flag = choice.flag,
+                delayMs = best.historyDelay,
+            ) {
                 val group = data.snapshot.preferredGroupNameFor(best.name)
                 if (group != null && data.client.switchProxy(group, best.name)) {
+                    data.client.closeStaleConnections(group, best.name)
                     AppliedLocation(group, best.name, choice.flag)
                 } else {
                     null
                 }
             }
         }
-        if (entries.isEmpty()) {
+        rows.addAll(verifiedRows)
+        if (rows.isEmpty()) {
             activity.snackbar(R.string.location_picker_empty).show()
             return
         }
 
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.location_picker_title)
-            .setItems(entries.toTypedArray()) { _, which ->
-                pickerJob?.cancel()
-                pickerJob = activity.lifecycleScope.launch {
-                    val applied = withContext(Dispatchers.IO) {
-                        runCatching { actions[which].invoke() }.getOrNull()
-                    }
-                    if (applied != null) {
-                        DataStore.yacdSelectedGroup = applied.group
-                        DataStore.yacdSelectedProxy = applied.proxy
-                        DataStore.yacdSelectedFlag = applied.flag
-                        val flag = displayFlags[which] ?: applied.flag
-                        if (!flag.isNullOrBlank()) {
-                            binding.locationFlag.text = flag
-                            lastLocationFlag = flag
-                        }
-                        activity.snackbar(R.string.location_picker_applied).show()
-                    } else {
-                        activity.snackbar(R.string.location_picker_apply_failed).show()
-                    }
-                }
+        lateinit var dialog: androidx.appcompat.app.AlertDialog
+        val content = buildPickerView(
+            rows = rows,
+            onPick = { row ->
+                dialog.dismiss()
+                applyPickerRow(row)
             }
+        )
+        dialog = MaterialAlertDialogBuilder(activity)
+            .setView(content)
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .create()
+        dialog.show()
+    }
+
+    private fun buildPickerView(
+        rows: List<PickerRow>,
+        onPick: (PickerRow) -> Unit,
+    ): View {
+        val density = activity.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        val root = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(8))
+        }
+        root.addView(TextView(activity).apply {
+            text = activity.getString(R.string.location_picker_title)
+            textSize = 20f
+            setTextColor(ContextCompat.getColor(activity, R.color.app_on_surface))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        })
+        root.addView(TextView(activity).apply {
+            text = activity.getString(R.string.location_picker_verified_summary)
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(activity, R.color.app_on_surface_muted))
+            setPadding(0, dp(6), 0, dp(14))
+        })
+
+        val list = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        addRows(list, rows.filter { it.title == activity.getString(R.string.location_picker_auto) }, onPick)
+        addRows(list, rows.filter { it.title != activity.getString(R.string.location_picker_auto) }, onPick, R.string.location_picker_verified)
+
+        root.addView(ScrollView(activity).apply {
+            addView(list)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(390)
+            )
+        })
+        return root
+    }
+
+    private fun addRows(
+        parent: LinearLayout,
+        rows: List<PickerRow>,
+        onPick: (PickerRow) -> Unit,
+        titleRes: Int? = null,
+    ) {
+        if (rows.isEmpty()) return
+        val density = activity.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        if (titleRes != null) {
+            parent.addView(TextView(activity).apply {
+                text = activity.getString(titleRes)
+                textSize = 12f
+                setTextColor(ContextCompat.getColor(activity, R.color.app_on_surface_muted))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(0, dp(10), 0, dp(6))
+            })
+        }
+        for (row in rows) {
+            parent.addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                background = ContextCompat.getDrawable(activity, R.drawable.bg_location_picker_row)
+                foreground = ContextCompat.getDrawable(activity, selectableItemBackground())
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setOnClickListener { onPick(row) }
+
+                addView(TextView(activity).apply {
+                    text = row.flag
+                    textSize = 28f
+                    gravity = android.view.Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(dp(46), dp(46))
+                })
+
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                        .apply { marginStart = dp(10) }
+                    addView(TextView(activity).apply {
+                        text = row.title
+                        textSize = 15f
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        setTextColor(ContextCompat.getColor(activity, R.color.app_on_surface))
+                        typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    })
+                    addView(TextView(activity).apply {
+                        text = row.subtitle
+                        textSize = 12f
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        setTextColor(ContextCompat.getColor(activity, R.color.app_on_surface_muted))
+                    })
+                })
+
+                row.delayMs?.let { delay ->
+                    addView(TextView(activity).apply {
+                        text = "${delay}ms"
+                        textSize = 12f
+                        gravity = android.view.Gravity.CENTER
+                        setTextColor(ContextCompat.getColor(activity, R.color.quick_update_text))
+                        background = ContextCompat.getDrawable(activity, R.drawable.bg_location_picker_delay)
+                        setPadding(dp(9), dp(5), dp(9), dp(5))
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        ).apply { marginStart = dp(10) }
+                    })
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(8)
+                }
+            })
+        }
+    }
+
+    private fun selectableItemBackground(): Int {
+        val outValue = android.util.TypedValue()
+        activity.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+        return outValue.resourceId
+    }
+
+    private fun shortProxyTitle(raw: String, flag: String): String {
+        return raw
+            .replace(flag, "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { activity.getString(R.string.location_picker_location) }
+    }
+
+    private fun applyPickerRow(row: PickerRow) {
+        pickerJob?.cancel()
+        pickerJob = activity.lifecycleScope.launch {
+            val applied = withContext(Dispatchers.IO) {
+                runCatching { row.action.invoke() }.getOrNull()
+            }
+            if (applied != null) {
+                DataStore.yacdSelectedGroup = applied.group
+                DataStore.yacdSelectedProxy = applied.proxy
+                DataStore.yacdSelectedFlag = applied.flag
+                binding.locationFlag.text = applied.flag
+                lastLocationFlag = applied.flag
+                activity.snackbar(R.string.location_picker_applied).show()
+            } else {
+                activity.snackbar(R.string.location_picker_apply_failed).show()
+            }
+        }
     }
 
     private fun extractFlag(name: String): String? {
@@ -299,7 +454,11 @@ class MainActivityLocationController(
                     ?.takeIf { snapshot.proxies[it]?.all?.contains(target) == true }
                     ?: snapshot.preferredGroupNameFor(target)
                     ?: return false
-                val ok = withContext(Dispatchers.IO) { client.switchProxy(group, target) }
+                val ok = withContext(Dispatchers.IO) {
+                    val switched = client.switchProxy(group, target)
+                    if (switched) client.closeStaleConnections(group, target)
+                    switched
+                }
                 if (ok && target != savedProxy) {
                     DataStore.yacdSelectedGroup = group
                     DataStore.yacdSelectedProxy = target
@@ -319,6 +478,8 @@ class MainActivityLocationController(
             .asSequence()
             .filter { it.isSelectableProxy }
             .filter { extractFlag(it.name) == flag }
+            .filter { (it.historyDelay ?: 0) > 0 }
+            .filter { snapshot.preferredGroupNameFor(it.name) != null }
             .sortedWith(
                 compareBy<ClashApiClient.ProxyItem> { it.historyDelay ?: Int.MAX_VALUE }
                     .thenBy { it.name.lowercase(Locale.US) }
@@ -342,6 +503,14 @@ class MainActivityLocationController(
     private data class LocationChoice(
         val flag: String,
         val proxies: List<ClashApiClient.ProxyItem>,
+    )
+
+    private data class PickerRow(
+        val title: String,
+        val subtitle: String,
+        val flag: String,
+        val delayMs: Int? = null,
+        val action: suspend () -> AppliedLocation?,
     )
 
     private companion object {

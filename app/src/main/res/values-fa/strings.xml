@@ -521,10 +521,17 @@
     <string name="dashboard_web_error">داشبورد بارگذاری نشد. API محلی ممکن است دوباره راه‌اندازی شده باشد.</string>
     <string name="location_picker_title">انتخاب لوکیشن</string>
     <string name="location_picker_auto">انتخاب خودکار</string>
+    <string name="location_picker_verified">تایید شده الان</string>
+    <string name="location_picker_verified_summary">فقط لوکیشن‌هایی که نتیجه تاخیر معتبر در داشبورد فعال دارند نمایش داده می‌شوند.</string>
+    <string name="location_picker_location">لوکیشن</string>
     <string name="location_picker_empty">لوکیشن قابل انتخابی در داشبورد فعال پیدا نشد.</string>
     <string name="location_picker_failed">امکان دریافت لوکیشن‌ها نیست: %s</string>
     <string name="location_picker_applied">لوکیشن اعمال شد</string>
     <string name="location_picker_apply_failed">امکان تغییر لوکیشن نیست</string>
+    <plurals name="location_picker_server_count">
+        <item quantity="one">%d سرور قابل استفاده</item>
+        <item quantity="other">%d سرور قابل استفاده</item>
+    </plurals>
     <string name="retry">تلاش دوباره</string>
     <string name="enable_clash_api">فعال کردن Clash API</string>
     <string name="log_level">سطح ثبت آمار</string>

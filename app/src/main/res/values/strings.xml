@@ -575,10 +575,17 @@
     <string name="dashboard_web_error">Dashboard failed to load. The local API may have restarted.</string>
     <string name="location_picker_title">Select location</string>
     <string name="location_picker_auto">Auto select</string>
+    <string name="location_picker_verified">Verified now</string>
+    <string name="location_picker_verified_summary">Only locations with a valid latency result from the active dashboard are shown.</string>
+    <string name="location_picker_location">Location</string>
     <string name="location_picker_empty">No selectable locations found in the active dashboard.</string>
     <string name="location_picker_failed">Could not load locations: %s</string>
     <string name="location_picker_applied">Location applied</string>
     <string name="location_picker_apply_failed">Could not switch location</string>
+    <plurals name="location_picker_server_count">
+        <item quantity="one">%d available server</item>
+        <item quantity="other">%d available servers</item>
+    </plurals>
     <string name="retry">Retry</string>
     <string name="enable_clash_api">Enable Clash API</string>
     <string name="log_level">Log Level</string>
