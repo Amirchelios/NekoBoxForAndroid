@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import libcore.Libcore
 import moe.matsuri.nb4a.utils.Util
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
@@ -199,15 +200,17 @@ class MainActivityLocationController(
         snapshot: ClashApiClient.ProxySnapshot,
     ): List<LocationChoice> {
         val byFlag = linkedMapOf<String, MutableList<ClashApiClient.ProxyItem>>()
+        val cached = loadCachedLocations()
         for (proxy in snapshot.proxies.values) {
             if (!proxy.isSelectableProxy) continue
-            val flag = extractFlag(proxy.name) ?: continue
-            val delay = proxy.historyDelay ?: continue
+            val cachedItem = cached[proxy.name]
+            val flag = extractFlag(proxy.name) ?: cachedItem?.flag ?: continue
+            val delay = proxy.historyDelay ?: cachedItem?.delayMs ?: continue
             if (delay <= 0) continue
             if (snapshot.preferredGroupNameFor(proxy.name) == null) continue
-            byFlag.getOrPut(flag) { mutableListOf() }.add(proxy)
+            byFlag.getOrPut(flag) { mutableListOf() }.add(proxy.copy(historyDelay = delay))
         }
-        return byFlag.entries
+        val choices = byFlag.entries
             .sortedBy { it.key }
             .map { (flag, proxies) ->
                 val sorted = proxies.sortedWith(
@@ -216,6 +219,45 @@ class MainActivityLocationController(
                 )
                 LocationChoice(flag, sorted)
             }
+        if (choices.isNotEmpty()) {
+            saveCachedLocations(choices)
+        }
+        return choices
+    }
+
+    private fun loadCachedLocations(): Map<String, CachedLocation> {
+        val json = runCatching { JSONArray(DataStore.yacdCachedLocations) }.getOrNull()
+            ?: return emptyMap()
+        val result = linkedMapOf<String, CachedLocation>()
+        for (i in 0 until json.length()) {
+            val item = json.optJSONObject(i) ?: continue
+            val proxy = item.optString("proxy").takeIf { it.isNotBlank() } ?: continue
+            val flag = item.optString("flag").takeIf { it.isNotBlank() } ?: continue
+            val delay = item.optInt("delayMs").takeIf { it > 0 } ?: continue
+            result[proxy] = CachedLocation(flag, delay)
+        }
+        return result
+    }
+
+    private fun saveCachedLocations(choices: List<LocationChoice>) {
+        val out = JSONArray()
+        var count = 0
+        for (choice in choices) {
+            for (proxy in choice.proxies) {
+                val delay = proxy.historyDelay ?: continue
+                out.put(JSONObject().apply {
+                    put("proxy", proxy.name)
+                    put("flag", choice.flag)
+                    put("delayMs", delay)
+                })
+                count++
+                if (count >= MAX_CACHED_LOCATION_PROXIES) {
+                    DataStore.yacdCachedLocations = out.toString()
+                    return
+                }
+            }
+        }
+        DataStore.yacdCachedLocations = out.toString()
     }
 
     private fun showPickerDialog(data: PickerData) {
@@ -474,14 +516,15 @@ class MainActivityLocationController(
         snapshot: ClashApiClient.ProxySnapshot,
         flag: String,
     ): String? {
+        val cached = loadCachedLocations()
         return snapshot.proxies.values
             .asSequence()
             .filter { it.isSelectableProxy }
-            .filter { extractFlag(it.name) == flag }
-            .filter { (it.historyDelay ?: 0) > 0 }
+            .filter { (extractFlag(it.name) ?: cached[it.name]?.flag) == flag }
+            .filter { ((it.historyDelay ?: cached[it.name]?.delayMs) ?: 0) > 0 }
             .filter { snapshot.preferredGroupNameFor(it.name) != null }
             .sortedWith(
-                compareBy<ClashApiClient.ProxyItem> { it.historyDelay ?: Int.MAX_VALUE }
+                compareBy<ClashApiClient.ProxyItem> { it.historyDelay ?: cached[it.name]?.delayMs ?: Int.MAX_VALUE }
                     .thenBy { it.name.lowercase(Locale.US) }
             )
             .firstOrNull()
@@ -505,6 +548,11 @@ class MainActivityLocationController(
         val proxies: List<ClashApiClient.ProxyItem>,
     )
 
+    private data class CachedLocation(
+        val flag: String,
+        val delayMs: Int,
+    )
+
     private data class PickerRow(
         val title: String,
         val subtitle: String,
@@ -517,5 +565,6 @@ class MainActivityLocationController(
         val FLAG_REGEX = Regex("[\\x{1F1E6}-\\x{1F1FF}]{2}")
         const val RECONNECT_SYNC_ATTEMPTS = 12
         const val RECONNECT_SYNC_DELAY_MS = 350L
+        const val MAX_CACHED_LOCATION_PROXIES = 500
     }
 }

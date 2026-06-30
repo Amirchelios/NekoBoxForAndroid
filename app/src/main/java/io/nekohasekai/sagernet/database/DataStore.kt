@@ -272,6 +272,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var yacdSelectedGroup by configurationStore.string("yacdSelectedGroup") { "" }
     var yacdSelectedProxy by configurationStore.string("yacdSelectedProxy") { "" }
     var yacdSelectedFlag by configurationStore.string("yacdSelectedFlag") { "" }
+    var yacdCachedLocations by configurationStore.string("yacdCachedLocations") { "[]" }
     var internalBrowserUrl by configurationStore.string("internalBrowserUrl") { "https://www.google.com" }
     var clientMode by configurationStore.boolean("clientMode") { false }
 
