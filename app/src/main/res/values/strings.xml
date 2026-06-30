@@ -569,6 +569,17 @@
     <string name="is_outbound_only">The JSON set is outbound</string>
     <string name="save">Save</string>
     <string name="set_panel_url">Set panel URL</string>
+    <string name="dashboard_loading">Opening dashboard</string>
+    <string name="dashboard_waiting_for_api">Waiting for sing-box Clash API…</string>
+    <string name="dashboard_api_unavailable">Dashboard is not ready. Start or reconnect the service and try again.</string>
+    <string name="dashboard_web_error">Dashboard failed to load. The local API may have restarted.</string>
+    <string name="location_picker_title">Select location</string>
+    <string name="location_picker_auto">Auto select</string>
+    <string name="location_picker_empty">No selectable locations found in the active dashboard.</string>
+    <string name="location_picker_failed">Could not load locations: %s</string>
+    <string name="location_picker_applied">Location applied</string>
+    <string name="location_picker_apply_failed">Could not switch location</string>
+    <string name="retry">Retry</string>
     <string name="enable_clash_api">Enable Clash API</string>
     <string name="log_level">Log Level</string>
     <string name="enable_clash_api_summary">Provide clash api and yacd dashboard at 127.0.0.1:9090</string>

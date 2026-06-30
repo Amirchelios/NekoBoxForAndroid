@@ -269,6 +269,9 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var profileTrafficStatistics by configurationStore.boolean(Key.PROFILE_TRAFFIC_STATISTICS) { true }
 
     var yacdURL by configurationStore.string("yacdURL") { "http://127.0.0.1:9090/ui" }
+    var yacdSelectedGroup by configurationStore.string("yacdSelectedGroup") { "" }
+    var yacdSelectedProxy by configurationStore.string("yacdSelectedProxy") { "" }
+    var yacdSelectedFlag by configurationStore.string("yacdSelectedFlag") { "" }
     var internalBrowserUrl by configurationStore.string("internalBrowserUrl") { "https://www.google.com" }
     var clientMode by configurationStore.boolean("clientMode") { false }
 

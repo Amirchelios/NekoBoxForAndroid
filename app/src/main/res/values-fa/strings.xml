@@ -515,6 +515,17 @@
     <string name="is_outbound_only">مجموعه JSON برای خروجی است</string>
     <string name="save">ذخیره</string>
     <string name="set_panel_url">تعیین لینک صفحه</string>
+    <string name="dashboard_loading">در حال باز کردن داشبورد</string>
+    <string name="dashboard_waiting_for_api">در انتظار Clash API سینگ‌باکس…</string>
+    <string name="dashboard_api_unavailable">داشبورد هنوز آماده نیست. سرویس را روشن یا دوباره متصل کنید و دوباره تلاش کنید.</string>
+    <string name="dashboard_web_error">داشبورد بارگذاری نشد. API محلی ممکن است دوباره راه‌اندازی شده باشد.</string>
+    <string name="location_picker_title">انتخاب لوکیشن</string>
+    <string name="location_picker_auto">انتخاب خودکار</string>
+    <string name="location_picker_empty">لوکیشن قابل انتخابی در داشبورد فعال پیدا نشد.</string>
+    <string name="location_picker_failed">امکان دریافت لوکیشن‌ها نیست: %s</string>
+    <string name="location_picker_applied">لوکیشن اعمال شد</string>
+    <string name="location_picker_apply_failed">امکان تغییر لوکیشن نیست</string>
+    <string name="retry">تلاش دوباره</string>
     <string name="enable_clash_api">فعال کردن Clash API</string>
     <string name="log_level">سطح ثبت آمار</string>
     <string name="enable_clash_api_summary">ارائه Clash api و صفحه yacd را در 127.0.0.1: 9090</string>

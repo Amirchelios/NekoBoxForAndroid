@@ -180,8 +180,7 @@ class MainActivity : ThemedActivity(),
             updateDefaultServersByUser()
         }
         binding.locationCard.setOnClickListener {
-            displayFragment(WebviewFragment(), true)
-            navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isChecked = true
+            locationController.showLocationPicker()
         }
     }
 
@@ -490,6 +489,7 @@ class MainActivity : ThemedActivity(),
         updateStatsAnimation(uiState)
         if (uiState == BaseService.State.Connected) {
             locationController.start()
+            locationController.syncSavedLocationAfterReconnect()
         } else {
             locationController.stop()
         }
