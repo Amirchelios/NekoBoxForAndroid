@@ -20,23 +20,23 @@
 
         <FrameLayout
             android:id="@+id/quick_server_update"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
-            android:layout_gravity="top|end"
-            android:layout_marginTop="68dp"
-            android:layout_marginEnd="18dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="top|left"
+            android:layout_marginLeft="22dp"
+            android:layout_marginTop="10dp"
             android:background="@drawable/bg_quick_update_appbar_button"
             android:clickable="true"
-            android:elevation="18dp"
+            android:elevation="22dp"
             android:focusable="true"
             android:foreground="?attr/selectableItemBackgroundBorderless"
-            android:padding="10dp"
-            android:translationZ="18dp">
+            android:padding="7dp"
+            android:translationZ="22dp">
 
             <ImageView
                 android:id="@+id/quick_server_update_icon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="21dp"
+                android:layout_height="21dp"
                 android:layout_gravity="center"
                 android:contentDescription="@string/update_current_subscription"
                 android:src="@drawable/ic_baseline_refresh_24"
@@ -45,8 +45,8 @@
             <ProgressBar
                 android:id="@+id/quick_server_update_progress"
                 style="?android:attr/progressBarStyleSmall"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="21dp"
+                android:layout_height="21dp"
                 android:layout_gravity="center"
                 android:indeterminate="true"
                 android:indeterminateTint="@color/quick_update_text"

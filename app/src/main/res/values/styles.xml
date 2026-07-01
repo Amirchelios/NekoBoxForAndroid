@@ -19,7 +19,7 @@
         <item name="fontFamily">@font/jetbrains_mono</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">?attr/colorOnSurface</item>
-        <item name="android:letterSpacing">0.02</item>
+        <item name="android:letterSpacing">0</item>
     </style>
 
     <style name="Widget.SagerNet.BodyMuted" parent="TextAppearance.MaterialComponents.Body2">
@@ -27,7 +27,7 @@
         <item name="fontFamily">@font/jetbrains_mono</item>
         <item name="android:textColor">?attr/colorOnSurface</item>
         <item name="android:alpha">0.78</item>
-        <item name="android:letterSpacing">0.005</item>
+        <item name="android:letterSpacing">0</item>
     </style>
 
 </resources>
