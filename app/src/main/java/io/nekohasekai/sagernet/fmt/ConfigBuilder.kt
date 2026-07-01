@@ -52,6 +52,45 @@ const val TAG_BLOCK = "block"
 
 const val LOCALHOST = "127.0.0.1"
 
+private val IR_DIRECT_DOMAIN_SUFFIXES = listOf(
+    "ir",
+    "shaparak.ir",
+    "shaparak.com",
+    "shetab.ir",
+    "bpm.shaparak.ir",
+    "pec.ir",
+    "pep.co.ir",
+    "sadadpsp.ir",
+    "asanpardakht.ir",
+    "ap.ir",
+    "sep.ir",
+    "sepehrpay.com",
+    "behpardakht.com",
+    "bankmellat.ir",
+    "bmi.ir",
+    "bpi.ir",
+    "banksepah.ir",
+    "bsi.ir",
+    "bankmelli-iran.com",
+    "enbank.ir",
+    "bankpasargad.com",
+    "rb24.ir",
+    "refah-bank.ir",
+    "tejaratbank.ir",
+    "bankmaskan.ir",
+    "sinabank.ir",
+    "parsian-bank.ir",
+    "samanbank.ir",
+    "sb24.ir",
+    "ayandehbank.ir",
+    "ghbi.ir",
+    "bank-day.ir",
+    "postbank.ir",
+    "izbank.ir",
+    "middleeastbank.ir",
+    "karafarinbank.ir",
+)
+
 class ConfigBuildResult(
     var config: String,
     var externalIndex: List<IndexEntity>,
@@ -702,7 +741,15 @@ fun buildConfig(
             })
 
             route.rules.add(0, Rule_DefaultOptions().apply {
-                rule_set = mutableListOf("geosite:ir", "geoip:ir")
+                rule_set = mutableListOf(
+                    "geosite:ir",
+                    "geoip:ir"
+                )
+                outbound = TAG_DIRECT
+            })
+
+            route.rules.add(0, Rule_DefaultOptions().apply {
+                domain_suffix = IR_DIRECT_DOMAIN_SUFFIXES
                 outbound = TAG_DIRECT
             })
 
@@ -835,6 +882,14 @@ fun buildConfig(
             // avoid loopback
             dns.rules.add(0, DNSRule_DefaultOptions().apply {
                 outbound = mutableListOf("any")
+                server = "dns-direct"
+            })
+            dns.rules.add(0, DNSRule_DefaultOptions().apply {
+                rule_set = mutableListOf("geosite:ir")
+                server = "dns-direct"
+            })
+            dns.rules.add(0, DNSRule_DefaultOptions().apply {
+                domain_suffix = IR_DIRECT_DOMAIN_SUFFIXES
                 server = "dns-direct"
             })
             // force bypass (always top DNS rule)
