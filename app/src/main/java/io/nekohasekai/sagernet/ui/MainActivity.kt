@@ -85,6 +85,8 @@ class MainActivity : ThemedActivity(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        DataStore.applyManagedSettingsDefaults()
+
         binding = LayoutMainBinding.inflate(layoutInflater)
         binding.fab.initProgress(binding.fabProgress)
         setupNavigationView()
@@ -451,7 +453,6 @@ class MainActivity : ThemedActivity(),
             }
 
             R.id.nav_group -> displayFragment(GroupFragment())
-            R.id.nav_settings -> displayFragment(SettingsFragment())
             R.id.nav_singbox_dashboard -> {
                 displayFragment(WebviewFragment())
                 return false

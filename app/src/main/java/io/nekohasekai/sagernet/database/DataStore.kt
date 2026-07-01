@@ -118,7 +118,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     var allowInsecureOnRequest by configurationStore.boolean(Key.ALLOW_INSECURE_ON_REQUEST)
     var networkChangeResetConnections by configurationStore.boolean(Key.NETWORK_CHANGE_RESET_CONNECTIONS) { true }
-    var wakeResetConnections by configurationStore.boolean(Key.WAKE_RESET_CONNECTIONS)
+    var wakeResetConnections by configurationStore.boolean(Key.WAKE_RESET_CONNECTIONS) { true }
 
     //
 
@@ -127,13 +127,13 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var nightTheme by configurationStore.stringToInt(Key.NIGHT_THEME)
     var serviceMode by configurationStore.string(Key.SERVICE_MODE) { Key.MODE_VPN }
 
-    var trafficSniffing by configurationStore.stringToInt(Key.TRAFFIC_SNIFFING) { 1 }
-    var resolveDestination by configurationStore.boolean(Key.RESOLVE_DESTINATION)
+    var trafficSniffing by configurationStore.stringToInt(Key.TRAFFIC_SNIFFING) { 2 }
+    var resolveDestination by configurationStore.boolean(Key.RESOLVE_DESTINATION) { true }
 
     var mtu by configurationStore.stringToInt(Key.MTU) { 9000 }
 
-    var bypassLan by configurationStore.boolean(Key.BYPASS_LAN)
-    var bypassLanInCore by configurationStore.boolean(Key.BYPASS_LAN_IN_CORE)
+    var bypassLan by configurationStore.boolean(Key.BYPASS_LAN) { true }
+    var bypassLanInCore by configurationStore.boolean(Key.BYPASS_LAN_IN_CORE) { true }
 
     var allowAccess by configurationStore.boolean(Key.ALLOW_ACCESS)
     var speedInterval by configurationStore.stringToInt(Key.SPEED_INTERVAL) { 1000 }
@@ -167,6 +167,45 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         }
     }
 
+    fun applyManagedSettingsDefaults() {
+        initGlobal()
+
+        serviceMode = Key.MODE_VPN
+        persistAcrossReboot = false
+        networkChangeResetConnections = true
+        wakeResetConnections = true
+
+        allowAccess = false
+        appendHttpProxy = false
+        globalAllowInsecure = false
+        allowInsecureOnRequest = false
+
+        trafficSniffing = 2
+        resolveDestination = true
+        bypassLan = true
+        bypassLanInCore = true
+
+        enableDnsRouting = true
+        enableFakeDns = true
+        if (remoteDns.isBlank()) {
+            remoteDns = "https://cloudflare-dns.com/dns-query\nhttps://dns.google/dns-query"
+        }
+        if (directDns.isBlank()) {
+            directDns = "https://223.5.5.5/dns-query\nhttps://1.1.1.1/dns-query"
+        }
+
+        enableClashAPI = true
+        profileTrafficStatistics = true
+        showDirectSpeed = true
+        smartEnableNetworkLearning = true
+        smartAdaptiveTransportEnabled = true
+        smartSpeedRefineEnabled = true
+        smartQuarantineEnabled = true
+        smartDebugEnabled = false
+        autoSelectPrimary = "parallel"
+        if (smartProfilePreset == "manual") smartProfilePreset = "balanced"
+    }
+
 
     private fun getLocalPort(key: String, default: Int): Int {
         return parsePort(configurationStore.getString(key), default + userIndex)
@@ -184,7 +223,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var individual by configurationStore.string(Key.INDIVIDUAL)
     var showDirectSpeed by configurationStore.boolean(Key.SHOW_DIRECT_SPEED) { true }
 
-    val persistAcrossReboot by configurationStore.boolean(Key.PERSIST_ACROSS_REBOOT) { false }
+    var persistAcrossReboot by configurationStore.boolean(Key.PERSIST_ACROSS_REBOOT) { false }
 
     var appendHttpProxy by configurationStore.boolean(Key.APPEND_HTTP_PROXY)
     var connectionTestURL by configurationStore.string(Key.CONNECTION_TEST_URL) { CONNECTION_TEST_URL }
