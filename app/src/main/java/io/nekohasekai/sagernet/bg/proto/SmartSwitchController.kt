@@ -75,6 +75,12 @@ class SmartSwitchController(
             val stableLockMs = policy.stableLockSec.coerceIn(120, 3600) * 1000L
             val excellentScore = policy.excellentScore.coerceIn(450, 1400)
             val minThroughputGainPct = policy.minThroughputGainPct.coerceIn(5, 80)
+            val stickyStableEnabled = DataStore.smartStickyStableEnabled
+            val stickyStableRoundsRequired = DataStore.smartStickyStableRounds.coerceIn(3, 24)
+            val stickyBreakScore = DataStore.smartStickyStableBreakScore.coerceIn(700, 4000)
+            val stickyMinImproveAbs = DataStore.smartStickyStableMinImproveAbs.coerceIn(160, 1600)
+            val stickyMinImprovePct = DataStore.smartStickyStableMinImprovePct.coerceIn(12, 75)
+            val stickyExtraWins = DataStore.smartStickyStableExtraWins.coerceIn(1, 6)
             val disruptionHoldMinMs = policy.disruptionHoldMinSec.coerceIn(30, 900) * 1000L
             val disruptionHoldMaxMs = policy.disruptionHoldMaxSec.coerceIn(60, 1800) * 1000L
             var activeId = 0L
@@ -93,6 +99,7 @@ class SmartSwitchController(
             var lastAutoTuneAtMs = 0L
             var trafficStallRounds = 0
             var lastTrafficRescueAtMs = 0L
+            var stickyLockedId = 0L
             val learningEnabled = DataStore.smartEnableNetworkLearning
 
             fun activeStats(): Pair<Int, Int> {
@@ -115,6 +122,7 @@ class SmartSwitchController(
                 if (coreActiveId <= 0L || coreActiveId == activeId) return
                 activeId = coreActiveId
                 activeSinceMs = System.currentTimeMillis()
+                stickyLockedId = 0L
                 if (standbyId == activeId) {
                     standbyId = 0L
                     DataStore.smartStandbyProxyId = 0L
@@ -253,6 +261,7 @@ class SmartSwitchController(
                 if (standbyId == id) {
                     DataStore.smartStandbyProxyId = 0L
                 }
+                stickyLockedId = 0L
                 activeSinceMs = System.currentTimeMillis()
                 lastSwitchAtMs = activeSinceMs
                 if (previousId > 0L && previousId != id) {
@@ -300,6 +309,12 @@ class SmartSwitchController(
                 val activeCritical = isCritical(activeScore, activeStreak) || trafficEmergency
                 val activeWeak = isWeak(activeScore, activeStreak) || trafficStallRounds >= 1
                 val activeGood = activeScore in 1..excellentScore && activeStreak == 0
+                val activeStickyLocked = stickyStableEnabled &&
+                    stickyLockedId == activeId &&
+                    activeId > 0L &&
+                    !activeCritical &&
+                    activeScore in 1 until stickyBreakScore &&
+                    activeStreak == 0
                 val activeBw = bandwidth(activeId)
                 val candidateBw = bandwidth(id)
                 val candidateUnstable = candidateStreak >= failTrigger ||
@@ -331,9 +346,23 @@ class SmartSwitchController(
                 } else {
                     false
                 }
+                val stickyImproveEnough = if (activeStickyLocked) {
+                    val stickyAbsEnough = activeScore > 0 && improveAbs >= stickyMinImproveAbs
+                    val stickyPctEnough =
+                        activeScore > 0 && candidateScore * 100 <= activeScore * (100 - stickyMinImprovePct)
+                    val stickyThroughputEnough = if (activeBw > 0 && candidateBw > 0) {
+                        candidateBw * 100 >= activeBw * (100 + minThroughputGainPct + 20)
+                    } else {
+                        false
+                    }
+                    stickyAbsEnough || stickyPctEnough || stickyThroughputEnough
+                } else {
+                    false
+                }
                 val activeExcellent = activeGood
                 val improveEnough = when {
                     activeCritical -> true
+                    activeStickyLocked -> stickyImproveEnough
                     activeExcellent -> {
                         val strictAbs = minImproveAbs + 180
                         val strictPct = (minImprovePct + 8).coerceAtMost(70)
@@ -345,7 +374,7 @@ class SmartSwitchController(
                 }
                 if (!improveEnough) {
                     if (pendingCandidateId == id) pendingWins = 0
-                    setDecision("hold:no_significant_gain")
+                    setDecision(if (activeStickyLocked) "hold:sticky_stable_lock" else "hold:no_significant_gain")
                     return false
                 }
                 if (pendingCandidateId == id) {
@@ -357,6 +386,7 @@ class SmartSwitchController(
                 val requiredWins = when {
                     activeCritical -> 1
                     warmup -> warmupWins + if (activeExcellent) 1 else 0
+                    activeStickyLocked -> baseWins + stickyExtraWins
                     activeWeak -> baseWins
                     else -> baseWins + 1
                 }.let {
@@ -443,6 +473,25 @@ class SmartSwitchController(
                     stableRounds = (stableRounds + 1).coerceAtMost(120)
                 } else {
                     stableRounds = 0
+                }
+                if (
+                    stickyStableEnabled &&
+                    activeId > 0L &&
+                    stableRounds >= stickyStableRoundsRequired &&
+                    score in 1 until stickyBreakScore &&
+                    streak == 0 &&
+                    !trafficCritical
+                ) {
+                    if (stickyLockedId != activeId) {
+                        stickyLockedId = activeId
+                        setDecision("lock:sticky_stable active=$activeId score=$score rounds=$stableRounds")
+                    }
+                } else if (
+                    stickyLockedId == activeId &&
+                    (critical || score >= stickyBreakScore || streak >= failTrigger || trafficCritical)
+                ) {
+                    stickyLockedId = 0L
+                    setDecision("unlock:sticky_stable score=$score streak=$streak traffic=$trafficCritical")
                 }
                 criticalRounds = if (critical) (criticalRounds + 1).coerceAtMost(60) else 0
                 val stabilityMultiplier = when {

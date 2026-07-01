@@ -255,6 +255,12 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var smartSwitchStableLockSec by configurationStore.int("smartSwitchStableLockSec") { 300 }
     var smartSwitchExcellentScore by configurationStore.int("smartSwitchExcellentScore") { 760 }
     var smartSwitchMinThroughputGainPct by configurationStore.int("smartSwitchMinThroughputGainPct") { 18 }
+    var smartStickyStableEnabled by configurationStore.boolean("smartStickyStableEnabled") { true }
+    var smartStickyStableRounds by configurationStore.int("smartStickyStableRounds") { 6 }
+    var smartStickyStableBreakScore by configurationStore.int("smartStickyStableBreakScore") { 1250 }
+    var smartStickyStableMinImproveAbs by configurationStore.int("smartStickyStableMinImproveAbs") { 420 }
+    var smartStickyStableMinImprovePct by configurationStore.int("smartStickyStableMinImprovePct") { 32 }
+    var smartStickyStableExtraWins by configurationStore.int("smartStickyStableExtraWins") { 2 }
     var smartProfilePreset by configurationStore.string("smartProfilePreset") { "balanced" }
     var smartSwitchSensitivity by configurationStore.string("smartSwitchSensitivity") { "balanced" }
     var smartSwitchNotificationsEnabled by configurationStore.boolean("smartSwitchNotificationsEnabled") { true }
