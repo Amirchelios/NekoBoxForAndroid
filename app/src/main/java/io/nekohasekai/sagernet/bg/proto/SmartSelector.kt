@@ -53,6 +53,7 @@ object SmartSelector {
         val worst: Int,
         val bandwidthKbps: Int,
         val transportClass: TransportClass,
+        val failureReason: String,
     )
 
     private enum class TransportClass(val key: String) {
@@ -456,10 +457,18 @@ object SmartSelector {
                 0
             }
             val learnedScore = SmartLearningEngine.compositeScore(profile.id, scope, transportClass.key)
-            val unstableRoute = successRatio < MIN_SUCCESS_RATIO ||
-                (successRatio < STRONG_SUCCESS_RATIO && jitter > MAX_JITTER_FOR_STRONG_ROUTE) ||
-                (successRatio < STRONG_SUCCESS_RATIO && worst > MAX_WORST_FOR_WEAK_ROUTE) ||
-                (worst > MAX_WORST_FOR_STRONG_ROUTE && successRatio < 0.85)
+            val failureReason = when {
+                !ambientHealthy -> SmartLearningEngine.FAILURE_AMBIENT_NETWORK
+                successRatio < MIN_SUCCESS_RATIO -> SmartLearningEngine.FAILURE_LOW_SUCCESS
+                successRatio < STRONG_SUCCESS_RATIO && jitter > MAX_JITTER_FOR_STRONG_ROUTE ->
+                    SmartLearningEngine.FAILURE_HIGH_JITTER
+                successRatio < STRONG_SUCCESS_RATIO && worst > MAX_WORST_FOR_WEAK_ROUTE ->
+                    SmartLearningEngine.FAILURE_HIGH_WORST
+                worst > MAX_WORST_FOR_STRONG_ROUTE && successRatio < 0.85 ->
+                    SmartLearningEngine.FAILURE_HIGH_WORST
+                else -> SmartLearningEngine.FAILURE_NONE
+            }
+            val unstableRoute = failureReason != SmartLearningEngine.FAILURE_NONE
             val finalScore = if (baseScore == null || unstableRoute) {
                 null
             } else {
@@ -477,6 +486,7 @@ object SmartSelector {
                 worst = worst,
                 bandwidthKbps = bandwidthKbps,
                 transportClass = transportClass,
+                failureReason = failureReason,
             )
         } catch (e: Exception) {
             Logs.w(e.readableMessage)
@@ -608,6 +618,7 @@ object SmartSelector {
                 jitter = result.jitter,
                 worst = result.worst,
                 bandwidthKbps = result.bandwidthKbps,
+                failureReason = result.failureReason,
             )
         )
         if (DataStore.smartAdaptiveTransportEnabled) {

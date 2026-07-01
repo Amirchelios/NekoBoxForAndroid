@@ -584,6 +584,7 @@
     <string name="location_picker_apply_failed">Could not switch location</string>
     <string name="location_picker_reset_auto">Clear cache &amp; auto</string>
     <string name="location_picker_reset_done">Location cache cleared; auto mode restored</string>
+    <string name="location_picker_selected">Selected</string>
     <plurals name="location_picker_server_count">
         <item quantity="one">%d available server</item>
         <item quantity="other">%d available servers</item>

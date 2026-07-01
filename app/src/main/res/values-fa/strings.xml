@@ -530,6 +530,7 @@
     <string name="location_picker_apply_failed">امکان تغییر لوکیشن نیست</string>
     <string name="location_picker_reset_auto">پاک‌کردن کش و خودکار</string>
     <string name="location_picker_reset_done">کش لوکیشن پاک شد و حالت خودکار برگشت</string>
+    <string name="location_picker_selected">انتخاب‌شده</string>
     <plurals name="location_picker_server_count">
         <item quantity="one">%d سرور قابل استفاده</item>
         <item quantity="other">%d سرور قابل استفاده</item>

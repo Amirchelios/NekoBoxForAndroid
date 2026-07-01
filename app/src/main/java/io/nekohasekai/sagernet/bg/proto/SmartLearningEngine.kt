@@ -27,6 +27,7 @@ object SmartLearningEngine {
         val jitter: Int,
         val worst: Int,
         val bandwidthKbps: Int,
+        val failureReason: String,
     )
 
     data class HealthSummary(
@@ -73,38 +74,50 @@ object SmartLearningEngine {
         val transportHash = normalizedTransportKey(result.transportClass)
 
         if (result.score == null) {
+            val networkWideFailure = result.failureReason == FAILURE_AMBIENT_NETWORK ||
+                result.failureReason == FAILURE_CORE_UNREADY
             DataStore.setSmartFailureCount(
                 result.profileId,
                 DataStore.getSmartFailureCount(result.profileId) + 1
             )
             DataStore.setSmartLastFailureAt(result.profileId, System.currentTimeMillis())
+            DataStore.setSmartLastFailureReason(result.profileId, result.failureReason)
             DataStore.setSmartLastScore(result.profileId, -1)
             DataStore.setSmartLastBandwidthKbps(result.profileId, -1)
-            DataStore.bumpSmartRecentSwitchCount(result.profileId)
+            if (!networkWideFailure) {
+                DataStore.bumpSmartRecentSwitchCount(result.profileId)
+            }
             observeEma(result.profileId, "score", -1, DEFAULT_QUALITY_ALPHA)
             observeEma(result.profileId, "bandwidth", -1, DEFAULT_BANDWIDTH_ALPHA)
             observeEma(result.profileId, "jitter", result.jitter, DEFAULT_JITTER_ALPHA)
             observeEma(result.profileId, "scope.$scopeHash.fail", 1, DEFAULT_QUALITY_ALPHA)
             observeEma(result.profileId, "transport.$transportHash.fail", 1, DEFAULT_QUALITY_ALPHA)
 
-            val newStreak = (oldStreak + 1).coerceAtMost(20)
-            val bump = (220 + newStreak * 30).coerceAtMost(700)
+            val newStreak = if (networkWideFailure) {
+                oldStreak.coerceAtMost(2)
+            } else {
+                (oldStreak + 1).coerceAtMost(20)
+            }
+            val bumpBase = if (networkWideFailure) 70 else 220
+            val bump = (bumpBase + newStreak * 30).coerceAtMost(if (networkWideFailure) 260 else 700)
             DataStore.setSmartFailureStreak(result.profileId, newStreak)
             DataStore.setSmartHealthPenalty(result.profileId, oldPenalty + bump)
 
-            when {
-                newStreak >= 6 -> DataStore.quarantineSmartProfile(
-                    result.profileId,
-                    DataStore.smartQuarantineLongMin
-                )
-                newStreak >= 4 -> DataStore.quarantineSmartProfile(
-                    result.profileId,
-                    DataStore.smartQuarantineMediumMin
-                )
-                newStreak >= 2 -> DataStore.quarantineSmartProfile(
-                    result.profileId,
-                    DataStore.smartQuarantineShortMin
-                )
+            if (!networkWideFailure) {
+                when {
+                    newStreak >= 6 -> DataStore.quarantineSmartProfile(
+                        result.profileId,
+                        DataStore.smartQuarantineLongMin
+                    )
+                    newStreak >= 4 -> DataStore.quarantineSmartProfile(
+                        result.profileId,
+                        DataStore.smartQuarantineMediumMin
+                    )
+                    newStreak >= 2 -> DataStore.quarantineSmartProfile(
+                        result.profileId,
+                        DataStore.smartQuarantineShortMin
+                    )
+                }
             }
             return
         }
@@ -114,6 +127,7 @@ object SmartLearningEngine {
             DataStore.getSmartSuccessCount(result.profileId) + 1
         )
         DataStore.setSmartLastSuccessAt(result.profileId, System.currentTimeMillis())
+        DataStore.setSmartLastFailureReason(result.profileId, "")
         DataStore.setSmartLastScore(result.profileId, result.score)
         DataStore.setSmartLastBandwidthKbps(result.profileId, result.bandwidthKbps)
         observeEma(result.profileId, "score", result.score, DEFAULT_QUALITY_ALPHA)
@@ -296,4 +310,11 @@ object SmartLearningEngine {
             else -> "mixed"
         }
     }
+
+    const val FAILURE_NONE = "none"
+    const val FAILURE_AMBIENT_NETWORK = "ambient_network"
+    const val FAILURE_CORE_UNREADY = "core_unready"
+    const val FAILURE_LOW_SUCCESS = "proxy_low_success"
+    const val FAILURE_HIGH_JITTER = "proxy_high_jitter"
+    const val FAILURE_HIGH_WORST = "proxy_high_worst"
 }

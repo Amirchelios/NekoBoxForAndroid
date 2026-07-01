@@ -288,6 +288,14 @@ class SmartSwitchController(
                 val candidateQuality = DataStore.getSmartQualityScore(id)
                 val now = System.currentTimeMillis()
                 val (activeScore, activeStreak) = activeStats()
+                val activeFailureReason = DataStore.getSmartLastFailureReason(activeId)
+                if (
+                    activeFailureReason == SmartLearningEngine.FAILURE_AMBIENT_NETWORK ||
+                    activeFailureReason == SmartLearningEngine.FAILURE_CORE_UNREADY
+                ) {
+                    setDecision("hold:network_wide_failure")
+                    return false
+                }
                 val trafficEmergency = trafficStallRounds >= 2
                 val activeCritical = isCritical(activeScore, activeStreak) || trafficEmergency
                 val activeWeak = isWeak(activeScore, activeStreak) || trafficStallRounds >= 1

@@ -498,6 +498,14 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         configurationStore.putLong("smartLastObservedAt.$profileId", timestamp.coerceAtLeast(0L))
     }
 
+    fun getSmartLastFailureReason(profileId: Long): String {
+        return configurationStore.getString("smartLastFailureReason.$profileId", "") ?: ""
+    }
+
+    fun setSmartLastFailureReason(profileId: Long, reason: String) {
+        configurationStore.putString("smartLastFailureReason.$profileId", reason.take(80))
+    }
+
     fun getSmartRecentSwitchCount(profileId: Long): Int {
         return configurationStore.getInt("smartRecentSwitchCount.$profileId", 0).coerceAtLeast(0)
     }

@@ -273,12 +273,17 @@ class MainActivityLocationController(
         val autoName = autoGroup?.let { group ->
             data.snapshot.proxies[group]?.all?.firstOrNull { it.equals("auto", ignoreCase = true) }
         }
+        val selectedProxy = DataStore.yacdSelectedProxy
+        val selectedFlag = DataStore.yacdSelectedFlag
+        val selectedGroup = DataStore.yacdSelectedGroup
         val rows = arrayListOf<PickerRow>()
         if (autoGroup != null && autoName != null) {
             rows.add(PickerRow(
                 title = activity.getString(R.string.location_picker_auto),
                 subtitle = autoGroup,
                 flag = "🌍",
+                selected = selectedProxy.isBlank() && selectedFlag.isBlank() ||
+                    selectedGroup == autoGroup && selectedProxy.equals(autoName, ignoreCase = true),
             ) {
                 if (data.client.switchProxy(autoGroup, autoName)) {
                     data.client.closeStaleConnections(autoGroup, autoName)
@@ -290,6 +295,8 @@ class MainActivityLocationController(
         }
         val verifiedRows = data.choices.map { choice ->
             val best = choice.proxies.first()
+            val selected = selectedFlag == choice.flag ||
+                choice.proxies.any { it.name == selectedProxy }
             PickerRow(
                 title = flagToCountryName(choice.flag) ?: activity.getString(R.string.location_picker_location),
                 subtitle = "${activity.resources.getQuantityString(
@@ -299,6 +306,7 @@ class MainActivityLocationController(
                 )} - ${best.historyDelay ?: 0}ms",
                 flag = choice.flag,
                 delayMs = best.historyDelay,
+                selected = selected,
             ) {
                 val group = data.snapshot.preferredGroupNameFor(best.name)
                 if (group != null && data.client.switchProxy(group, best.name)) {
@@ -309,7 +317,11 @@ class MainActivityLocationController(
                 }
             }
         }
-        rows.addAll(verifiedRows.take(MAX_LOCATION_PICKER_ROWS))
+        rows.addAll(
+            verifiedRows
+                .sortedWith(compareByDescending<PickerRow> { it.selected }.thenBy { it.delayMs ?: Int.MAX_VALUE })
+                .take(MAX_LOCATION_PICKER_ROWS)
+        )
         if (rows.isEmpty()) {
             activity.snackbar(R.string.location_picker_empty).show()
             return
@@ -419,7 +431,10 @@ class MainActivityLocationController(
             parent.addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
-                background = ContextCompat.getDrawable(activity, R.drawable.bg_location_picker_row)
+                background = ContextCompat.getDrawable(
+                    activity,
+                    if (row.selected) R.drawable.bg_location_picker_row_selected else R.drawable.bg_location_picker_row
+                )
                 foreground = ContextCompat.getDrawable(activity, selectableItemBackground())
                 isClickable = true
                 isFocusable = true
@@ -442,15 +457,25 @@ class MainActivityLocationController(
                         textSize = 15f
                         maxLines = 1
                         ellipsize = android.text.TextUtils.TruncateAt.END
-                        setTextColor(ContextCompat.getColor(activity, R.color.app_on_surface))
+                        setTextColor(ContextCompat.getColor(
+                            activity,
+                            if (row.selected) android.R.color.white else R.color.app_on_surface
+                        ))
                         typeface = android.graphics.Typeface.DEFAULT_BOLD
                     })
                     addView(TextView(activity).apply {
-                        text = row.subtitle
+                        text = if (row.selected) {
+                            "${activity.getString(R.string.location_picker_selected)} - ${row.subtitle}"
+                        } else {
+                            row.subtitle
+                        }
                         textSize = 12f
                         maxLines = 1
                         ellipsize = android.text.TextUtils.TruncateAt.END
-                        setTextColor(ContextCompat.getColor(activity, R.color.app_on_surface_muted))
+                        setTextColor(ContextCompat.getColor(
+                            activity,
+                            if (row.selected) android.R.color.white else R.color.app_on_surface_muted
+                        ))
                     })
                 })
 
@@ -596,6 +621,7 @@ class MainActivityLocationController(
         val subtitle: String,
         val flag: String,
         val delayMs: Int? = null,
+        val selected: Boolean = false,
         val action: suspend () -> AppliedLocation?,
     )
 
