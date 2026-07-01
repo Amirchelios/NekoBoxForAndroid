@@ -4,8 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/drawer_layout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:openDrawer="start">
+    android:layout_height="match_parent">
 
     <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:id="@+id/coordinator"
@@ -51,6 +50,19 @@
                 android:layout_gravity="center"
                 android:indeterminate="true"
                 android:indeterminateTint="@color/quick_update_text"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/quick_server_update_badge"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="top|end"
+                android:background="@drawable/bg_quick_update_badge"
+                android:gravity="center"
+                android:text="!"
+                android:textColor="@android:color/white"
+                android:textSize="11sp"
+                android:textStyle="bold"
                 android:visibility="gone" />
         </FrameLayout>
 
@@ -388,6 +400,7 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="start"
+        android:visibility="gone"
         app:itemIconTint="@color/navigation_icon"
         app:itemTextColor="@color/navigation_icon"
         app:menu="@menu/main_drawer_menu" />
@@ -398,6 +411,7 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="start"
+        android:visibility="gone"
         app:itemIconTint="@color/navigation_icon"
         app:itemShapeAppearance="@style/ShapeAppearance.MaterialComponents.MediumComponent"
         app:itemShapeFillColor="@color/navigation_item"

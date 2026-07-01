@@ -61,6 +61,8 @@
     <string name="group_status_empty_subscription">هنوز به‌روزرسانی نشده است</string>
     <string name="update_success">به‌روزرسانی با موفقیت انجام شد</string>
     <string name="update_failed">به‌روزرسانی ناموفق بود</string>
+    <string name="subscription_sources_update_available">منابع جدید سرورها در دسترس است. برای بروزرسانی لمس کنید.</string>
+    <string name="subscription_sources_update_check_failed">فعلا امکان بررسی منابع سرورها وجود ندارد.</string>
     <string name="update_summary_title">نتیجه بروزرسانی</string>
     <string name="first_run_update_success">بروزرسانی اولیه با موفقیت انجام شد</string>
     <string name="update_status_success">موفق</string>

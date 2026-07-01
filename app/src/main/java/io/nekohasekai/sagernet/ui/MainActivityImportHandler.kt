@@ -60,7 +60,7 @@ class MainActivityImportHandler(
         group.name = group.name.takeIf { !it.isNullOrBlank() } ?: ("Subscription #" + System.currentTimeMillis())
 
         onMainDispatcher {
-            activity.displayFragmentWithId(R.id.nav_group)
+            activity.displayFragmentWithId(R.id.nav_configuration)
             MaterialAlertDialogBuilder(activity)
                 .setTitle(R.string.subscription_import)
                 .setMessage(activity.getString(R.string.subscription_import_message, name))

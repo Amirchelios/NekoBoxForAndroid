@@ -171,6 +171,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
         initGlobal()
 
         serviceMode = Key.MODE_VPN
+        clientMode = false
         persistAcrossReboot = false
         networkChangeResetConnections = true
         wakeResetConnections = true
@@ -402,6 +403,12 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var subscriptionAutoUpdate by profileCacheStore.boolean(Key.SUBSCRIPTION_AUTO_UPDATE)
     var subscriptionAutoUpdateDelay by profileCacheStore.stringToInt(Key.SUBSCRIPTION_AUTO_UPDATE_DELAY) { 360 }
     var firstRunDone by configurationStore.boolean(Key.FIRST_RUN_DONE) { false }
+    var subscriptionSourceLastSha by configurationStore.string("subscriptionSourceLastSha") {
+        "7f0ff73fd6197601a26a8416ebcc9375dc8cf3f9"
+    }
+    var subscriptionSourcePendingSha by configurationStore.string("subscriptionSourcePendingSha") { "" }
+    var subscriptionSourceLastCheckAt by configurationStore.long("subscriptionSourceLastCheckAt") { 0L }
+    var subscriptionSourceUpdateAvailable by configurationStore.boolean("subscriptionSourceUpdateAvailable") { false }
 
     @Volatile
     var firstRunSilentUpdateActive = false

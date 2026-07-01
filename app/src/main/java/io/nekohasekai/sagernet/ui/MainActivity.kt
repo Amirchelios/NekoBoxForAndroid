@@ -18,6 +18,7 @@ import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceDataStore
@@ -56,6 +57,7 @@ import io.nekohasekai.sagernet.ktx.readableMessage
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import moe.matsuri.nb4a.utils.Util
 import libcore.Libcore
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import kotlinx.coroutines.Job
@@ -81,6 +83,12 @@ class MainActivity : ThemedActivity(),
     private val importHandler by lazy { MainActivityImportHandler(this) }
     private val connectionAnimator by lazy { MainActivityConnectionAnimator(this, binding) }
     private val locationController by lazy { MainActivityLocationController(this, binding) }
+
+    private companion object {
+        private const val SUBSCRIPTION_SOURCE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
+        private const val SUBSCRIPTION_SOURCE_COMMITS_URL =
+            "https://api.github.com/repos/Amirchelios/clc-main/commits?sha=main&path=githubmirror/bypass&per_page=1"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,6 +137,8 @@ class MainActivity : ThemedActivity(),
             navigation = binding.navViewBlack
             binding.drawerLayout.removeView(binding.navView)
         }
+        binding.drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
+        navigation.visibility = View.GONE
         navigation.setNavigationItemSelectedListener(this)
     }
 
@@ -201,10 +211,12 @@ class MainActivity : ThemedActivity(),
         GroupManager.userInterface = GroupInterfaceAdapter(this)
         GroupUpdater.listeners.add(updateProgressListener)
         applyConnectionPerformanceBaseline()
+        updateQuickServerUpdateNotice()
         runOnDefaultDispatcher {
             val defaultGroup = GroupManager.ensureDefaultSubscriptionGroup()
             runFirstRunUpdate(defaultGroup)
             ensureDefaultAutoSelectOnFirstRun()
+            checkSubscriptionSourceUpdateIfNeeded()
         }
     }
 
@@ -220,13 +232,7 @@ class MainActivity : ThemedActivity(),
     }
 
     fun refreshNavMenu(clashApi: Boolean) {
-        if (::navigation.isInitialized) {
-            navigation.menu.findItem(R.id.nav_singbox_dashboard)?.isVisible = clashApi
-            navigation.menu.findItem(R.id.nav_client_mode)?.apply {
-                isVisible = BuildConfig.DEBUG
-                isChecked = DataStore.clientMode
-            }
-        }
+        DataStore.clientMode = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -304,30 +310,8 @@ class MainActivity : ThemedActivity(),
     }
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.nav_client_mode -> {
-                if (!BuildConfig.DEBUG) {
-                    binding.drawerLayout.closeDrawers()
-                    return true
-                }
-                DataStore.clientMode = !DataStore.clientMode
-                item.isChecked = DataStore.clientMode
-                applyClientModeUi()
-                if (DataStore.clientMode) {
-                    displayFragmentWithId(R.id.nav_configuration)
-                }
-                binding.drawerLayout.closeDrawers()
-                true
-            }
-            else -> {
-                if (item.isChecked) {
-                    binding.drawerLayout.closeDrawers()
-                    true
-                } else {
-                    displayFragmentWithId(item.itemId)
-                }
-            }
-        }
+        binding.drawerLayout.closeDrawers()
+        return false
     }
 
 
@@ -376,12 +360,10 @@ class MainActivity : ThemedActivity(),
     }
 
     private fun applyClientModeUi() {
+        DataStore.clientMode = false
         val params = binding.fab.layoutParams as androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams
         val progressParams = binding.fabProgress.layoutParams as androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams
         val density = resources.displayMetrics.density
-        if (::navigation.isInitialized) {
-            navigation.menu.findItem(R.id.nav_client_mode)?.isChecked = DataStore.clientMode
-        }
         (supportFragmentManager.findFragmentById(R.id.fragment_holder) as? ConfigurationFragment)
             ?.updateAddProfileMenuForClientMode()
         if (DataStore.clientMode) {
@@ -451,20 +433,6 @@ class MainActivity : ThemedActivity(),
             R.id.nav_configuration -> {
                 displayFragment(ConfigurationFragment())
             }
-
-            R.id.nav_group -> displayFragment(GroupFragment())
-            R.id.nav_singbox_dashboard -> {
-                displayFragment(WebviewFragment())
-                return false
-            }
-            R.id.nav_tools -> displayFragment(ToolsFragment())
-            R.id.nav_logcat -> displayFragment(LogcatFragment())
-            R.id.nav_internal_browser -> {
-                startActivity(Intent(this, InternalBrowserActivity::class.java))
-                return false
-            }
-            R.id.nav_about -> displayFragment(AboutFragment())
-
             else -> return false
         }
         navigation.menu.findItem(id)?.isChecked = true
@@ -533,6 +501,70 @@ class MainActivity : ThemedActivity(),
         binding.fabProgress.isIndeterminate = false
         binding.fabProgress.max = totalMax
         binding.fabProgress.progress = totalProgress.coerceAtMost(totalMax)
+    }
+
+    private suspend fun checkSubscriptionSourceUpdateIfNeeded(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - DataStore.subscriptionSourceLastCheckAt < SUBSCRIPTION_SOURCE_CHECK_INTERVAL_MS) {
+            updateQuickServerUpdateNotice()
+            return
+        }
+
+        val latestSha = runCatching { fetchLatestSubscriptionSourceSha() }
+            .onFailure { Logs.w(it) }
+            .getOrNull()
+            ?.takeIf { it.length >= 7 }
+            ?: run {
+                DataStore.subscriptionSourceLastCheckAt = now
+                updateQuickServerUpdateNotice()
+                return
+            }
+
+        DataStore.subscriptionSourceLastCheckAt = now
+        val currentSha = DataStore.subscriptionSourceLastSha.trim()
+        if (currentSha.isNotBlank() && !latestSha.equals(currentSha, ignoreCase = true)) {
+            DataStore.subscriptionSourcePendingSha = latestSha
+            DataStore.subscriptionSourceUpdateAvailable = true
+            onMainDispatcher {
+                updateQuickServerUpdateNotice()
+                snackbar(R.string.subscription_sources_update_available).show()
+            }
+        } else {
+            DataStore.subscriptionSourceLastSha = latestSha
+            DataStore.subscriptionSourcePendingSha = ""
+            DataStore.subscriptionSourceUpdateAvailable = false
+            updateQuickServerUpdateNotice()
+        }
+    }
+
+    private fun fetchLatestSubscriptionSourceSha(): String {
+        val client = Libcore.newHttpClient().apply {
+            modernTLS()
+            trySocks5(DataStore.mixedPort)
+        }
+        val response = client.newRequest().apply {
+            setURL(SUBSCRIPTION_SOURCE_COMMITS_URL)
+            setUserAgent("NekoBoxForAndroid/${BuildConfig.VERSION_NAME}")
+        }.execute()
+        val commits = JSONArray(Util.getStringBox(response.contentString))
+        if (commits.length() == 0) return ""
+        return commits.getJSONObject(0).optString("sha", "").trim()
+    }
+
+    private fun updateQuickServerUpdateNotice() {
+        runOnUiThread {
+            val visible = DataStore.subscriptionSourceUpdateAvailable &&
+                    DataStore.subscriptionSourcePendingSha.isNotBlank() &&
+                    binding.quickServerUpdateProgress.visibility != View.VISIBLE
+            binding.quickServerUpdateBadge.isVisible = visible
+            binding.quickServerUpdate.contentDescription = getString(
+                if (visible) {
+                    R.string.subscription_sources_update_available
+                } else {
+                    R.string.update_current_subscription
+                }
+            )
+        }
     }
 
     private fun scheduleInternalProxyRestart() {
@@ -830,8 +862,16 @@ class MainActivity : ThemedActivity(),
                 setQuickServerUpdateBusy(false)
             }
             if (ok) {
+                val pendingSha = DataStore.subscriptionSourcePendingSha.trim()
+                if (pendingSha.isNotBlank()) {
+                    DataStore.subscriptionSourceLastSha = pendingSha
+                }
+                DataStore.subscriptionSourcePendingSha = ""
+                DataStore.subscriptionSourceUpdateAvailable = false
+                DataStore.subscriptionSourceLastCheckAt = System.currentTimeMillis()
                 ensureDefaultAutoSelectOnFirstRun()
                 onMainDispatcher {
+                    updateQuickServerUpdateNotice()
                     snackbar(R.string.update_success).show()
                 }
             } else {
@@ -846,6 +886,11 @@ class MainActivity : ThemedActivity(),
         binding.quickServerUpdate.isEnabled = !busy
         binding.quickServerUpdateIcon.visibility = if (busy) View.GONE else View.VISIBLE
         binding.quickServerUpdateProgress.visibility = if (busy) View.VISIBLE else View.GONE
+        if (busy) {
+            binding.quickServerUpdateBadge.visibility = View.GONE
+        } else {
+            updateQuickServerUpdateNotice()
+        }
     }
 
     override fun snackbarInternal(text: CharSequence): Snackbar {
@@ -933,23 +978,7 @@ class MainActivity : ThemedActivity(),
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (super.onKeyDown(keyCode, event)) return true
-                binding.drawerLayout.open()
-                navigation.requestFocus()
-            }
-
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (binding.drawerLayout.isOpen) {
-                    binding.drawerLayout.close()
-                    return true
-                }
-            }
-        }
-
         if (super.onKeyDown(keyCode, event)) return true
-        if (binding.drawerLayout.isOpen) return false
 
         val fragment =
             supportFragmentManager.findFragmentById(R.id.fragment_holder) as? ToolbarFragment

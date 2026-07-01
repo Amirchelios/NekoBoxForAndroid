@@ -54,6 +54,8 @@
     <string name="group_status_empty_subscription">Not updated yet</string>
     <string name="update_success">Update completed successfully</string>
     <string name="update_failed">Update failed</string>
+    <string name="subscription_sources_update_available">New server sources are available. Tap update to refresh.</string>
+    <string name="subscription_sources_update_check_failed">Could not check server sources right now.</string>
     <string name="update_summary_title">Update results</string>
     <string name="first_run_update_success">Initial update completed successfully</string>
     <string name="update_status_success">Success</string>
