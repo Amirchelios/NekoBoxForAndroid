@@ -190,6 +190,17 @@ class MainActivityLocationController(
         return String(Character.toChars(first)) + String(Character.toChars(second))
     }
 
+    private fun flagToCountryName(flag: String): String? {
+        val points = flag.codePoints().toArray()
+        if (points.size != 2) return null
+        val code = points.map { point ->
+            val offset = point - 0x1F1E6
+            if (offset !in 0..25) return null
+            ('A'.code + offset).toChar()
+        }.joinToString("")
+        return Locale("", code).getDisplayCountry(Locale.US).takeIf { it.isNotBlank() }
+    }
+
     private fun buildLocationChoices(
         snapshot: ClashApiClient.ProxySnapshot,
     ): List<LocationChoice> {
@@ -205,7 +216,6 @@ class MainActivityLocationController(
             byFlag.getOrPut(flag) { mutableListOf() }.add(proxy.copy(historyDelay = delay))
         }
         val choices = byFlag.entries
-            .sortedBy { it.key }
             .map { (flag, proxies) ->
                 val sorted = proxies.sortedWith(
                     compareBy<ClashApiClient.ProxyItem> { it.historyDelay ?: Int.MAX_VALUE }
@@ -213,6 +223,10 @@ class MainActivityLocationController(
                 )
                 LocationChoice(flag, sorted)
             }
+            .sortedWith(
+                compareBy<LocationChoice> { it.proxies.firstOrNull()?.historyDelay ?: Int.MAX_VALUE }
+                    .thenBy { it.flag }
+            )
         if (choices.isNotEmpty()) {
             saveCachedLocations(choices)
         }
@@ -277,12 +291,12 @@ class MainActivityLocationController(
         val verifiedRows = data.choices.map { choice ->
             val best = choice.proxies.first()
             PickerRow(
-                title = shortProxyTitle(best.name, choice.flag),
-                subtitle = activity.resources.getQuantityString(
+                title = flagToCountryName(choice.flag) ?: activity.getString(R.string.location_picker_location),
+                subtitle = "${activity.resources.getQuantityString(
                     R.plurals.location_picker_server_count,
                     choice.proxies.size,
                     choice.proxies.size
-                ),
+                )} - ${best.historyDelay ?: 0}ms",
                 flag = choice.flag,
                 delayMs = best.historyDelay,
             ) {
@@ -295,7 +309,7 @@ class MainActivityLocationController(
                 }
             }
         }
-        rows.addAll(verifiedRows)
+        rows.addAll(verifiedRows.take(MAX_LOCATION_PICKER_ROWS))
         if (rows.isEmpty()) {
             activity.snackbar(R.string.location_picker_empty).show()
             return
@@ -311,9 +325,37 @@ class MainActivityLocationController(
         )
         dialog = MaterialAlertDialogBuilder(activity)
             .setView(content)
+            .setNeutralButton(R.string.location_picker_reset_auto) { _, _ ->
+                resetLocationCacheAndAuto(data)
+            }
             .setNegativeButton(android.R.string.cancel, null)
             .create()
         dialog.show()
+    }
+
+    private fun resetLocationCacheAndAuto(data: PickerData) {
+        pickerJob?.cancel()
+        pickerJob = activity.lifecycleScope.launch {
+            val applied = withContext(Dispatchers.IO) {
+                DataStore.yacdCachedLocations = ""
+                DataStore.yacdSelectedGroup = ""
+                DataStore.yacdSelectedProxy = ""
+                DataStore.yacdSelectedFlag = ""
+                val autoGroup = data.snapshot.preferredFallbackGroupName()
+                val autoName = autoGroup?.let { group ->
+                    data.snapshot.proxies[group]?.all?.firstOrNull { it.equals("auto", ignoreCase = true) }
+                }
+                if (autoGroup != null && autoName != null && data.client.switchProxy(autoGroup, autoName)) {
+                    data.client.closeStaleConnections(autoGroup, autoName)
+                    AppliedLocation(autoGroup, autoName, "🌍")
+                } else {
+                    AppliedLocation("", "", "🌍")
+                }
+            }
+            binding.locationFlag.text = applied.flag
+            lastLocationFlag = applied.flag
+            activity.snackbar(R.string.location_picker_reset_done).show()
+        }
     }
 
     private fun buildPickerView(
@@ -341,14 +383,16 @@ class MainActivityLocationController(
 
         val list = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         addRows(list, rows.filter { it.title == activity.getString(R.string.location_picker_auto) }, onPick)
-        addRows(list, rows.filter { it.title != activity.getString(R.string.location_picker_auto) }, onPick, R.string.location_picker_verified)
+        addRows(
+            list,
+            rows.filter { it.title != activity.getString(R.string.location_picker_auto) },
+            onPick,
+            R.string.location_picker_verified
+        )
 
         root.addView(ScrollView(activity).apply {
             addView(list)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(390)
-            )
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(390))
         })
         return root
     }
@@ -559,6 +603,7 @@ class MainActivityLocationController(
         val FLAG_REGEX = Regex("[\\x{1F1E6}-\\x{1F1FF}]{2}")
         const val RECONNECT_SYNC_ATTEMPTS = 12
         const val RECONNECT_SYNC_DELAY_MS = 350L
-        const val MAX_CACHED_LOCATION_PROXIES = 500
+        const val MAX_CACHED_LOCATION_PROXIES = 250
+        const val MAX_LOCATION_PICKER_ROWS = 80
     }
 }

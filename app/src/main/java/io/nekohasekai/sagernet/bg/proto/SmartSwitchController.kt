@@ -213,11 +213,18 @@ class SmartSwitchController(
                             DataStore.parallelTimeoutMs = (DataStore.parallelTimeoutMs + 500).coerceAtMost(8500)
                         }
                     }
-                    health > 90 -> {
-                        if (DataStore.connectionTestConcurrent > 18) {
+                    health > 92 && stableRounds >= 8 -> {
+                        if (DataStore.connectionTestConcurrent > 16) {
                             DataStore.connectionTestConcurrent =
-                                (DataStore.connectionTestConcurrent - 1).coerceAtLeast(18)
+                                (DataStore.connectionTestConcurrent - 2).coerceAtLeast(16)
                             setDecision("tune:lower_probe_concurrency")
+                        }
+                        if (DataStore.parallelConcurrency > 24) {
+                            DataStore.parallelConcurrency =
+                                (DataStore.parallelConcurrency - 2).coerceAtLeast(24)
+                        }
+                        if (DataStore.parallelDelayMs < 110) {
+                            DataStore.parallelDelayMs = (DataStore.parallelDelayMs + 10).coerceAtMost(110)
                         }
                     }
                 }
@@ -431,7 +438,8 @@ class SmartSwitchController(
                 }
                 criticalRounds = if (critical) (criticalRounds + 1).coerceAtMost(60) else 0
                 val stabilityMultiplier = when {
-                    stableRounds >= 24 -> 4L
+                    stableRounds >= 36 -> 6L
+                    stableRounds >= 24 -> 5L
                     stableRounds >= 12 -> 3L
                     stableRounds >= 6 -> 2L
                     else -> 1L

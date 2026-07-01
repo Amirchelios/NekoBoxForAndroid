@@ -48,6 +48,8 @@ class BaseService {
         var state = State.Stopped
         var proxy: ProxyInstance? = null
         var notification: ServiceNotification? = null
+        var lastNetworkRecoveryAt: Long = 0L
+        var lastNetworkLostAt: Long = 0L
         val receiver = broadcastReceiver { ctx, intent ->
             when (intent.action) {
                 Intent.ACTION_SHUTDOWN -> service.persistStats()
@@ -344,6 +346,13 @@ class BaseService {
         // networks
         suspend fun preInit() {
             DefaultNetworkListener.start(this) {
+                if (it == null) {
+                    data.lastNetworkLostAt = System.currentTimeMillis()
+                    if (data.state == State.Connected) {
+                        DataStore.smartLastDecision = "hold:network_lost"
+                    }
+                    return@start
+                }
                 SagerNet.connectivity.getLinkProperties(it)?.also { link ->
                     SagerNet.underlyingNetwork = it
                     DataStore.vpnService?.updateUnderlyingNetwork()
@@ -354,10 +363,40 @@ class BaseService {
                     }
                     if (oldName != null && upstreamInterfaceName != null && oldName != upstreamInterfaceName) {
                         Logs.d("Network changed: $oldName -> $upstreamInterfaceName")
-                        if (DataStore.networkChangeResetConnections) {
-                            Libcore.resetAllConnections(true)
+                        DataStore.smartLastDecision = "monitor:network_changed"
+                    }
+                    if (data.lastNetworkLostAt > 0L) {
+                        val lostForMs = System.currentTimeMillis() - data.lastNetworkLostAt
+                        data.lastNetworkLostAt = 0L
+                        if (lostForMs >= 2_000L) {
+                            recoverAfterNetworkChange()
                         }
                     }
+                }
+            }
+        }
+
+        fun recoverAfterNetworkChange() {
+            val now = System.currentTimeMillis()
+            if (data.state != State.Connected) return
+            if (now - data.lastNetworkRecoveryAt < 5_000L) return
+            data.lastNetworkRecoveryAt = now
+            DataStore.smartLastDecision = "recover:network_changed"
+            runOnDefaultDispatcher {
+                delay(1_500L)
+                runCatching { Libcore.resetAllConnections(true) }
+                val active = SagerDatabase.proxyDao.getById(DataStore.selectedProxy) ?: return@runOnDefaultDispatcher
+                val candidateId = SmartSelector.selectBestFast(active.groupId, smartSwitchScope())
+                    ?: return@runOnDefaultDispatcher
+                if (candidateId == DataStore.smartActiveProxyId || DataStore.smartActiveProxyId <= 0L) {
+                    DataStore.smartLastDecision = "recover:network_ready"
+                    return@runOnDefaultDispatcher
+                }
+                val tag = data.proxy?.config?.profileTagMap?.get(candidateId).orEmpty()
+                if (tag.isNotBlank() && data.proxy?.box?.selectOutbound(tag) == true) {
+                    DataStore.smartActiveProxyId = candidateId
+                    DataStore.smartLastDecision = "recover:network_selected:$candidateId"
+                    SmartLearningEngine.setPreferredProxy(active.groupId, candidateId)
                 }
             }
         }

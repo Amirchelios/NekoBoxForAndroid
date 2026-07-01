@@ -178,7 +178,7 @@ object RawUpdater : GroupUpdater() {
 
         val exists = SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
         val duplicate = ArrayList<String>()
-        if (subscription.deduplication) {
+        if (subscription.deduplication || GroupManager.isDefaultSubscriptionGroup(proxyGroup)) {
             Logs.d("Before deduplication: ${proxies.size}")
             if (GroupManager.isDefaultSubscriptionGroup(proxyGroup)) {
                 val unique = LinkedHashMap<String, AbstractBean>()
